@@ -1,7 +1,9 @@
 # wa-wire — Design Document
 
-> **Status:** **IMPLEMENTING** — all nine RFCs accepted. Steps 1–6 and 9 of §8
-> are done; steps 7–8 (Baileys, hypermeow) remain.
+> **Status:** **IMPLEMENTING** — all nine RFCs accepted. Steps 1–6, 9 and 10 of
+> §8 are done; steps 7–8 (Baileys, hypermeow) remain. Two engines are measured
+> agreeing on derived events (rev 15); `whatsapp-rust` emits L0-plain, one
+> adapter of the four the definition of done asks for.
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
@@ -1002,7 +1004,8 @@ Envelope
 PlaintextEntry
   path_len     u8
   path         u16[path_len]      child indices from the root node
-  status       u8                 0 = ok, 1 = decrypt_failed, 2 = unsupported
+  status       u8                 0 = ok, 1 = decrypt_failed, 2 = unsupported,
+                                  3 = unobserved (D-054)
   payload_len  u32
   payload      u8[payload_len]    decrypted protobuf bytes
 ```
@@ -1317,7 +1320,7 @@ No L2. No Layer 3 host.
    `hypermeow`.
 3. L1 derivation generated from `whatspec`, host-side, single implementation.
 4. Conformance suite (RFC-005) green: identical L0 in → identical L1 out across
-   all four engines.
+   all four engines. **Green for two of them as of rev 15.**
 5. Capability matrix machine-readable and enforced at setup.
 6. Takeover working on at least `zapo` (native) and `whatsapp-rust` (patched).
 
@@ -1343,6 +1346,7 @@ so step 0 is done and implementation can begin.
 | 7 | `Baileys` adapter | third engine | `ws.on('frame')` for tap; one-line patch for bytes |
 | 8 | `hypermeow` adapter + Go hook | fourth engine | hook at `client.go:844`, bytes at `:824`; **MPL-2.0 subdirectory with NOTICE** |
 | ~~9~~ | ~~`whatsapp-rust` takeover patch (D-020)~~ | — | **done in rev 13** — a pre-dispatch interceptor, upstream at #1239 |
+| ~~10~~ | ~~`whatsapp-rust` adapter, L0-plain~~ | — | **done in rev 14** — a per-`<enc>` plaintext event upstream at #1240, joined to its frame adapter-side |
 
 **Step 6 is the milestone that matters.** Everything before it is plumbing;
 step 6 is where "four engines produce identical L1" stops being a claim and
@@ -1450,10 +1454,104 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-049 | Connection-critical stanzas are never offered for takeover | `success`, `failure`, `stream:error` and `ack` settle auth, shutdown and send waiters. Taking one would leave a client authenticated-but-unaware or waiting forever — breaking it, not extending it. `zapo` protects the same auth tags | 13 |
 | D-050 | A claimed stanza is always answered, ack replacing the nack it would have got | Answering nothing leaves it in the offline queue and recycles the stream — a failure `whatsapp-rust` had already been bitten by once | 13 |
 | D-051 | Tap and takeover carry separate capability sets; neither is a superset | Tap sees the auth phase and cannot suppress; takeover suppresses and cannot see it. One declaration for both would be false in one direction | 13 |
+| D-052 | An adapter holds a frame until its plaintexts arrive, emitting one envelope per stanza | The frame exists when a stanza is decoded, a plaintext only after Signal. Emitting twice would make a consumer correlate what the adapter already knows, and "one stanza, one envelope" is what replay and conformance compare | 14 |
+| D-053 | Waiting is bounded in stanzas, not milliseconds | No per-`<enc>` signal exists for one that will never decrypt, so something must give up. A stanza count is identical on every machine; a duration is not, and this output is meant to be compared across engines | 14 |
+| D-054 | `PlaintextStatus::Unobserved` is added to the format | The three existing statuses each assert a cause. An adapter that watches plaintexts appear knows a node produced nothing but not why, and guessing would put an unverified cause into the record | 14 |
+| D-055 | A fan-out stanza is emitted as L0-wire, with no plaintext table | The engine numbers `<participants><to>` encs after the direct ones and only for its own device; reproducing that needs the device JID, which a plugin-installed adapter does not have. A frame without payloads is a smaller claim than a payload on the wrong `<enc>` | 14 |
+| D-056 | The conformance corpus is frames, not envelopes, and is committed | An envelope is what an adapter produced; a frame is what an engine received. Feeding one frame to two engines is the only way their outputs are comparable, and committing it makes a corpus change a reviewed change | 15 |
+| D-057 | Engine agreement is asserted at `is_identical`, not `agrees` | The suite tolerates an L0 difference because two encodings are both valid — but on this corpus there is nothing to tolerate. Asserting the weaker property would let a future encoder change start producing different bytes silently | 15 |
+| D-058 | Capture takes its endpoint as configuration and knows nothing about the server | A tool that names one server becomes a dependency on it. An endpoint, an optional pairing hook and a TLS-verification feature cover a local test server and a real one with the same code | 16 |
+| D-059 | Captured frames are not scrubbed | A scrubber that misses a field is worse than none, because it invites trusting the output. Capture from a test account and review what gets committed | 16 |
 
 ---
 
 ## Changelog
+
+### rev 16 — 2026-08-07
+
+- **A capture tool, so the corpus can stop being hand-written.**
+  `adapters/whatsapp-rust/examples/capture-corpus.rs` connects to a server, taps
+  the inbound stream and writes each stanza as a frame. The corpus's weakness is
+  that it holds the stanzas someone thought to write down; a server sends shapes
+  nobody would think to write down, and those are where two engines are most
+  likely to disagree.
+- **The tool knows nothing about any particular server** (D-058). The endpoint
+  is `WA_WIRE_CAPTURE_URL`, pairing can optionally be forwarded to
+  `WA_WIRE_CAPTURE_PAIR_POST`, and skipping TLS/certificate-chain verification
+  is the `insecure-capture` **feature** rather than a runtime flag — a build
+  without it cannot be talked into skipping either.
+- **Frames are not scrubbed** (D-059), deliberately. Capture from a test
+  account; review before committing.
+- **Not yet exercised end to end.** Against a local test server the handshake
+  completes and the server replies, but no stanza reaches the tap — most likely
+  server-side setup (a pre-registered user, or a client version the server
+  accepts) rather than the tool. The corpus is still the hand-written one, and
+  the agreement result in rev 15 stands unchanged.
+
+### rev 15 — 2026-08-07
+
+- **The central claim is now a measurement.** `whatsapp-rust` and `zapo` both
+  read a committed corpus of frames and their output is compared:
+  `adapters/whatsapp-rust/tests/engine_agreement.rs`. This is what §8 called the
+  milestone that matters — *"if the project is going to fail, it fails there"* —
+  and until now the conformance crate only had tests of the **comparator**,
+  driven by envelopes Rust built for itself. Two engines had never actually been
+  put side by side.
+- **They agree, and by more than the design allows for** (D-057). The suite was
+  built to tolerate an L0 difference, since two encodings of one stanza are both
+  valid and only L1 has to match. On this corpus there is nothing to tolerate:
+  `zapo` re-encodes from a decoded node, `whatsapp-rust` forwards the buffer it
+  received, and the frames come out **byte-identical** across all 13 stanzas.
+  The test asserts `is_identical()` rather than `agrees()` so that stops being
+  true loudly rather than quietly.
+- **What the result does not cover, stated plainly.** Because the encoders agree,
+  the *interesting* path — different bytes, same derived event — is exercised
+  only by the comparator's own unit tests, not by two real engines. A third
+  engine less faithful to the format is what would exercise it. The corpus also
+  covers the four tags the derivation models (13 stanzas, ≥8 deriving an event),
+  which is enough to make agreement non-vacuous but is not real traffic.
+- **The corpus is frames, committed** (D-056), regenerated by
+  `cargo run --example emit-corpus` on the Rust side and read by
+  `npx tsx scripts/emit-recording.ts` on the TypeScript side.
+
+### rev 14 — 2026-08-07
+
+- **Step 10 done: `whatsapp-rust` emits L0-plain.** The first of the four
+  adapters the definition of done asks for. Needed a second observation point
+  in the engine, sent upstream as
+  [#1240](https://github.com/oxidezap/whatsapp-rust/pull/1240): a plaintext that
+  decrypts but does not decode was being logged and dropped, and since the
+  decryption had already advanced the ratchet, those bytes were gone for good.
+  The PR argues that on its own terms and never mentions `wa-wire`.
+- **The adapter joins frame to plaintexts itself** (D-052). They arrive at
+  different times and cannot be made to arrive together — the frame when a
+  stanza is decoded, a plaintext only after Signal. Holding the frame until its
+  table fills keeps "one stanza, one envelope", which is the unit replay and
+  conformance compare.
+- **Waiting is counted in stanzas, not milliseconds** (D-053). Investigating
+  the engine first is what settled this: `UndecryptableMessage` is per *message*
+  and deduplicated by id, so it cannot close a per-node table, and several
+  paths drop an `<enc>` with no event at all. Nothing can close the table by
+  event alone, so something has to give up — and a stanza count gives up
+  identically on every machine, which is the property this project's output
+  needs. The frame itself supplies the count of `<enc>` nodes, so the common
+  case still closes immediately, with no clock involved.
+- **`PlaintextStatus::Unobserved` added to RFC-008** (D-054). The three existing
+  statuses each assert a cause; an adapter that watches plaintexts appear knows
+  a node produced nothing but not why. Both encoders carry it, and the
+  cross-language fixture now exercises all four.
+- **Fan-out stanzas stay L0-wire** (D-055), a limitation found by writing the
+  end-to-end test rather than by reading the code: the engine's `<enc>`
+  enumeration concatenates direct children with the ones addressed to its own
+  device under `<participants>`, so an index cannot be resolved to a node
+  without the device's JID.
+- **Three upstream review findings were real and fixed**: the bot-secret
+  (`msmsg`) path decoded its payload without emitting the event, and its secret
+  is single-use, so a dropped payload there is as unrecoverable as a ratcheted
+  one; `enc_index` was counted per decryption bucket rather than per
+  stanza — the common group shape (pkmsg + skmsg) reported the same index for
+  both; and splitting a published `wacore` function changed its arity, which
+  `cargo semver-checks` correctly called a breaking change.
 
 ### rev 13 — 2026-08-07
 

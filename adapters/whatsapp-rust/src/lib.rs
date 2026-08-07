@@ -33,15 +33,16 @@
 //! | `l0.inbound.tap` | yes — `Event::RawNode` fires before any early return |
 //! | `l0.inbound.auth-phase` | yes — `success`, `failure` and `xmlstreamend` all reach it |
 //! | `l0.zero-copy-frame` | yes — the decode buffer is already retained |
-//! | `l0.plaintext` | **no** — `RawNode` fires before Signal has run |
+//! | `l0.plaintext` | yes — `Event::DecryptedPayload` reports each one after Signal |
 //! | `l0.outbound` | **no** — the engine has no raw outbound observer |
 //! | `l0.takeover` | in [`takeover`], not here — `RawNode` observes; the pipeline runs regardless |
 //!
-//! The plaintext gap is the interesting one. `Event::RawNode` is dispatched at
-//! the point a stanza is decoded, which is necessarily *before* decryption. So
-//! this adapter produces L0-wire, and an envelope it emits carries no plaintext
-//! table. Reaching L0-plain needs a second observation point inside the engine,
-//! after Signal — a patch, not a configuration.
+//! Plaintext is the one that needs two observation points rather than one.
+//! `Event::RawNode` fires when a stanza is decoded, necessarily *before*
+//! decryption; `Event::DecryptedPayload` reports each `<enc>` afterwards. The
+//! adapter holds the frame until its payloads catch up and emits one envelope
+//! carrying both — see [`plaintext`] for what happens when a payload never
+//! comes.
 //!
 //! # Cost when nobody is listening
 //!
@@ -59,6 +60,16 @@ use whatsapp_rust::plugins::{
 };
 use whatsapp_rust::types::events::{Event, EventHandler, EventInterest, EventKind};
 
+use crate::plaintext::{DecryptedEnc, PlaintextJoiner};
+
+/// The events this adapter needs to produce L0-plain.
+///
+/// Both are lease-gated in the engine, and the host takes each lease from this
+/// interest — so declaring the pair here is also what turns them on.
+fn interest() -> EventInterest {
+    EventInterest::of(&[EventKind::RawNode, EventKind::DecryptedPayload])
+}
+
 /// The engine version this adapter was written against.
 pub const ENGINE_VERSION: &str = "0.7";
 
@@ -75,6 +86,7 @@ pub const PLUGIN_ID: &str = "wa-wire";
 pub const CAPABILITIES: CapabilitySet = CapabilitySet::NONE
     .with(Capability::L0InboundTap)
     .with(Capability::L0InboundAuthPhase)
+    .with(Capability::L0Plaintext)
     .with(Capability::ZeroCopyFrame);
 
 /// This adapter's declaration.
@@ -137,8 +149,11 @@ where
             // Declaring interest in RawNode is what makes the host take the
             // forwarding lease; dropping the subscription releases it.
             let subscription = events.subscribe(
-                EventInterest::of(&[EventKind::RawNode]),
-                Arc::new(RawNodeTap { sink }),
+                interest(),
+                Arc::new(RawNodeTap {
+                    sink,
+                    joiner: Mutex::new(PlaintextJoiner::new()),
+                }),
             )?;
             // The subscription lives as long as the plugin's resources do; the
             // host drops it on shutdown.
@@ -149,8 +164,44 @@ where
     }
 }
 
-struct RawNodeTap<S> {
+// The bound lives on the struct only because `Drop` requires it to; every impl
+// below repeats it anyway.
+struct RawNodeTap<S: StanzaSink> {
     sink: Arc<Mutex<S>>,
+    /// Held separately from the sink, and always locked first, so the two are
+    /// acquired in one order everywhere.
+    joiner: Mutex<PlaintextJoiner>,
+}
+
+impl<S: StanzaSink> RawNodeTap<S> {
+    /// Run `work` with the joiner and sink both held.
+    ///
+    /// A poisoned lock means a consumer panicked. Dropping the stanza beats
+    /// propagating the panic into the engine's receive path, and beats emitting
+    /// past a joiner whose buffer may be half-updated.
+    fn with_both(&self, work: impl FnOnce(&mut PlaintextJoiner, &mut S)) {
+        let Ok(mut joiner) = self.joiner.lock() else {
+            return;
+        };
+        let Ok(mut sink) = self.sink.lock() else {
+            return;
+        };
+        work(&mut joiner, &mut sink);
+    }
+
+    /// Emit every frame still waiting for plaintexts.
+    fn flush(&self) {
+        self.with_both(|joiner, sink| joiner.flush(&mut VerifyingSink(sink)));
+    }
+}
+
+impl<S: StanzaSink> Drop for RawNodeTap<S> {
+    fn drop(&mut self) {
+        // The host drops the subscription on shutdown, which drops this. A
+        // frame still waiting for a plaintext that will now never arrive is
+        // better emitted unobserved than lost: the stanza was real either way.
+        self.flush();
+    }
 }
 
 impl<S> EventHandler for RawNodeTap<S>
@@ -158,27 +209,45 @@ where
     S: StanzaSink + Send + 'static,
 {
     fn handle_event(&self, event: Arc<Event>) {
-        let Event::RawNode(node) = &*event else {
-            return;
-        };
-        // A refcount bump on the buffer the decoder already retained.
-        let frame = node.backing_bytes();
-        let stanza = RawStanza::inbound(&frame);
+        match &*event {
+            // The frame is a refcount bump on the buffer the decoder retained.
+            Event::RawNode(node) => self.with_both(|joiner, sink| {
+                joiner.accept_frame(node, &mut VerifyingSink(sink));
+            }),
+            Event::DecryptedPayload(payload) => self.with_both(|joiner, sink| {
+                joiner.accept_plaintext(
+                    &DecryptedEnc {
+                        message_id: payload.info.id.clone(),
+                        enc_index: payload.enc_index,
+                        payload: payload.payload.clone(),
+                    },
+                    &mut VerifyingSink(sink),
+                );
+            }),
+            _ => {}
+        }
+    }
+
+    fn interest(&self) -> EventInterest {
+        interest()
+    }
+}
+
+/// Checks each stanza against [`INFO`] on the way to the real sink.
+///
+/// In debug builds only: the declaration is what a consumer selects an engine
+/// on, so a capability that stops being true should fail a test rather than
+/// quietly mislead.
+struct VerifyingSink<'a, S>(&'a mut S);
+
+impl<S: StanzaSink> StanzaSink for VerifyingSink<'_, S> {
+    fn accept(&mut self, stanza: RawStanza<'_>) {
         debug_assert_eq!(
             INFO.verify(&stanza),
             Ok(()),
             "adapter emitted a stanza its own declaration forbids"
         );
-        let Ok(mut sink) = self.sink.lock() else {
-            // A poisoned sink means a consumer panicked. Dropping the stanza
-            // beats propagating the panic into the engine's receive path.
-            return;
-        };
-        sink.accept(stanza);
-    }
-
-    fn interest(&self) -> EventInterest {
-        EventInterest::of(&[EventKind::RawNode])
+        self.0.accept(stanza);
     }
 }
 
@@ -190,6 +259,7 @@ pub fn verify(stanza: &RawStanza<'_>) -> Result<(), Violation> {
     INFO.verify(stanza)
 }
 
+pub mod plaintext;
 pub mod takeover;
 
 #[cfg(test)]

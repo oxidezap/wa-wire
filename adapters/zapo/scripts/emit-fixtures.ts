@@ -58,6 +58,7 @@ const multiDevice: BinaryNode = {
         { tag: 'enc', attrs: { type: 'msg' }, content: new TextEncoder().encode('one') },
         { tag: 'enc', attrs: { type: 'pkmsg' }, content: new TextEncoder().encode('two') },
         { tag: 'enc', attrs: { type: 'skmsg' }, content: new TextEncoder().encode('three') },
+        { tag: 'enc', attrs: { type: 'msg' }, content: new TextEncoder().encode('four') },
     ],
 }
 
@@ -93,6 +94,7 @@ const fixtures: ReadonlyArray<readonly [string, Stanza]> = [
                 { path: [0], status: PlaintextStatus.Ok, payload: new TextEncoder().encode('plain-one') },
                 { path: [1], status: PlaintextStatus.DecryptFailed, payload: new Uint8Array() },
                 { path: [2], status: PlaintextStatus.Unsupported, payload: new Uint8Array() },
+                { path: [3], status: PlaintextStatus.Unobserved, payload: new Uint8Array() },
             ],
         },
     ],

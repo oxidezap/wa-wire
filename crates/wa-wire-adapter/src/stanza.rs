@@ -55,6 +55,21 @@ impl<'a> Plaintext<'a> {
             payload: &[],
         }
     }
+
+    /// A node no plaintext ever arrived for.
+    ///
+    /// For an adapter that observes decryptions as they happen rather than
+    /// being told the outcome of each one: it can say a node produced nothing,
+    /// but not why. Claiming [`failed`](Self::failed) instead would put a cause
+    /// it never verified into the record.
+    #[must_use]
+    pub const fn unobserved(path: NodePath<'a>) -> Self {
+        Self {
+            path,
+            status: PlaintextStatus::Unobserved,
+            payload: &[],
+        }
+    }
 }
 
 impl<'a> From<Plaintext<'a>> for PlaintextEntry<'a> {

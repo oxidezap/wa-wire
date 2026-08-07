@@ -7,6 +7,8 @@
 
 use super::*;
 
+use crate::plaintext::PlaintextJoiner;
+
 use std::sync::{Arc, Mutex};
 
 use wa_wire_adapter::{CountingSink, Direction, NullSink};
@@ -43,6 +45,10 @@ fn raw_node_event(node: &Node) -> Arc<Event> {
 }
 
 /// Run the handler over one event and return what the sink captured.
+///
+/// Flushes afterwards: a `<message>` is held for its plaintexts, and these
+/// tests drive the handler with no decryption behind it. What they assert is
+/// the frame, which the flush emits unchanged.
 fn tap(event: Arc<Event>) -> Vec<Vec<u8>> {
     let captured: Arc<Mutex<Vec<Vec<u8>>>> = Arc::new(Mutex::new(Vec::new()));
     let sink = {
@@ -55,9 +61,11 @@ fn tap(event: Arc<Event>) -> Vec<Vec<u8>> {
         }
     };
     let handler = RawNodeTap {
+        joiner: Mutex::new(PlaintextJoiner::new()),
         sink: Arc::new(Mutex::new(sink)),
     };
     handler.handle_event(event);
+    handler.flush();
     captured.lock().expect("sink lock").clone()
 }
 
@@ -95,8 +103,8 @@ fn the_forwarded_frame_parses_with_the_wa_wire_codec() {
 
 #[test]
 fn a_path_addresses_the_enc_the_way_an_envelope_would() {
-    // The adapter cannot fill in plaintexts, but the paths a future one would
-    // emit must already resolve against the frame it forwards today.
+    // The paths the adapter puts in a plaintext table must resolve against the
+    // frame it forwards, or a payload lands on the wrong node.
     let node = message_node();
     let frames = tap(raw_node_event(&node));
     let root = Parser::new(tokens::TABLE)
@@ -194,7 +202,10 @@ fn a_poisoned_sink_drops_the_stanza_instead_of_unwinding() {
     });
     assert!(sink.is_poisoned(), "fixture must actually poison the lock");
 
-    let handler = RawNodeTap { sink };
+    let handler = RawNodeTap {
+        joiner: Mutex::new(PlaintextJoiner::new()),
+        sink,
+    };
     let node = message_node();
     handler.handle_event(raw_node_event(&node));
     // Reaching here without unwinding is the assertion.
@@ -218,11 +229,12 @@ fn the_declaration_matches_what_this_adapter_actually_does() {
     assert!(INFO.has(Capability::L0InboundAuthPhase));
     assert!(INFO.has(Capability::ZeroCopyFrame));
 
-    // Not claimed, because the engine does not offer them at this point.
     assert!(
-        !INFO.has(Capability::L0Plaintext),
-        "RawNode fires before Signal has run"
+        INFO.has(Capability::L0Plaintext),
+        "DecryptedPayload reports each one after Signal"
     );
+
+    // Not claimed, because the engine does not offer them at this point.
     assert!(
         !INFO.has(Capability::L0Outbound),
         "the engine has no raw outbound observer"
@@ -286,14 +298,21 @@ fn the_shared_sink_is_readable_by_the_caller() {
 
     let node = message_node();
     let handler = RawNodeTap {
+        joiner: Mutex::new(PlaintextJoiner::new()),
         sink: Arc::clone(&sink),
     };
     handler.handle_event(raw_node_event(&node));
     handler.handle_event(raw_node_event(&node));
+    // Both are `<message>`, so both wait; nothing decrypts behind this test.
+    handler.flush();
 
     let counts = *sink.lock().expect("sink lock");
     assert_eq!(counts.stanzas(), 2);
-    assert_eq!(counts.plaintexts(), 0, "tap mode carries no plaintexts");
+    assert_eq!(
+        counts.plaintexts(),
+        2,
+        "one unobserved entry per <enc>, naming the node without claiming a cause"
+    );
     assert_eq!(counts.re_encoded(), 0, "frames are verbatim");
     assert_eq!(counts.frame_bytes(), frame_of(&node).len() as u64 * 2);
 }
@@ -303,6 +322,7 @@ fn the_handler_declares_interest_in_raw_node_only() {
     // The interest hint is what makes the host take the forwarding lease; a
     // wider one would turn on machinery this adapter does not use.
     let handler = RawNodeTap {
+        joiner: Mutex::new(PlaintextJoiner::new()),
         sink: Arc::new(Mutex::new(NullSink)),
     };
     let interest = handler.interest();

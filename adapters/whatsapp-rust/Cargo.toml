@@ -21,9 +21,32 @@ wa-wire-adapter = { path = "../../crates/wa-wire-adapter" }
 whatsapp-rust = { path = "../../../whatsapp-rust", features = ["plugins"] }
 anyhow = "1"
 
+[features]
+# Turns off TLS and certificate-chain verification for `capture-corpus`, which a
+# server presenting a self-signed certificate needs. A feature rather than a
+# runtime flag so a build without it cannot be talked into skipping either.
+insecure-capture = [
+    "whatsapp-rust/danger-skip-tls-verify",
+    "whatsapp-rust/danger-skip-cert-chain-verify",
+]
+
 [dev-dependencies]
-wa-wire-codec = { path = "../../crates/wa-wire-codec" }
+wa-wire-codec = { path = "../../crates/wa-wire-codec", features = ["bundled-tokens"] }
+# The conformance comparison needs both engines' output, and this crate is the
+# only place that has one of them plus a way to read the other's recording.
+wa-wire-conformance = { path = "../../crates/wa-wire-conformance" }
 wa-wire-contract = { path = "../../crates/wa-wire-contract" }
+wa-wire-l1 = { path = "../../crates/wa-wire-l1" }
+whatsapp-rust-tokio-transport = { path = "../../../whatsapp-rust/transports/tokio-transport" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+ureq = "3"
+env_logger = "0.11" 
+
+[[example]]
+name = "capture-corpus"
+# The capture only makes sense against a server, and the only servers worth
+# pointing it at during development present their own certificate.
+required-features = ["insecure-capture"]
 
 [lints.rust]
 missing_docs = "warn"

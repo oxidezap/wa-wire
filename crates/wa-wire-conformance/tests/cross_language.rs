@@ -92,8 +92,8 @@ fn paths_written_in_typescript_address_the_right_nodes() {
         .parse(envelope.frame())
         .expect("parses");
 
-    assert_eq!(envelope.entry_count(), 3);
-    assert_eq!(root.children().len(), 3);
+    assert_eq!(envelope.entry_count(), 4);
+    assert_eq!(root.children().len(), 4);
 
     let entries: Vec<_> = envelope.entries().collect();
 
@@ -120,6 +120,17 @@ fn paths_written_in_typescript_address_the_right_nodes() {
         .expect("addresses a node");
     assert!(third.attr_eq("type", "skmsg"));
     assert_eq!(entries[2].status, PlaintextStatus::Unsupported);
+
+    let fourth = root
+        .at_path(entries[3].path.iter())
+        .expect("addresses a node");
+    assert!(fourth.attr_eq("type", "msg"));
+    assert_eq!(
+        entries[3].status,
+        PlaintextStatus::Unobserved,
+        "an adapter that never learned why still names the node"
+    );
+    assert!(entries[3].payload.is_empty());
 }
 
 #[test]

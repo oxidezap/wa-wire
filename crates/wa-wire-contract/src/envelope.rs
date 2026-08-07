@@ -659,10 +659,12 @@ mod tests {
         let entries = [entry(&p, PlaintextStatus::Ok, b"")];
         let mut bytes = encode(Flags::inbound(), b"f", &entries);
         // header(8) + frame(1) + count(2) + path_len(1) + path(2) = 14
-        bytes[14] = 3;
+        // One past the last assigned status, so this test tracks the enum
+        // rather than pinning a byte that a new status may claim.
+        bytes[14] = 4;
         assert_eq!(
             EnvelopeRef::decode(&bytes),
-            Err(DecodeError::InvalidStatus(3))
+            Err(DecodeError::InvalidStatus(4))
         );
     }
 

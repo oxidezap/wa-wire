@@ -19,6 +19,15 @@ pub enum PlaintextStatus {
     /// The engine recognised the node but cannot decrypt this variant. The
     /// payload is empty.
     Unsupported,
+    /// The adapter saw the node and no plaintext ever arrived for it. The
+    /// payload is empty.
+    ///
+    /// Distinct from the two failures above because it claims less: an engine
+    /// that reports decryption per node can say *why* one produced nothing,
+    /// while an adapter that only observes plaintexts as they appear cannot.
+    /// Reporting a guess would put an unverified cause into a record whose
+    /// whole purpose is being compared against other engines.
+    Unobserved,
 }
 
 impl PlaintextStatus {
@@ -29,6 +38,7 @@ impl PlaintextStatus {
             Self::Ok => 0,
             Self::DecryptFailed => 1,
             Self::Unsupported => 2,
+            Self::Unobserved => 3,
         }
     }
 
@@ -41,6 +51,7 @@ impl PlaintextStatus {
             0 => Ok(Self::Ok),
             1 => Ok(Self::DecryptFailed),
             2 => Ok(Self::Unsupported),
+            3 => Ok(Self::Unobserved),
             other => Err(DecodeError::InvalidStatus(other)),
         }
     }
@@ -56,10 +67,11 @@ impl PlaintextStatus {
 mod tests {
     use super::*;
 
-    const ALL: [PlaintextStatus; 3] = [
+    const ALL: [PlaintextStatus; 4] = [
         PlaintextStatus::Ok,
         PlaintextStatus::DecryptFailed,
         PlaintextStatus::Unsupported,
+        PlaintextStatus::Unobserved,
     ];
 
     #[test]
@@ -75,11 +87,12 @@ mod tests {
         assert_eq!(PlaintextStatus::Ok.to_byte(), 0);
         assert_eq!(PlaintextStatus::DecryptFailed.to_byte(), 1);
         assert_eq!(PlaintextStatus::Unsupported.to_byte(), 2);
+        assert_eq!(PlaintextStatus::Unobserved.to_byte(), 3);
     }
 
     #[test]
     fn unknown_bytes_are_rejected_not_defaulted() {
-        for byte in 3..=u8::MAX {
+        for byte in 4..=u8::MAX {
             assert_eq!(
                 PlaintextStatus::from_byte(byte),
                 Err(DecodeError::InvalidStatus(byte)),
@@ -93,6 +106,7 @@ mod tests {
         assert!(PlaintextStatus::Ok.is_ok());
         assert!(!PlaintextStatus::DecryptFailed.is_ok());
         assert!(!PlaintextStatus::Unsupported.is_ok());
+        assert!(!PlaintextStatus::Unobserved.is_ok());
     }
 
     #[test]

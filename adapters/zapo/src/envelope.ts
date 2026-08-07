@@ -51,6 +51,13 @@ export enum PlaintextStatus {
     Ok = 0,
     DecryptFailed = 1,
     Unsupported = 2,
+    /**
+     * The adapter saw the node and no plaintext ever arrived for it.
+     *
+     * Claims less than the two failures above: an adapter that watches
+     * plaintexts appear can say a node produced nothing, but not why.
+     */
+    Unobserved = 3,
 }
 
 /** One decrypted payload, addressed by the path of the node it came from. */

@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, it } from 'node:test'
 
+import { PlaintextStatus } from '../envelope.js'
 import { EnvelopeReader } from './reader.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -53,14 +54,20 @@ describe('cross-language fixtures', () => {
     it('address one plaintext per enc in the multi-device case', () => {
         const bytes = readFileSync(join(FIXTURES, 'multi-device-with-plaintexts.bin'))
         const envelope = new EnvelopeReader(new Uint8Array(bytes)).read()
-        assert.equal(envelope.plaintexts.length, 3)
+        assert.equal(envelope.plaintexts.length, 4)
         assert.deepEqual(
             envelope.plaintexts.map((p) => p.path),
-            [[0], [1], [2]],
+            [[0], [1], [2], [3]],
         )
+        // Every status, so the fixture pins all four across both encoders.
         assert.deepEqual(
             envelope.plaintexts.map((p) => p.status),
-            [0, 1, 2],
+            [
+                PlaintextStatus.Ok,
+                PlaintextStatus.DecryptFailed,
+                PlaintextStatus.Unsupported,
+                PlaintextStatus.Unobserved,
+            ],
         )
     })
 
