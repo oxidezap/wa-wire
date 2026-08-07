@@ -1057,6 +1057,22 @@ pinned. This makes `wa-wire-codec` a `whatspec` consumer rather than a
 reimplementation — the same relationship `zapo` already has with its `spec/`
 directory (finding 3.2).
 
+**As implemented (rev 9):** the table is a *parameter* (`TokenTable`), not a
+constant, so a host generated from a different `whatspec` build supplies its own
+without needing a different parser (D-031). A generated table ships bundled
+behind a default feature, with the source table's SHA-256 recorded alongside it.
+
+Two properties of the encoding turned out to carry the design:
+
+- **It is self-delimiting.** A node can be represented by the slice starting at
+  its own list tag, running to the end of the buffer; the parse knows where to
+  stop. No offset arithmetic is needed to slice a subtree out, which is what
+  makes the whole tree navigable with no allocation and no index bookkeeping.
+- **Some values have no string in the frame.** Packed digit runs and JIDs are
+  assembled from parts, so there is nothing to borrow. They stay in parts and
+  compare through `eq_str` (D-033) — which is the comparison L1 derivation
+  actually performs, so nothing is lost by not materialising them.
+
 ---
 
 ## RFC-009 — Contract versioning and provenance
@@ -1319,7 +1335,7 @@ so step 0 is done and implementation can begin.
 | --- | --- | --- | --- |
 | ~~0~~ | ~~RFC-008 boundary format, RFC-009 versioning~~ | — | **done in rev 7** |
 | ~~1~~ | ~~`wa-wire-contract` — envelope encode/decode, capability + provenance types~~ | — | **done in rev 8** — `no_std`, zero dependencies, allocation-free decoding; 99.7% line coverage |
-| 2 | `wa-wire-codec` — binary-node parse over `whatspec` tokens | L1 | consumer of `whatspec`, not a reimplementation |
+| ~~2~~ | ~~`wa-wire-codec` — binary-node parse over `whatspec` tokens~~ | — | **done in rev 9** — token table is a parameter, not a constant; 99.8% line coverage |
 | 3 | `whatsapp-rust` adapter, tap mode | first end-to-end proof | zero-copy is free here (`slice_bytes()`), so this is also the fast path reference |
 | 4 | `wa-wire-l1` — derivation generated from `whatspec`, committed | conformance | host-side, single implementation, CI checks regeneration is a no-op |
 | 5 | `zapo` adapter | second engine | plugin + stanza filter; native takeover |
@@ -1413,10 +1429,44 @@ Portability is enforced too: the contract builds with no allocator and for
 
 | D-029 | Line coverage floor of 95%, enforced in CI | The contract is the product; unreviewable code is untrustworthy code | 8 |
 | D-030 | Unreachable defensive branches are removed, not left uncovered | A branch no test can reach is a branch no reviewer can trust. Concretely: the `Reader` tracks its unread tail instead of an index, so every read is a `split_*_checked` with one real failure arm | 8 |
+| D-031 | The token table is a **parameter**, not a constant | Dictionaries move with the WhatsApp client version, which RFC-009 makes a matter of provenance rather than contract version. A host generated from a different `whatspec` build supplies its own table instead of needing a different parser | 9 |
+| D-032 | Parsing validates the whole tree up front, so every accessor afterwards is infallible | Pushing `Result` into `attrs()`, `children()` and `at_path()` would make the common path noisy to serve an error that validation already ruled out | 9 |
+| D-033 | Packed runs and JIDs stay in parts and compare/render on demand | Their text exists nowhere in the frame, so borrowing is impossible and joining would allocate. `eq_str` is the comparison L1 derivation actually needs, and it walks the parts | 9 |
+| D-034 | The codec parses only; re-encoding stays with the engine | An engine that cannot supply original bytes re-encodes in its own language and sets `frame_origin` (D-026). A host-side encoder would duplicate that with no caller | 9 |
 
 ---
 
 ## Changelog
+
+### rev 9 — 2026-08-07
+
+- **Step 2 implemented: `wa-wire-codec`.** `no_std`, zero runtime dependencies,
+  `unsafe` forbidden, nothing allocated while parsing.
+  - Covers the whole value grammar: single-byte and dictionary tokens, all three
+    binary widths, packed nibble and hex runs, and all four JID forms
+    (pair, user-with-domain-type, interop, Messenger).
+  - `NodeRef` holds the slice starting at its own list tag and re-walks on
+    demand — the encoding is self-delimiting, so a node never needs to know
+    where it ends, and no offset arithmetic is required to slice one out.
+  - 100 unit tests plus 6 integration tests; **99.83% line coverage across the
+    workspace, 100% function coverage**; clippy clean at `pedantic`.
+- **Design refinements recorded as D-031…D-034.** The one worth naming: packed
+  runs and JIDs have no string anywhere in the frame, so they stay in parts and
+  compare through `eq_str` rather than being joined. That is what keeps a 433 KB
+  stanza allocation-free.
+- **Integration test asserts the two crates agree about paths.** If the
+  contract's `NodePath` and the codec's `at_path` ever diverged, a decrypted
+  message would be attributed to the wrong recipient — too important to leave
+  as a shared assumption between two crates.
+- **Token dictionaries generated and committed** (`tools/generate-tokens.py`),
+  with the source table's SHA-256 recorded in the generated module. CI
+  regenerates and requires no diff, which is RFC-009's codegen rule (D-028)
+  in practice.
+- Bug found and fixed during testing: `skip_node_body` walked child bodies twice,
+  because `Children`'s iterator already advances past each child. Caught by the
+  path-navigation tests, which is why they exist.
+- CI extended: codec without bundled tokens, whole-workspace wasm32 build, and a
+  generated-code freshness gate.
 
 ### rev 8 — 2026-08-07
 

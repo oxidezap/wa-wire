@@ -52,9 +52,32 @@ is parsed exactly once, host-side, and only if something subscribed to L1.
 
 | Crate | What it is |
 | --- | --- |
-| [`wa-wire-contract`](crates/wa-wire-contract) | the normative envelope format and negotiation types — `no_std`, no dependencies, allocation-free decoding |
+| [`wa-wire-contract`](crates/wa-wire-contract) | the normative envelope format and negotiation types |
+| [`wa-wire-codec`](crates/wa-wire-codec) | parser for WhatsApp's binary-node encoding, over pluggable token tables |
+
+Both are `no_std` with no dependencies, and neither allocates while reading.
 
 More arrive in the order set out in [`DESIGN.md` §8](DESIGN.md#8-implementation-plan).
+
+### How they fit together
+
+An envelope addresses each decrypted payload by the path of the node it came
+from. The contract carries the path; the codec walks it:
+
+```rust
+let envelope = EnvelopeRef::decode(bytes)?;
+let root = Parser::new(tokens::TABLE).parse(envelope.frame())?;
+
+for entry in envelope.entries() {
+    let node = root.at_path(entry.path.iter()).expect("addresses a node");
+    // `node` is the <enc> that `entry.payload` decrypted from.
+}
+```
+
+If the two ever disagreed about what a path means, a decrypted message would be
+attributed to the wrong recipient — so the agreement is asserted in
+[an integration test](crates/wa-wire-codec/tests/envelope_integration.rs), not
+assumed.
 
 ## Development
 
@@ -66,9 +89,17 @@ cargo llvm-cov --workspace --all-features --summary-only
 ```
 
 Line coverage must stay at or above **95%**; CI enforces it. Portability is also
-enforced: the contract builds without an allocator and for
+enforced: everything builds without an allocator and for
 `wasm32-unknown-unknown`, since JS adapters consume the core through
 WebAssembly.
+
+The token dictionaries are generated and committed, so a protocol change arrives
+as a reviewable diff rather than a build artifact. CI regenerates them and
+requires no change:
+
+```console
+python3 tools/generate-tokens.py
+```
 
 ## License
 

@@ -1,0 +1,23 @@
+[package]
+name = "wa-wire-codec"
+version = "0.1.0"
+description = "Zero-copy parser for WhatsApp's binary-node encoding, over pluggable token tables"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+wa-wire-contract = { path = "../wa-wire-contract" }
+
+[features]
+default = ["bundled-tokens"]
+# The generated token dictionaries. A host that supplies its own table — from a
+# different `whatspec` build, say — can drop them.
+bundled-tokens = []
+
+[lints]
+workspace = true

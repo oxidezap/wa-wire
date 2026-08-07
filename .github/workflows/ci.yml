@@ -52,10 +52,35 @@ jobs:
       - name: Build without alloc
         run: cargo build -p wa-wire-contract --no-default-features
 
+      - name: Build the codec without its bundled tokens
+        run: cargo build -p wa-wire-codec --no-default-features
+
       # JS adapters consume the core through WebAssembly, so this target is
       # part of the contract's reach, not an afterthought.
       - name: Build for wasm32
-        run: cargo build -p wa-wire-contract --target wasm32-unknown-unknown
+        run: cargo build --workspace --target wasm32-unknown-unknown
+
+  generated:
+    name: generated code is fresh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      # Generated code is committed so a protocol change arrives as a reviewable
+      # diff (RFC-009). Regenerating here is what rules out drift.
+      - name: Regenerate token dictionaries
+        run: python3 tools/generate-tokens.py
+
+      - name: Require no change
+        run: |
+          if ! git diff --quiet; then
+            echo "Generated code is stale. Run tools/generate-tokens.py and commit."
+            git diff --stat
+            exit 1
+          fi
 
   coverage:
     name: coverage
