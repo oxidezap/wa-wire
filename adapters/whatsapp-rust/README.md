@@ -50,8 +50,8 @@ The adapter needs the buffer the engine decoded. `OwnedNodeRef` already retains
 it as its yoke cart, but nothing exposed it, so this method was added upstream:
 
 ```rust
-/// The whole buffer this node was decoded from, verbatim.
-pub fn frame_bytes(&self) -> Bytes {
+/// The whole backing buffer, verbatim: exactly what `new` consumed.
+pub fn backing_bytes(&self) -> Bytes {
     self.inner.backing_cart().0.clone()
 }
 ```

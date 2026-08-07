@@ -162,7 +162,7 @@ where
             return;
         };
         // A refcount bump on the buffer the decoder already retained.
-        let frame = node.frame_bytes();
+        let frame = node.backing_bytes();
         let stanza = RawStanza::inbound(&frame);
         debug_assert_eq!(
             INFO.verify(&stanza),

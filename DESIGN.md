@@ -1374,7 +1374,7 @@ Portability is enforced too: the contract builds with no allocator and for
 
 | Engine | Site | Change |
 | --- | --- | --- |
-| whatsapp-rust | `node_io.rs:307` | **corrected in rev 10:** `slice_bytes()` needs a slice already inside the buffer, so it cannot hand over the whole thing. One method added upstream — `OwnedNodeRef::frame_bytes()`, a clone of the yoke's cart, so a refcount bump rather than a copy |
+| whatsapp-rust | `node_io.rs:307` | **corrected in rev 10:** `slice_bytes()` needs a slice already inside the buffer, so it cannot hand over the whole thing. One method added upstream — `OwnedNodeRef::backing_bytes()`, a clone of the yoke's cart, so a refcount bump rather than a copy |
 | zapo | `transport/binary/decoder.ts:344` | emit `nodeBytes` alongside the node |
 | Baileys | `Utils/noise-handler.ts:196-198` | pass `result` into `onFrame` |
 | whatsmeow | `client.go:824-830` | carry `decompressed` with the node |
@@ -1449,7 +1449,7 @@ Portability is enforced too: the contract builds with no allocator and for
 - **Correction to RFC-008's patch table.** It recorded "none — expose existing
   `slice_bytes()`" for `whatsapp-rust`. Wrong: `slice_bytes` takes a slice that
   already points inside the buffer, so it cannot produce the buffer itself. One
-  method was added upstream — `OwnedNodeRef::frame_bytes()` — cloning the yoke's
+  method was added upstream — `OwnedNodeRef::backing_bytes()` — cloning the yoke's
   cart, so still a refcount bump rather than a copy. The zero-copy claim holds;
   the route to it did not.
 - **Bug found by testing against the real engine.** `TokenTable::single_byte`
