@@ -1482,11 +1482,19 @@ Portability is enforced too: the contract builds with no allocator and for
   without it cannot be talked into skipping either.
 - **Frames are not scrubbed** (D-059), deliberately. Capture from a test
   account; review before committing.
+- **Version lookup is skippable** via `WA_WIRE_CAPTURE_VERSION`. By default the
+  client fetches the live web-client version over the internet before
+  connecting, which makes a capture depend on a network the server has nothing
+  to do with and pins it to whatever is live at the time. `with_version_override`
+  skips the lookup entirely.
 - **Not yet exercised end to end.** Against a local test server the handshake
-  completes and the server replies, but no stanza reaches the tap — most likely
-  server-side setup (a pre-registered user, or a client version the server
-  accepts) rather than the tool. The corpus is still the hand-written one, and
-  the agreement result in rev 15 stands unchanged.
+  completes, the server sends one 634-byte reply, and it is never decoded — no
+  stanza, no error, nothing. Pinning the version did not change it, so the
+  lookup was not the blocker. Silence rather than a decode error points at
+  framing: a client waiting for the rest of a frame the server considers
+  finished would look exactly like this. That is server-side, so the corpus is
+  still the hand-written one and the agreement result in rev 15 stands
+  unchanged.
 
 ### rev 15 — 2026-08-07
 

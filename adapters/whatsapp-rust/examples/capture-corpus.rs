@@ -24,10 +24,17 @@
 //! | `WA_WIRE_CAPTURE_SECONDS` | How long to stay connected. Defaults to 60. |
 //! | `WA_WIRE_CAPTURE_STORE` | Session database. Defaults to an in-memory one, so each run pairs afresh. |
 //! | `WA_WIRE_CAPTURE_PAIR_POST` | Optional. A URL the pairing code is `POST`ed to as `text/plain`. |
+//! | `WA_WIRE_CAPTURE_VERSION` | Optional. `major.minor.patch` to use instead of looking the version up. |
 //!
 //! Pairing is normally a phone scanning the printed code. `WA_WIRE_CAPTURE_PAIR_POST`
 //! covers the case where something else on the other end can accept the code
 //! directly — the tool posts it and waits, and does not care what receives it.
+//!
+//! `WA_WIRE_CAPTURE_VERSION` matters more than it looks. By default the client
+//! fetches the current web client version over the internet before connecting,
+//! which makes a capture depend on a network the server has nothing to do with
+//! — and pins it to whatever version happens to be live, which a server may not
+//! accept. Setting this skips the lookup entirely.
 //!
 //! The `insecure-capture` feature turns off TLS and certificate-chain
 //! verification, which a server using a self-signed certificate needs. It is a
@@ -59,6 +66,7 @@ struct Settings {
     seconds: u64,
     store: Option<String>,
     pair_post: Option<String>,
+    version: Option<(u32, u32, u32)>,
 }
 
 impl Settings {
@@ -87,7 +95,22 @@ impl Settings {
             seconds,
             store: std::env::var("WA_WIRE_CAPTURE_STORE").ok(),
             pair_post: std::env::var("WA_WIRE_CAPTURE_PAIR_POST").ok(),
+            version: std::env::var("WA_WIRE_CAPTURE_VERSION")
+                .ok()
+                .map(|value| parse_version(&value))
+                .transpose()?,
         })
+    }
+}
+
+/// Parse `major.minor.patch`.
+fn parse_version(value: &str) -> Result<(u32, u32, u32), String> {
+    let mut parts = value.split('.').map(str::parse::<u32>);
+    match (parts.next(), parts.next(), parts.next(), parts.next()) {
+        (Some(Ok(major)), Some(Ok(minor)), Some(Ok(patch)), None) => Ok((major, minor, patch)),
+        _ => Err(format!(
+            "WA_WIRE_CAPTURE_VERSION must be major.minor.patch, got {value}"
+        )),
     }
 }
 
@@ -199,15 +222,16 @@ async fn build(
     let backend = whatsapp_rust::store::SqliteStore::new(&store).await?;
     let persistence = Arc::new(PersistenceManager::new(Arc::new(backend)).await?);
 
-    let build = ClientBuilder::new()
+    let mut builder = ClientBuilder::new()
         .with_runtime(whatsapp_rust::runtime_impl::TokioRuntime)
         .with_persistence_manager(persistence)
         .with_transport_factory(TokioWebSocketTransportFactory::new().with_url(&settings.url))
         .with_http_client(whatsapp_rust::http::UreqHttpClient::new())
-        .with_plugin(plugin)
-        .build()
-        .await?;
-    Ok(build.into_client())
+        .with_plugin(plugin);
+    if let Some(version) = settings.version {
+        builder = builder.with_version_override(version);
+    }
+    Ok(builder.build().await?.into_client())
 }
 
 #[tokio::main]
