@@ -1,11 +1,11 @@
 # wa-wire — Design Document
 
-> **Status:** **IMPLEMENTING** — all nine RFCs accepted. Steps 1–6 of §8 are
-> done; steps 7–9 (Baileys, hypermeow, takeover patch) remain.
+> **Status:** **IMPLEMENTING** — all nine RFCs accepted. Steps 1–6 and 9 of §8
+> are done; steps 7–8 (Baileys, hypermeow) remain.
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 12
+> **Last revised:** rev 13
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1342,7 +1342,7 @@ so step 0 is done and implementation can begin.
 | ~~6~~ | ~~**Conformance runner**~~ | — | **done in rev 11** — the central claim is now a test result |
 | 7 | `Baileys` adapter | third engine | `ws.on('frame')` for tap; one-line patch for bytes |
 | 8 | `hypermeow` adapter + Go hook | fourth engine | hook at `client.go:844`, bytes at `:824`; **MPL-2.0 subdirectory with NOTICE** |
-| 9 | `whatsapp-rust` takeover patch (D-020) | interchangeability | `StanzaRouter::register` panics on duplicate tags (`router.rs:30-35`) — needs an override path or a pre-dispatch gate |
+| ~~9~~ | ~~`whatsapp-rust` takeover patch (D-020)~~ | — | **done in rev 13** — a pre-dispatch interceptor, upstream at #1239 |
 
 **Step 6 is the milestone that matters.** Everything before it is plumbing;
 step 6 is where "four engines produce identical L1" stops being a claim and
@@ -1446,10 +1446,35 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-045 | Two engines failing the same way is agreement, not a finding | Being consistently silent about a stanza neither models is exactly the consistency conformance is checking for | 11 |
 | D-046 | The boundary format is implemented per adapter language, verified by committed cross-language fixtures | An adapter runs inside its engine, so a JS engine needs a JS encoder. Two descriptions of one format tested only separately are two formats waiting to diverge | 12 |
 | D-047 | An adapter that cannot reach the engine's buffer re-encodes and says so | `frame_origin` exists for exactly this. Claiming verbatim bytes that are not verbatim would make a consumer trust a frame it should not | 12 |
+| D-048 | Takeover is a pre-dispatch interceptor, not a router override | `StanzaRouter::register` panics on duplicate tags, and overriding a handler would still leave no way to reach a tag the engine does not model. A gate before dispatch covers both | 13 |
+| D-049 | Connection-critical stanzas are never offered for takeover | `success`, `failure`, `stream:error` and `ack` settle auth, shutdown and send waiters. Taking one would leave a client authenticated-but-unaware or waiting forever — breaking it, not extending it. `zapo` protects the same auth tags | 13 |
+| D-050 | A claimed stanza is always answered, ack replacing the nack it would have got | Answering nothing leaves it in the offline queue and recycles the stream — a failure `whatsapp-rust` had already been bitten by once | 13 |
+| D-051 | Tap and takeover carry separate capability sets; neither is a superset | Tap sees the auth phase and cannot suppress; takeover suppresses and cannot see it. One declaration for both would be false in one direction | 13 |
 
 ---
 
 ## Changelog
+
+### rev 13 — 2026-08-07
+
+- **Step 9 done: takeover on `whatsapp-rust`.** Needed an upstream change, sent
+  as [#1239](https://github.com/oxidezap/whatsapp-rust/pull/1239) and written to
+  stand on its own: the engine gains a pre-dispatch interceptor so a consumer
+  can act on a stanza it does not model, instead of watching it get nacked. The
+  PR never mentions `wa-wire`.
+- **Both engines now have takeover.** `zapo` had it natively; this closes the
+  gap D-020 opened.
+- **Review caught two real faults in the first cut of the patch** (D-050,
+  D-049), both about the same thing — a takeover that answers nothing or takes
+  what it should not leaves a *worse* client, not an extended one:
+  - a claimed stanza outside `should_ack`'s tags went unanswered, exactly the
+    failure `nack_unrecognized_stanza` exists to prevent;
+  - `success`, `failure`, `stream:error` and `ack` could be claimed, which
+    would strand authentication, reconnection or a pending send.
+- **Tap and takeover declare different capabilities** (D-051). Takeover cannot
+  see the auth phase, because the engine refuses to offer those stanzas to an
+  interceptor; tap can, and cannot suppress. Neither is a superset, so a single
+  declaration would be false in one direction.
 
 ### rev 12 — 2026-08-07
 

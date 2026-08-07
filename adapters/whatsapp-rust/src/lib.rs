@@ -35,7 +35,7 @@
 //! | `l0.zero-copy-frame` | yes — the decode buffer is already retained |
 //! | `l0.plaintext` | **no** — `RawNode` fires before Signal has run |
 //! | `l0.outbound` | **no** — the engine has no raw outbound observer |
-//! | `l0.takeover` | **no** — `RawNode` observes; the pipeline runs regardless |
+//! | `l0.takeover` | in [`takeover`], not here — `RawNode` observes; the pipeline runs regardless |
 //!
 //! The plaintext gap is the interesting one. `Event::RawNode` is dispatched at
 //! the point a stanza is decoded, which is necessarily *before* decryption. So
@@ -189,6 +189,8 @@ where
 pub fn verify(stanza: &RawStanza<'_>) -> Result<(), Violation> {
     INFO.verify(stanza)
 }
+
+pub mod takeover;
 
 #[cfg(test)]
 mod tests;

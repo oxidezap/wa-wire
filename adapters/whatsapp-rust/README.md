@@ -59,21 +59,51 @@ pub fn backing_bytes(&self) -> Bytes {
 A refcount bump, not a copy — which is what makes `l0.zero-copy-frame` true
 here rather than aspirational.
 
-## Capabilities
+## Two modes, two capability sets
 
-| Capability | Status |
-| --- | --- |
-| `l0.inbound.tap` | yes — `Event::RawNode` fires before any early return |
-| `l0.inbound.auth-phase` | yes — `success`, `failure`, `xmlstreamend` all reach it |
-| `l0.zero-copy-frame` | yes — the decode buffer is already retained |
-| `l0.plaintext` | **no** |
-| `l0.outbound` | **no** |
-| `l0.takeover` | **no** |
-| `l0.request` | **no** |
-| `lifecycle.drain-hook` | **no** |
+Tap and takeover ride different engine hooks, and the difference in coverage is
+real rather than cosmetic.
 
-Every row is asserted in `src/tests.rs`. A claim that stops being true fails a
-test rather than quietly misleading a consumer.
+| Capability | tap (`WaWirePlugin`) | takeover (`takeover::attach`) |
+| --- | --- | --- |
+| `l0.inbound.tap` | yes | yes |
+| `l0.zero-copy-frame` | yes | yes |
+| `l0.inbound.auth-phase` | yes | **no** |
+| `l0.takeover` | **no** | yes |
+| `l0.plaintext` | **no** | **no** |
+| `l0.outbound` | **no** | **no** |
+| `l0.request` | **no** | **no** |
+| `lifecycle.drain-hook` | **no** | **no** |
+
+Neither is a superset of the other, which is why they carry separate
+declarations (`INFO` and `takeover::TAKEOVER_INFO`). Every row is asserted in
+this crate's tests.
+
+**Tap** rides `Event::RawNode`, emitted before any early return, so it sees
+everything the engine decodes — and only observes.
+
+**Takeover** rides `Client::add_stanza_interceptor`. A claimed stanza skips the
+engine's built-in handler and is acknowledged all the same, so the server does
+not redeliver. It sees what would have reached dispatch, which is less: the
+engine refuses to offer `success`, `failure`, `stream:error` and `ack` to an
+interceptor, because a consumer that took one would leave the client
+authenticated-but-unaware or waiting forever on a completed send.
+
+Running both is fine — a tap watches the whole stream while a takeover claims
+the part it handles. The tap fires first.
+
+```rust
+use wa_wire_adapter_whatsapp_rust::takeover::{TakeTags, attach};
+
+// Handle receipts ourselves; leave the rest to the engine.
+let handle = attach(&client, sink, TakeTags::new(["receipt"]));
+```
+
+### Requires the interceptor API
+
+Takeover needs `Client::add_stanza_interceptor`, added in
+[oxidezap/whatsapp-rust#1239](https://github.com/oxidezap/whatsapp-rust/pull/1239).
+Tap works without it.
 
 ### Why no plaintexts
 
