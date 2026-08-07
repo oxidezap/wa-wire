@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  # The contract is the product; a regression in coverage is a regression in
+  # confidence. Raise this as coverage improves, never lower it.
+  MIN_COVERAGE: 95
+
+jobs:
+  check:
+    name: fmt, clippy, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Formatting
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features
+
+      - name: Tests
+        run: cargo test --workspace --all-features
+
+      - name: Docs
+        run: cargo doc --workspace --all-features --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  portability:
+    name: no_std and wasm32
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      # Decoding must not need an allocator: a consumer that only reads
+      # envelopes should build on targets without one.
+      - name: Build without alloc
+        run: cargo build -p wa-wire-contract --no-default-features
+
+      # JS adapters consume the core through WebAssembly, so this target is
+      # part of the contract's reach, not an afterthought.
+      - name: Build for wasm32
+        run: cargo build -p wa-wire-contract --target wasm32-unknown-unknown
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Measure
+        run: cargo llvm-cov --workspace --all-features --json --output-path coverage.json
+
+      - name: Enforce threshold
+        run: |
+          percent=$(jq -r '.data[0].totals.lines.percent' coverage.json)
+          printf 'line coverage: %.2f%% (minimum %s%%)\n' "$percent" "$MIN_COVERAGE"
+          awk -v p="$percent" -v min="$MIN_COVERAGE" \
+            'BEGIN { if (p + 0 < min + 0) { print "coverage below threshold"; exit 1 } }'
+
+      - name: Report
+        run: cargo llvm-cov report --summary-only

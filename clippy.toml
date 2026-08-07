@@ -1,0 +1,2 @@
+# Proper nouns that read like identifiers to the doc lint.
+doc-valid-idents = ["WhatsApp", "TypeScript", "JavaScript", "WebAssembly", ".."]

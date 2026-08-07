@@ -1,0 +1,20 @@
+[package]
+name = "wa-wire-contract"
+version = "0.1.0"
+description = "Normative boundary format and negotiation types for the wa-wire contract"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+
+[features]
+default = ["alloc"]
+# Encoding needs a growable buffer. Decoding never allocates, so a target that
+# only consumes envelopes can drop this.
+alloc = []
+
+[lints]
+workspace = true
