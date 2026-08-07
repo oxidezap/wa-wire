@@ -79,6 +79,6 @@ pub use stanza::{Plaintext, RawStanza};
 
 // Re-exported so an adapter needs one dependency, not two.
 pub use wa_wire_contract::{
-    Capability, CapabilitySet, ContractVersion, Direction, FrameOrigin, NodePath, PlaintextStatus,
-    Provenance,
+    Capability, CapabilitySet, ContractVersion, Direction, Flags, FrameOrigin, NodePath,
+    PlaintextStatus, Provenance,
 };

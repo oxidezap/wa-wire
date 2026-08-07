@@ -23,11 +23,44 @@ pub enum User<'a> {
     Bytes(&'a [u8]),
 }
 
-impl User<'_> {
+impl<'a> User<'a> {
     /// Whether there is no user part.
     #[must_use]
     pub const fn is_none(self) -> bool {
         matches!(self, Self::None)
+    }
+
+    /// Whether two user parts name the same user, whatever form each arrived
+    /// in.
+    ///
+    /// One engine may hand back a packed digit run where another hands back the
+    /// same digits as bytes. They name the same user, and a conformance run
+    /// that called them different would report a divergence that is not one.
+    #[must_use]
+    pub fn semantic_eq(self, other: User<'_>) -> bool {
+        match (self, other) {
+            (Self::None, User::None) => true,
+            (Self::Packed(a), User::Packed(b)) => a.semantic_eq(b),
+            // One rule, whichever side the packed run is on.
+            (Self::Packed(packed), rendered) => packed_eq_text(packed, rendered.as_text()),
+            #[allow(clippy::match_same_arms)]
+            (rendered, User::Packed(packed)) => packed_eq_text(packed, rendered.as_text()),
+            (a, b) => match (a.as_text(), b.as_text()) {
+                (Some(x), Some(y)) => x == y,
+                _ => false,
+            },
+        }
+    }
+
+    /// The user as borrowed text, when it exists in that form.
+    #[must_use]
+    fn as_text(self) -> Option<&'a str> {
+        match self {
+            Self::None => Some(""),
+            Self::Token(text) => Some(text),
+            Self::Bytes(bytes) => core::str::from_utf8(bytes).ok(),
+            Self::Packed(_) => None,
+        }
     }
 
     /// Whether the user renders as exactly `other`.
@@ -40,6 +73,14 @@ impl User<'_> {
             Self::Bytes(bytes) => bytes == other.as_bytes(),
         }
     }
+}
+
+/// A packed run against text, when the other side had any.
+///
+/// An absent user is not the empty digit run: one names no user at all, the
+/// other names a user whose digits happen to be none.
+fn packed_eq_text(packed: Packed<'_>, text: Option<&str>) -> bool {
+    text.is_some_and(|text| !text.is_empty() && packed.eq_str(text))
 }
 
 impl fmt::Display for User<'_> {
@@ -141,6 +182,16 @@ impl<'a> Jid<'a> {
     #[must_use]
     pub const fn is_server_only(self) -> bool {
         self.user.is_none()
+    }
+
+    /// Whether two JIDs name the same address, whatever form each part arrived
+    /// in.
+    #[must_use]
+    pub fn semantic_eq(self, other: Jid<'_>) -> bool {
+        self.server == other.server
+            && self.device == other.device
+            && self.integrator == other.integrator
+            && self.user.semantic_eq(other.user)
     }
 }
 
@@ -257,6 +308,53 @@ mod tests {
         let user = User::Bytes(&[0xff, 0xfe]);
         assert_eq!(user.to_string(), "\u{FFFD}");
         assert!(!user.eq_str("\u{FFFD}"), "comparison stays byte-exact");
+    }
+
+    #[test]
+    fn semantic_equality_looks_past_how_a_user_was_encoded() {
+        // The digits 5511 as a packed run and as raw bytes name one user.
+        let packed = Packed::new(Alphabet::Nibble, &[0x55, 0x11], false);
+        let as_packed = Jid::pair(User::Packed(packed), SERVER_PN);
+        let as_bytes = Jid::pair(User::Bytes(b"5511"), SERVER_PN);
+        let as_token = Jid::pair(User::Token("5511"), SERVER_PN);
+
+        assert!(as_packed.semantic_eq(as_bytes));
+        assert!(as_bytes.semantic_eq(as_packed), "and the other way round");
+        assert!(as_packed.semantic_eq(as_token));
+        assert!(as_bytes.semantic_eq(as_token));
+        assert_ne!(as_packed, as_bytes, "while not being byte-equal");
+    }
+
+    #[test]
+    fn semantic_equality_still_separates_different_addresses() {
+        let base = Jid::with_device(User::Token("u"), SERVER_PN, 1);
+        assert!(base.semantic_eq(base));
+
+        for different in [
+            Jid::with_device(User::Token("v"), SERVER_PN, 1),
+            Jid::with_device(User::Token("u"), SERVER_LID, 1),
+            Jid::with_device(User::Token("u"), SERVER_PN, 2),
+            Jid::interop(User::Token("u"), 1, 7),
+            Jid::pair(User::None, SERVER_PN),
+        ] {
+            assert!(!base.semantic_eq(different), "{different} must differ");
+        }
+    }
+
+    #[test]
+    fn a_packed_user_never_equals_an_absent_one() {
+        let packed = Packed::new(Alphabet::Nibble, &[], false);
+        assert!(!User::Packed(packed).semantic_eq(User::None));
+        assert!(!User::None.semantic_eq(User::Packed(packed)));
+    }
+
+    #[test]
+    fn invalid_utf8_is_never_semantically_equal_to_text() {
+        let invalid = User::Bytes(&[0xff, 0xfe]);
+        assert!(!invalid.semantic_eq(User::Token("x")));
+        assert!(!User::Token("x").semantic_eq(invalid));
+        let packed = Packed::new(Alphabet::Nibble, &[0x12], false);
+        assert!(!invalid.semantic_eq(User::Packed(packed)));
     }
 
     #[test]

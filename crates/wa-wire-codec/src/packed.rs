@@ -120,6 +120,21 @@ impl<'a> Packed<'a> {
             .take(digits)
     }
 
+    /// Whether two runs decode to the same digits, whatever alphabet or
+    /// parity each used to get there.
+    #[must_use]
+    pub fn semantic_eq(self, other: Packed<'_>) -> bool {
+        let mut mine = self.chars();
+        let mut theirs = other.chars();
+        loop {
+            match (mine.next(), theirs.next()) {
+                (None, None) => return true,
+                (Some(a), Some(b)) if a == b => {}
+                _ => return false,
+            }
+        }
+    }
+
     /// Whether the run decodes to exactly `other`, without building a string.
     #[must_use]
     pub fn eq_str(self, other: &str) -> bool {
@@ -277,6 +292,32 @@ mod tests {
         let packed = Packed::new(Alphabet::Hex, &bytes, false);
         assert_eq!(packed.len(), 254);
         assert_eq!(packed.chars().count(), 254);
+    }
+
+    #[test]
+    fn semantic_equality_ignores_how_the_digits_were_packed() {
+        // The same digits, one run even and one odd-with-padding.
+        let even = Packed::new(Alphabet::Nibble, &[0x12, 0x30], false);
+        let odd = Packed::new(Alphabet::Nibble, &[0x12, 0x30], true);
+        assert!(
+            !even.semantic_eq(odd),
+            "one has a trailing zero, one does not"
+        );
+
+        let a = Packed::new(Alphabet::Nibble, &[0x12, 0x3f], true);
+        let b = Packed::new(Alphabet::Nibble, &[0x12, 0x30], true);
+        assert!(a.semantic_eq(b), "the padding nibble is not a digit");
+        assert_ne!(a, b, "and they are not byte-equal");
+
+        // Digits 0..9 render the same in both alphabets.
+        let nibble = Packed::new(Alphabet::Nibble, &[0x12], false);
+        let hex = Packed::new(Alphabet::Hex, &[0x12], false);
+        assert!(nibble.semantic_eq(hex));
+
+        let different = Packed::new(Alphabet::Nibble, &[0x13], false);
+        assert!(!nibble.semantic_eq(different));
+        assert!(!nibble.semantic_eq(Packed::new(Alphabet::Nibble, &[0x12, 0x34], false)));
+        assert!(!Packed::new(Alphabet::Nibble, &[], false).semantic_eq(nibble));
     }
 
     #[test]

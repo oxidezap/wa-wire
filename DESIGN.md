@@ -1,11 +1,11 @@
 # wa-wire — Design Document
 
-> **Status:** **IMPLEMENTING** — all nine RFCs accepted. Steps 1–3 of §8 are
-> done; step 4 is next.
+> **Status:** **IMPLEMENTING** — all nine RFCs accepted. Steps 1–4 and 6 of §8
+> are done; step 5 (the `zapo` adapter) is next.
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 10
+> **Last revised:** rev 11
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1337,9 +1337,9 @@ so step 0 is done and implementation can begin.
 | ~~1~~ | ~~`wa-wire-contract` — envelope encode/decode, capability + provenance types~~ | — | **done in rev 8** — `no_std`, zero dependencies, allocation-free decoding; 99.7% line coverage |
 | ~~2~~ | ~~`wa-wire-codec` — binary-node parse over `whatspec` tokens~~ | — | **done in rev 9** — token table is a parameter, not a constant; 99.8% line coverage |
 | ~~3~~ | ~~`whatsapp-rust` adapter, tap mode~~ | — | **done in rev 10** — plus `wa-wire-adapter`, the SDK every Rust adapter shares |
-| 4 | `wa-wire-l1` — derivation generated from `whatspec`, committed | conformance | host-side, single implementation, CI checks regeneration is a no-op |
+| ~~4~~ | ~~`wa-wire-l1` — derivation generated from `whatspec`~~ | — | **done in rev 11** — generated from the `incoming` domain, tests generated alongside |
 | 5 | `zapo` adapter | second engine | plugin + stanza filter; native takeover |
-| 6 | **Conformance runner** | the whole thesis | first point where the central claim becomes a test result |
+| ~~6~~ | ~~**Conformance runner**~~ | — | **done in rev 11** — the central claim is now a test result |
 | 7 | `Baileys` adapter | third engine | `ws.on('frame')` for tap; one-line patch for bytes |
 | 8 | `hypermeow` adapter + Go hook | fourth engine | hook at `client.go:844`, bytes at `:824`; **MPL-2.0 subdirectory with NOTICE** |
 | 9 | `whatsapp-rust` takeover patch (D-020) | interchangeability | `StanzaRouter::register` panics on duplicate tags (`router.rs:30-35`) — needs an override path or a pre-dispatch gate |
@@ -1437,10 +1437,42 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-036 | An adapter's capability claims are **checked against its stanzas**, not merely declared | A declaration nobody verifies drifts from the code the first time an engine moves underneath. `AdapterInfo::verify` turns "this adapter is zero-copy" into a failing test | 10 |
 | D-037 | A sink receives the pre-encoding `RawStanza`, not a finished buffer | An in-process consumer then never pays for encoding, while a sidecar consumer encodes and writes. Same value, two costs, one adapter | 10 |
 | D-038 | Adapters live outside the main workspace | Each drags in a whole engine — tokio, TLS, protobuf — and the contract and codec are dependency-free on purpose. An adapter also inherits its engine's toolchain, which must not become the project's | 10 |
+| D-039 | L1 is generated from whatspec's `incoming` domain, not written | That domain records how WhatsApp Web itself parses each stanza. Writing the derivation by hand would mean guessing at what the spec states | 11 |
+| D-040 | The most specific reading of a field wins; obligation is taken at its weakest | whatspec records every call site, so one field appears several times with different readers. One site using the always-present reader does not make a field required on the wire — trusting it made generated shapes reject valid stanzas | 11 |
+| D-041 | Shapes of one tag are tried richest-first, behind whatever assertions the spec gives | Spec order let the most permissive shape win every time: a call receipt claimed every message receipt, its required fields being a subset | 11 |
+| D-042 | Tests for generated code are generated from the same source | Sixteen fixtures kept in step with sixteen shapes by hand would drift; deriving both from one source is the only way they cannot | 11 |
+| D-043 | Conformance compares L1 by **meaning**, not by bytes | Two engines can encode one value differently and both be right. Reporting that as a divergence would bury the ones that are real | 11 |
+| D-044 | A frame difference is reported but is not a fault; a derivation difference is | The format has more than one valid encoding, so L0 differences are context. The derivation is pure, so two engines cannot both be right at L1 | 11 |
+| D-045 | Two engines failing the same way is agreement, not a finding | Being consistently silent about a stanza neither models is exactly the consistency conformance is checking for | 11 |
 
 ---
 
 ## Changelog
+
+### rev 11 — 2026-08-07
+
+- **Steps 4 and 6 implemented: `wa-wire-l1` and `wa-wire-conformance`.**
+  95.6% line coverage and 100% function coverage across the workspace; clippy
+  clean.
+- **L1 is generated from whatspec's `incoming` domain** (D-039). Three things
+  the spec forced out that a hand-written parser would have guessed wrong:
+  - the same field is read several ways at different call sites — `t` as a
+    string, an int and a timestamp — so the most specific reading wins (D-040);
+  - a call site using the always-present reader does not make a field required
+    on the wire, and trusting it made shapes reject valid stanzas (D-040);
+  - shapes of one tag must be tried richest-first, or the most permissive one
+    claims everything — a call receipt swallowed every message receipt, its
+    required fields being a subset (D-041).
+- **Tests for generated code are generated too** (D-042), from the same shapes.
+- **`semantic_eq` added at every level** — `Value`, `Jid`, `Packed`, and each
+  generated shape. Two engines can encode one value differently and both be
+  right, and a comparison that called that a divergence would bury the real
+  ones (D-043).
+- **Conformance separates context from faults** (D-044). A frame difference is
+  reported and is not a fault; a derivation difference is. Two engines failing
+  the same way is agreement (D-045).
+- Provenance mismatch is reported *first*, because it changes how every L1
+  difference after it reads.
 
 ### rev 10 — 2026-08-07
 

@@ -68,6 +68,7 @@ pub mod error;
 pub mod extract;
 pub mod generated;
 pub mod provenance;
+pub mod semantic;
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;

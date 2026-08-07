@@ -146,6 +146,25 @@ def dedupe(fields: list[dict], owner: str) -> list[dict]:
     return [chosen[name] for name in order]
 
 
+def semantic_compare(name: str, ty: str) -> str:
+    """How one scalar field is compared."""
+    if ty == "Value<'a>":
+        return f"self.{name}.semantic_eq(other.{name})"
+    if ty == "Option<Value<'a>>":
+        return (
+            f"match (self.{name}, other.{name}) {{ "
+            f"(Some(a), Some(b)) => a.semantic_eq(b), (None, None) => true, _ => false }}"
+        )
+    if ty == "Jid<'a>":
+        return f"self.{name}.semantic_eq(other.{name})"
+    if ty == "Option<Jid<'a>>":
+        return (
+            f"match (self.{name}, other.{name}) {{ "
+            f"(Some(a), Some(b)) => a.semantic_eq(b), (None, None) => true, _ => false }}"
+        )
+    return f"self.{name} == other.{name}"
+
+
 def snake(name: str) -> str:
     out = re.sub(r"[^0-9a-zA-Z]+", "_", name)
     out = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", out)
@@ -175,6 +194,10 @@ class Emitter:
     def __init__(self) -> None:
         self.structs: list[str] = []
         self.enums: dict[str, list[str]] = {}
+        # Only list items are compared through the trait, so only they need the
+        # impl. Emitting it for every struct would leave impls with no caller.
+        self.list_items: set[str] = set()
+        self.pending_trait_impls: list[str] = []
 
     def enum_for(self, owner: str, field: dict) -> str | None:
         """Emit an enum type for a field, deduplicating identical value sets."""
@@ -201,9 +224,10 @@ class Emitter:
         decls: list[str] = []
         inits: list[str] = []
         accessors: list[str] = []
+        comparisons: list[str] = []
 
         for field in dedupe(self.flatten(fields, name), name):
-            emitted = self.emit_field(name, field, decls, inits, accessors)
+            emitted = self.emit_field(name, field, decls, inits, accessors, comparisons)
             if not emitted:
                 drops.append(f"{name}.{field['name']}: {field['method'] or 'mixin'}")
 
@@ -232,7 +256,36 @@ class Emitter:
         struct += ["            node: *node,", "        })", "    }", "}"]
         if accessors:
             struct += ["", f"impl<'a> {name}<'a> {{"] + accessors + ["}"]
+
+        # Two engines can encode one value differently and both be right, so a
+        # conformance run compares meaning rather than bytes. `node` is excluded
+        # on purpose: it is the frame this came from, and comparing frames is
+        # what `semantic_eq` exists to avoid.
+        struct += [
+            "",
+            f"impl {name}<'_> {{",
+            "    /// Whether two derivations mean the same thing, whatever form",
+            "    /// each field arrived in.",
+            "    ///",
+            "    /// The originating node is excluded: two engines may encode one",
+            "    /// stanza differently and both be right.",
+            "    #[must_use]",
+            # A shape whose fields the generator could not express has nothing
+            # to compare; naming the parameter would only warn.
+            f"    pub fn semantic_eq(&self, {'other' if comparisons else '_other'}: &{name}<'_>) -> bool {{",
+        ]
+        if len(comparisons) == 1:
+            struct.append(f"        {comparisons[0]}")
+        elif comparisons:
+            # Parenthesised: a bare `match` in leading position parses as a
+            # statement, and the `&&` after it becomes a reference.
+            joined = "\n            && ".join(f"({c})" for c in comparisons)
+            struct.append(f"        {joined}")
+        else:
+            struct.append("        true")
+        struct += ["    }", "}"]
         self.structs.append("\n".join(struct))
+        self.pending_trait_impls.append(name)
 
     def flatten(self, fields: list[dict], owner: str) -> list[dict]:
         """Inline `sameNode` mixins — they parse the same node, so they are the
@@ -247,7 +300,7 @@ class Emitter:
 
     def emit_field(
         self, owner: str, field: dict, decls: list[str], inits: list[str],
-        accessors: list[str],
+        accessors: list[str], comparisons: list[str],
     ) -> bool:
         method = field.get("method") or ""
         name = snake(field["name"])
@@ -260,6 +313,7 @@ class Emitter:
                 ty, call = f"Option<{ty}>", OPTIONAL_JID[method]
             decls += [doc, f"    pub {name}: {ty},"]
             inits.append(f"{name}: {call.format(key=key)},")
+            comparisons.append(semantic_compare(name, ty))
             return True
 
         if method in ENUM_METHODS:
@@ -277,6 +331,7 @@ class Emitter:
                 call = f"extract::attr_enum(node, {key}, {enum_name}::from_wire)?"
             decls += [doc, f"    pub {name}: {ty},"]
             inits.append(f"{name}: {call},")
+            comparisons.append(f"self.{name} == other.{name}")
             return True
 
         if method in CHILD_METHODS:
@@ -284,12 +339,18 @@ class Emitter:
             self.emit_struct(child_name, field.get("children", []))
             tag = rust_str(field.get("tag") or field["name"])
             if method == "child":
+                comparisons.append(f"self.{name}.semantic_eq(&other.{name})")
                 decls += [doc, f"    pub {name}: alloc::boxed::Box<{child_name}<'a>>,"]
                 inits.append(
                     f"{name}: alloc::boxed::Box::new({child_name}::derive("
                     f"&extract::child(node, {tag})?)?),"
                 )
             else:
+                comparisons.append(
+                    f"match (&self.{name}, &other.{name}) {{ "
+                    f"(Some(a), Some(b)) => a.semantic_eq(b), "
+                    f"(None, None) => true, _ => false }}"
+                )
                 decls += [doc, f"    pub {name}: Option<alloc::boxed::Box<{child_name}<'a>>>,"]
                 inits.append(
                     f"{name}: match extract::maybe_child(node, {tag}) {{ "
@@ -302,6 +363,10 @@ class Emitter:
             item_name = f"{owner}{pascal(field['name'])}"
             self.emit_struct(item_name, field.get("children", []))
             tag = rust_str(field.get("tag") or field["name"])
+            comparisons.append(
+                f"crate::semantic::iter_eq(self.{name}(), other.{name}())"
+            )
+            self.list_items.add(item_name)
             accessors += [
                 f"    /// Each `<{field.get('tag') or field['name']}>` child, derived lazily.",
                 "    ///",
@@ -497,6 +562,20 @@ def main() -> None:
     lines += emitter.structs
     lines.append("")
 
+    # The trait exists for `iter_eq`, so it is implemented for the types that
+    # reach it and no others.
+    for name in emitter.pending_trait_impls:
+        if name not in emitter.list_items:
+            continue
+        lines += [
+            f"impl crate::semantic::SemanticEq for {name}<'_> {{",
+            "    fn semantic_eq(&self, other: &Self) -> bool {",
+            f"        {name}::semantic_eq(self, other)",
+            "    }",
+            "}",
+            "",
+        ]
+
     # The event union and its dispatcher.
     lines += [
         "/// One derived stanza.",
@@ -531,7 +610,23 @@ def main() -> None:
     ]
     for variant, _struct, _tag in variants:
         lines.append(f"            Self::{variant}(inner) => &inner.node,")
-    lines += ["        }", "    }", "}", ""]
+    lines += ["        }", "    }", ""]
+
+    lines += [
+        "    /// Whether two events mean the same thing.",
+        "    ///",
+        "    /// Different shapes never do, even for one tag: which shape matched",
+        "    /// is part of what was derived, so two engines picking different",
+        "    /// shapes for one stanza is exactly the divergence worth reporting.",
+        "    #[must_use]",
+        "    pub fn semantic_eq(&self, other: &Event<'_>) -> bool {",
+        "        match (self, other) {",
+    ]
+    for variant, _struct, _tag in variants:
+        lines.append(
+            f"            (Self::{variant}(a), Event::{variant}(b)) => a.semantic_eq(b),"
+        )
+    lines += ["            _ => false,", "        }", "    }", "}", ""]
 
     # Field counts decide the order two shapes of one tag are tried in. Without
     # it the most permissive shape wins every time — a call receipt would claim
@@ -636,6 +731,31 @@ def main() -> None:
             f'        assert!(derived.is_ok(), "{name}: {{:?}}", derived.err());',
             "    }",
             "",
+            f"    /// `{name}` agrees with itself and differs from another shape.",
+            "    ///",
+            "    /// Reflexivity is the floor: a comparison that cannot recognise",
+            "    /// its own output would report every stanza as a divergence.",
+            "    #[test]",
+            f"    fn {snake(name)}_compares_semantically() {{",
+            f"        let stanza = {fixture_for(entry['tag'], entry['shape']['fields'], True)}.build();",
+            "        let node = parse(&stanza);",
+            f"        let derived = {name}::derive(&node).expect(\"derives\");",
+            f"        let again = {name}::derive(&node).expect(\"derives\");",
+            "        assert!(derived.semantic_eq(&again));",
+            "",
+
+            "        // A stanza missing every optional field is a different",
+            "        // derivation of the same shape, unless the shape has none.",
+            f"        let bare = {fixture_for(entry['tag'], entry['shape']['fields'], False)}.build();",
+            "        let bare_node = parse(&bare);",
+            f"        if let Ok(bare_derived) = {name}::derive(&bare_node) {{",
+            "            let full_is_bare = derived.semantic_eq(&bare_derived);",
+            "            // Either they carry the same fields or they do not; both",
+            "            // are valid, and the comparison must not panic either way.",
+            "            let _ = full_is_bare;",
+            "        }",
+            "    }",
+            "",
         ]
     for enum_name, keys in sorted(emitter.enums.items()):
         lines += [
@@ -658,6 +778,31 @@ def main() -> None:
             "",
         ]
     lines += [
+        "    /// Events of different shapes never mean the same thing.",
+        "    #[test]",
+        "    fn different_shapes_never_compare_equal() {",
+        "        // Which shape matched is part of what was derived, so two",
+        "        // engines picking different shapes for one stanza is exactly",
+        "        // the divergence a conformance run should report.",
+        "        let stanza = Fixture::node(\"receipt\")",
+        "            .attr(\"id\", \"A\")",
+        "            .jid_attr(\"from\", \"u\")",
+        "            .build();",
+        "        let node = parse(&stanza);",
+        "        let a = derive(&node).expect(\"derives\");",
+        "        assert!(a.semantic_eq(&a), \"an event agrees with itself\");",
+        "",
+        "        let other = Fixture::node(\"ack\")",
+        "            .attr(\"id\", \"A\")",
+        "            .attr(\"class\", \"message\")",
+        "            .jid_attr(\"content\", \"u\")",
+        "            .build();",
+        "        let b = derive(&parse(&other)).expect(\"derives\");",
+        "        assert!(!a.semantic_eq(&b));",
+        "        assert!(!b.semantic_eq(&a));",
+        "        assert_ne!(a.tag(), b.tag());",
+        "    }",
+        "",
         "    /// Every tag dispatches, and an unmodelled one is reported as such.",
         "    #[test]",
         "    fn dispatch_covers_every_known_tag() {",

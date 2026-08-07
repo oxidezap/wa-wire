@@ -17,6 +17,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wa-wire-conformance"
+version = "0.1.0"
+dependencies = [
+ "wa-wire-adapter",
+ "wa-wire-codec",
+ "wa-wire-contract",
+ "wa-wire-l1",
+]
+
+[[package]]
 name = "wa-wire-contract"
 version = "0.1.0"
 

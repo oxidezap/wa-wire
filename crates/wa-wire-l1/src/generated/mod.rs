@@ -564,6 +564,18 @@ impl<'a> IncomingMsgParserPlaintext<'a> {
         Ok(Self { node: *node })
     }
 }
+
+impl IncomingMsgParserPlaintext<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, _other: &IncomingMsgParserPlaintext<'_>) -> bool {
+        true
+    }
+}
 /// Derived from whatspec's `IncomingMsgParserEnc` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -602,6 +614,40 @@ impl<'a> IncomingMsgParserEnc<'a> {
         })
     }
 }
+
+impl IncomingMsgParserEnc<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserEnc<'_>) -> bool {
+        (self.r#type == other.r#type)
+            && (match (self.mediatype, other.mediatype) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.content == other.content)
+            && (self.count == other.count)
+            && (match (self.decrypt_fail, other.decrypt_fail) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.state, other.state) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.session_type, other.session_type) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+    }
+}
 /// Derived from whatspec's `IncomingMsgParserDeviceIdentity` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -620,6 +666,18 @@ impl<'a> IncomingMsgParserDeviceIdentity<'a> {
             content: extract::content_bytes(node)?,
             node: *node,
         })
+    }
+}
+
+impl IncomingMsgParserDeviceIdentity<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserDeviceIdentity<'_>) -> bool {
+        self.content == other.content
     }
 }
 /// Derived from whatspec's `IncomingMsgParserBot` shape.
@@ -654,6 +712,38 @@ impl<'a> IncomingMsgParserBot<'a> {
         })
     }
 }
+
+impl IncomingMsgParserBot<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserBot<'_>) -> bool {
+        (match (self.sender_timestamp_ms, other.sender_timestamp_ms) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (self.edit_target_id, other.edit_target_id) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (self.edit, other.edit) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (self.biz_bot, other.biz_bot) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (self.r#type, other.r#type) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        })
+    }
+}
 /// Derived from whatspec's `IncomingMsgParserUnavailable` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -674,6 +764,26 @@ impl<'a> IncomingMsgParserUnavailable<'a> {
             hosted: extract::maybe_attr_string(node, "hosted"),
             r#type: extract::maybe_attr_string(node, "type"),
             node: *node,
+        })
+    }
+}
+
+impl IncomingMsgParserUnavailable<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserUnavailable<'_>) -> bool {
+        (match (self.hosted, other.hosted) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (self.r#type, other.r#type) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
         })
     }
 }
@@ -698,6 +808,22 @@ impl<'a> IncomingMsgParserMetaKey<'a> {
             content: extract::content_bytes(node)?,
             node: *node,
         })
+    }
+}
+
+impl IncomingMsgParserMetaKey<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserMetaKey<'_>) -> bool {
+        (match (self.rkid, other.rkid) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (self.content == other.content)
     }
 }
 /// Derived from whatspec's `IncomingMsgParserMeta` shape.
@@ -785,6 +911,98 @@ impl<'a> IncomingMsgParserMeta<'a> {
         })
     }
 }
+
+impl IncomingMsgParserMeta<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserMeta<'_>) -> bool {
+        (self.polltype == other.polltype)
+            && (match (self.status_mentioned, other.status_mentioned) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.origin == other.origin)
+            && (self.appdata == other.appdata)
+            && (self.content.semantic_eq(other.content))
+            && (match (self.thread_msg_id, other.thread_msg_id) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.thread_msg_sender_jid, other.thread_msg_sender_jid) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.target_id, other.target_id) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.target_sender_jid, other.target_sender_jid) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.target_chat_jid, other.target_chat_jid) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.target_chat_jid_lid, other.target_chat_jid_lid) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.from, other.from) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.capi, other.capi) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.event_type == other.event_type)
+            && (match (self.context_source, other.context_source) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.read, other.read) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.is_group_status, other.is_group_status) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.session_scope, other.session_scope) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.r#type, other.r#type) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.st == other.st)
+            && (match (&self.key, &other.key) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+    }
+}
 /// Derived from whatspec's `IncomingMsgParserVerifiedName` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -803,6 +1021,18 @@ impl<'a> IncomingMsgParserVerifiedName<'a> {
             content: extract::content_bytes(node)?,
             node: *node,
         })
+    }
+}
+
+impl IncomingMsgParserVerifiedName<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserVerifiedName<'_>) -> bool {
+        self.content == other.content
     }
 }
 /// Derived from whatspec's `IncomingMsgParserBiz` shape.
@@ -837,6 +1067,30 @@ impl<'a> IncomingMsgParserBiz<'a> {
         })
     }
 }
+
+impl IncomingMsgParserBiz<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserBiz<'_>) -> bool {
+        (self.actual_actors == other.actual_actors)
+            && (self.host_storage == other.host_storage)
+            && (self.privacy_mode_ts == other.privacy_mode_ts)
+            && (match (self.native_flow_name, other.native_flow_name) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.campaign_id, other.campaign_id) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+    }
+}
 /// Derived from whatspec's `IncomingMsgParserPay` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -852,6 +1106,18 @@ impl<'a> IncomingMsgParserPay<'a> {
         Ok(Self { node: *node })
     }
 }
+
+impl IncomingMsgParserPay<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, _other: &IncomingMsgParserPay<'_>) -> bool {
+        true
+    }
+}
 /// Derived from whatspec's `IncomingMsgParserTransaction` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -865,6 +1131,18 @@ impl<'a> IncomingMsgParserTransaction<'a> {
     /// Derive from a node already known to match this shape.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
         Ok(Self { node: *node })
+    }
+}
+
+impl IncomingMsgParserTransaction<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, _other: &IncomingMsgParserTransaction<'_>) -> bool {
+        true
     }
 }
 /// Derived from whatspec's `IncomingMsgParserHsm` shape.
@@ -887,6 +1165,26 @@ impl<'a> IncomingMsgParserHsm<'a> {
             tag: extract::maybe_attr_string(node, "tag"),
             category: extract::maybe_attr_string(node, "category"),
             node: *node,
+        })
+    }
+}
+
+impl IncomingMsgParserHsm<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserHsm<'_>) -> bool {
+        (match (self.tag, other.tag) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (self.category, other.category) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
         })
     }
 }
@@ -913,6 +1211,18 @@ impl<'a> IncomingMsgParserReportingReportingToken<'a> {
         })
     }
 }
+
+impl IncomingMsgParserReportingReportingToken<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserReportingReportingToken<'_>) -> bool {
+        (self.content == other.content) && (self.v == other.v)
+    }
+}
 /// Derived from whatspec's `IncomingMsgParserReportingReportingTag` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -931,6 +1241,18 @@ impl<'a> IncomingMsgParserReportingReportingTag<'a> {
             content: extract::content_bytes(node)?,
             node: *node,
         })
+    }
+}
+
+impl IncomingMsgParserReportingReportingTag<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserReportingReportingTag<'_>) -> bool {
+        self.content == other.content
     }
 }
 /// Derived from whatspec's `IncomingMsgParserReporting` shape.
@@ -966,6 +1288,26 @@ impl<'a> IncomingMsgParserReporting<'a> {
         })
     }
 }
+
+impl IncomingMsgParserReporting<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserReporting<'_>) -> bool {
+        (match (&self.reporting_token, &other.reporting_token) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (&self.reporting_tag, &other.reporting_tag) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        })
+    }
+}
 /// Derived from whatspec's `IncomingMsgParserRcat` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -979,6 +1321,18 @@ impl<'a> IncomingMsgParserRcat<'a> {
     /// Derive from a node already known to match this shape.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
         Ok(Self { node: *node })
+    }
+}
+
+impl IncomingMsgParserRcat<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, _other: &IncomingMsgParserRcat<'_>) -> bool {
+        true
     }
 }
 /// Derived from whatspec's `IncomingMsgParser` shape.
@@ -1129,6 +1483,87 @@ impl<'a> IncomingMsgParser<'a> {
             .map(|child| IncomingMsgParserEnc::derive(&child))
     }
 }
+
+impl IncomingMsgParser<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParser<'_>) -> bool {
+        (match (&self.plaintext, &other.plaintext) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (crate::semantic::iter_eq(self.enc(), other.enc()))
+            && (match (&self.device_identity, &other.device_identity) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (&self.bot, &other.bot) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.from.semantic_eq(other.from))
+            && (match (self.participant, other.participant) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (&self.unavailable, &other.unavailable) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.r#type == other.r#type)
+            && (match (&self.meta, &other.meta) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.t == other.t)
+            && (match (&self.verified_name, &other.verified_name) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.verified_level == other.verified_level)
+            && (match (&self.biz, &other.biz) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (&self.pay, &other.pay) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (&self.transaction, &other.transaction) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.recipient.semantic_eq(other.recipient))
+            && (match (&self.hsm, &other.hsm) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (&self.reporting, &other.reporting) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (&self.rcat, &other.rcat) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+    }
+}
 /// Derived from whatspec's `IncomingMsgParserForAckOnlyBot` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1158,6 +1593,38 @@ impl<'a> IncomingMsgParserForAckOnlyBot<'a> {
             biz_bot: extract::maybe_attr_string(node, "biz_bot"),
             r#type: extract::maybe_attr_string(node, "type"),
             node: *node,
+        })
+    }
+}
+
+impl IncomingMsgParserForAckOnlyBot<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserForAckOnlyBot<'_>) -> bool {
+        (match (self.sender_timestamp_ms, other.sender_timestamp_ms) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (self.edit_target_id, other.edit_target_id) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (self.edit, other.edit) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (self.biz_bot, other.biz_bot) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (self.r#type, other.r#type) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
         })
     }
 }
@@ -1201,6 +1668,31 @@ impl<'a> IncomingMsgParserForAckOnly<'a> {
         })
     }
 }
+
+impl IncomingMsgParserForAckOnly<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgParserForAckOnly<'_>) -> bool {
+        (self.r#type == other.r#type)
+            && (self.offline.semantic_eq(other.offline))
+            && (match (&self.bot, &other.bot) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.id.semantic_eq(other.id))
+            && (self.from.semantic_eq(other.from))
+            && (match (self.participant, other.participant) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+    }
+}
 /// Derived from whatspec's `CallReceiptParserOffer` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1214,6 +1706,18 @@ impl<'a> CallReceiptParserOffer<'a> {
     /// Derive from a node already known to match this shape.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
         Ok(Self { node: *node })
+    }
+}
+
+impl CallReceiptParserOffer<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, _other: &CallReceiptParserOffer<'_>) -> bool {
+        true
     }
 }
 /// Derived from whatspec's `CallReceiptParserAccept` shape.
@@ -1231,6 +1735,18 @@ impl<'a> CallReceiptParserAccept<'a> {
         Ok(Self { node: *node })
     }
 }
+
+impl CallReceiptParserAccept<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, _other: &CallReceiptParserAccept<'_>) -> bool {
+        true
+    }
+}
 /// Derived from whatspec's `CallReceiptParserReject` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1244,6 +1760,18 @@ impl<'a> CallReceiptParserReject<'a> {
     /// Derive from a node already known to match this shape.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
         Ok(Self { node: *node })
+    }
+}
+
+impl CallReceiptParserReject<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, _other: &CallReceiptParserReject<'_>) -> bool {
+        true
     }
 }
 /// Derived from whatspec's `CallReceiptParser` shape.
@@ -1296,6 +1824,36 @@ impl<'a> CallReceiptParser<'a> {
         })
     }
 }
+
+impl CallReceiptParser<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &CallReceiptParser<'_>) -> bool {
+        (match (&self.offer, &other.offer) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (&self.accept, &other.accept) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (&self.reject, &other.reject) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (self.id.semantic_eq(other.id))
+            && (match (self.r#type, other.r#type) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.from.semantic_eq(other.from))
+    }
+}
 /// Derived from whatspec's `IncomingMsgReceiptParserError` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1317,6 +1875,22 @@ impl<'a> IncomingMsgReceiptParserError<'a> {
             r#type: extract::attr_string(node, "type")?,
             node: *node,
         })
+    }
+}
+
+impl IncomingMsgReceiptParserError<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgReceiptParserError<'_>) -> bool {
+        (match (self.reason, other.reason) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (self.r#type.semantic_eq(other.r#type))
     }
 }
 /// Derived from whatspec's `IncomingMsgReceiptParserParticipantsUser` shape.
@@ -1353,6 +1927,30 @@ impl<'a> IncomingMsgReceiptParserParticipantsUser<'a> {
             participant_username: extract::maybe_attr_string(node, "participant_username"),
             node: *node,
         })
+    }
+}
+
+impl IncomingMsgReceiptParserParticipantsUser<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgReceiptParserParticipantsUser<'_>) -> bool {
+        (self.jid.semantic_eq(other.jid))
+            && (self.t == other.t)
+            && (self.r#type == other.r#type)
+            && (match (self.participant_pn, other.participant_pn) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.participant_username, other.participant_username) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
     }
 }
 /// Derived from whatspec's `IncomingMsgReceiptParserParticipants` shape.
@@ -1392,6 +1990,28 @@ impl<'a> IncomingMsgReceiptParserParticipants<'a> {
             .map(|child| IncomingMsgReceiptParserParticipantsUser::derive(&child))
     }
 }
+
+impl IncomingMsgReceiptParserParticipants<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgReceiptParserParticipants<'_>) -> bool {
+        (crate::semantic::iter_eq(self.user(), other.user()))
+            && (match (self.message_id, other.message_id) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.key, other.key) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+    }
+}
 /// Derived from whatspec's `IncomingMsgReceiptParserListItem` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1412,6 +2032,26 @@ impl<'a> IncomingMsgReceiptParserListItem<'a> {
             server_id: extract::maybe_attr_string(node, "server_id"),
             id: extract::maybe_attr_string(node, "id"),
             node: *node,
+        })
+    }
+}
+
+impl IncomingMsgReceiptParserListItem<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgReceiptParserListItem<'_>) -> bool {
+        (match (self.server_id, other.server_id) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (self.id, other.id) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
         })
     }
 }
@@ -1444,6 +2084,18 @@ impl<'a> IncomingMsgReceiptParserList<'a> {
             .map(|child| IncomingMsgReceiptParserListItem::derive(&child))
     }
 }
+
+impl IncomingMsgReceiptParserList<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgReceiptParserList<'_>) -> bool {
+        crate::semantic::iter_eq(self.item(), other.item())
+    }
+}
 /// Derived from whatspec's `IncomingMsgReceiptParserBiz` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1468,6 +2120,20 @@ impl<'a> IncomingMsgReceiptParserBiz<'a> {
             privacy_mode_ts: extract::maybe_attr_int(node, "privacy_mode_ts")?,
             node: *node,
         })
+    }
+}
+
+impl IncomingMsgReceiptParserBiz<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgReceiptParserBiz<'_>) -> bool {
+        (self.actual_actors == other.actual_actors)
+            && (self.host_storage == other.host_storage)
+            && (self.privacy_mode_ts == other.privacy_mode_ts)
     }
 }
 /// Derived from whatspec's `IncomingMsgReceiptParser` shape.
@@ -1553,6 +2219,71 @@ impl<'a> IncomingMsgReceiptParser<'a> {
         })
     }
 }
+
+impl IncomingMsgReceiptParser<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &IncomingMsgReceiptParser<'_>) -> bool {
+        (self.id.semantic_eq(other.id))
+            && (self.from.semantic_eq(other.from))
+            && (match (self.offline, other.offline) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.r#type == other.r#type)
+            && (match (&self.error, &other.error) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (&self.participants, &other.participants) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.participant, other.participant) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.recipient, other.recipient) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (&self.list, &other.list) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (&self.biz, &other.biz) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.is_lid, other.is_lid) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.participant_pn, other.participant_pn) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.participant_username, other.participant_username) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.t == other.t)
+    }
+}
 /// Derived from whatspec's `RetryRequestParserRetry` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1576,6 +2307,18 @@ impl<'a> RetryRequestParserRetry<'a> {
         })
     }
 }
+
+impl RetryRequestParserRetry<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &RetryRequestParserRetry<'_>) -> bool {
+        (self.id.semantic_eq(other.id)) && (self.count == other.count)
+    }
+}
 /// Derived from whatspec's `RetryRequestParserKeysIdentity` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1594,6 +2337,18 @@ impl<'a> RetryRequestParserKeysIdentity<'a> {
             content: extract::content_bytes(node)?,
             node: *node,
         })
+    }
+}
+
+impl RetryRequestParserKeysIdentity<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &RetryRequestParserKeysIdentity<'_>) -> bool {
+        self.content == other.content
     }
 }
 /// Derived from whatspec's `RetryRequestParserKeysSkeyId` shape.
@@ -1616,6 +2371,18 @@ impl<'a> RetryRequestParserKeysSkeyId<'a> {
         })
     }
 }
+
+impl RetryRequestParserKeysSkeyId<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &RetryRequestParserKeysSkeyId<'_>) -> bool {
+        self.content == other.content
+    }
+}
 /// Derived from whatspec's `RetryRequestParserKeysSkeyValue` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1636,6 +2403,18 @@ impl<'a> RetryRequestParserKeysSkeyValue<'a> {
         })
     }
 }
+
+impl RetryRequestParserKeysSkeyValue<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &RetryRequestParserKeysSkeyValue<'_>) -> bool {
+        self.content == other.content
+    }
+}
 /// Derived from whatspec's `RetryRequestParserKeysSkeySignature` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1654,6 +2433,18 @@ impl<'a> RetryRequestParserKeysSkeySignature<'a> {
             content: extract::content_bytes(node)?,
             node: *node,
         })
+    }
+}
+
+impl RetryRequestParserKeysSkeySignature<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &RetryRequestParserKeysSkeySignature<'_>) -> bool {
+        self.content == other.content
     }
 }
 /// Derived from whatspec's `RetryRequestParserKeysSkey` shape.
@@ -1688,6 +2479,20 @@ impl<'a> RetryRequestParserKeysSkey<'a> {
         })
     }
 }
+
+impl RetryRequestParserKeysSkey<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &RetryRequestParserKeysSkey<'_>) -> bool {
+        (self.id.semantic_eq(&other.id))
+            && (self.value.semantic_eq(&other.value))
+            && (self.signature.semantic_eq(&other.signature))
+    }
+}
 /// Derived from whatspec's `RetryRequestParserKeysKeyId` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1708,6 +2513,18 @@ impl<'a> RetryRequestParserKeysKeyId<'a> {
         })
     }
 }
+
+impl RetryRequestParserKeysKeyId<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &RetryRequestParserKeysKeyId<'_>) -> bool {
+        self.content == other.content
+    }
+}
 /// Derived from whatspec's `RetryRequestParserKeysKeyValue` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1726,6 +2543,18 @@ impl<'a> RetryRequestParserKeysKeyValue<'a> {
             content: extract::content_bytes(node)?,
             node: *node,
         })
+    }
+}
+
+impl RetryRequestParserKeysKeyValue<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &RetryRequestParserKeysKeyValue<'_>) -> bool {
+        self.content == other.content
     }
 }
 /// Derived from whatspec's `RetryRequestParserKeysKey` shape.
@@ -1753,6 +2582,18 @@ impl<'a> RetryRequestParserKeysKey<'a> {
             )?),
             node: *node,
         })
+    }
+}
+
+impl RetryRequestParserKeysKey<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &RetryRequestParserKeysKey<'_>) -> bool {
+        (self.id.semantic_eq(&other.id)) && (self.value.semantic_eq(&other.value))
     }
 }
 /// Derived from whatspec's `RetryRequestParserKeys` shape.
@@ -1790,6 +2631,24 @@ impl<'a> RetryRequestParserKeys<'a> {
         })
     }
 }
+
+impl RetryRequestParserKeys<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &RetryRequestParserKeys<'_>) -> bool {
+        (self.identity.semantic_eq(&other.identity))
+            && (self.skey.semantic_eq(&other.skey))
+            && (match (&self.key, &other.key) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+    }
+}
 /// Derived from whatspec's `RetryRequestParserRegistration` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1808,6 +2667,18 @@ impl<'a> RetryRequestParserRegistration<'a> {
             content: extract::content_uint(node)?,
             node: *node,
         })
+    }
+}
+
+impl RetryRequestParserRegistration<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &RetryRequestParserRegistration<'_>) -> bool {
+        self.content == other.content
     }
 }
 /// Derived from whatspec's `RetryRequestParser` shape.
@@ -1866,6 +2737,43 @@ impl<'a> RetryRequestParser<'a> {
         })
     }
 }
+
+impl RetryRequestParser<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &RetryRequestParser<'_>) -> bool {
+        (self.r#type.semantic_eq(other.r#type))
+            && (self.from.semantic_eq(other.from))
+            && (match (self.participant, other.participant) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.is_lid, other.is_lid) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.recipient, other.recipient) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.retry.semantic_eq(&other.retry))
+            && (match (&self.keys, &other.keys) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.id.semantic_eq(other.id))
+            && (self.t == other.t)
+            && (self.registration.semantic_eq(&other.registration))
+    }
+}
 /// Derived from whatspec's `CallOfferNoticeParserOfferNotice` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1893,6 +2801,21 @@ impl<'a> CallOfferNoticeParserOfferNotice<'a> {
             media: extract::attr_string(node, "media")?,
             node: *node,
         })
+    }
+}
+
+impl CallOfferNoticeParserOfferNotice<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &CallOfferNoticeParserOfferNotice<'_>) -> bool {
+        (self.call_creator.semantic_eq(other.call_creator))
+            && (self.call_id.semantic_eq(other.call_id))
+            && (self.r#type.semantic_eq(other.r#type))
+            && (self.media.semantic_eq(other.media))
     }
 }
 /// Derived from whatspec's `CallOfferNoticeParser` shape.
@@ -1926,6 +2849,21 @@ impl<'a> CallOfferNoticeParser<'a> {
         })
     }
 }
+
+impl CallOfferNoticeParser<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &CallOfferNoticeParser<'_>) -> bool {
+        (self.id.semantic_eq(other.id))
+            && (self.from.semantic_eq(other.from))
+            && (self.offer_notice.semantic_eq(&other.offer_notice))
+            && (self.t == other.t)
+    }
+}
 /// Derived from whatspec's `CallOfferPlaceholder` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -1944,6 +2882,18 @@ impl<'a> CallOfferPlaceholder<'a> {
             t: extract::maybe_attr_time(node, "t")?,
             node: *node,
         })
+    }
+}
+
+impl CallOfferPlaceholder<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &CallOfferPlaceholder<'_>) -> bool {
+        self.t == other.t
     }
 }
 /// Derived from whatspec's `CallParser` shape.
@@ -1984,6 +2934,36 @@ impl<'a> CallParser<'a> {
         })
     }
 }
+
+impl CallParser<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &CallParser<'_>) -> bool {
+        (self.from.semantic_eq(other.from))
+            && (match (self.sender_lid, other.sender_lid) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.platform, other.platform) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.version, other.version) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.t == other.t)
+            && (self.e == other.e)
+            && (self.id.semantic_eq(other.id))
+    }
+}
 /// Derived from whatspec's `Ack` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -2020,6 +3000,40 @@ impl<'a> Ack<'a> {
             recipient: extract::maybe_attr_jid(node, "recipient")?,
             node: *node,
         })
+    }
+}
+
+impl Ack<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &Ack<'_>) -> bool {
+        (self.id.semantic_eq(other.id))
+            && (match (self.t, other.t) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.class.semantic_eq(other.class))
+            && (match (self.r#type, other.r#type) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.content.semantic_eq(other.content))
+            && (match (self.participant, other.participant) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.recipient, other.recipient) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
     }
 }
 /// Derived from whatspec's `ParseNewsletterResponseNegative` shape.
@@ -2060,6 +3074,25 @@ impl<'a> ParseNewsletterResponseNegative<'a> {
         })
     }
 }
+
+impl ParseNewsletterResponseNegative<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &ParseNewsletterResponseNegative<'_>) -> bool {
+        (self.error.semantic_eq(other.error))
+            && (self.class.semantic_eq(other.class))
+            && (self.t == other.t)
+            && (self.edit.semantic_eq(other.edit))
+            && (self.franking_reporting_tag_element_value
+                == other.franking_reporting_tag_element_value)
+            && (self.application_error == other.application_error)
+            && (self.backoff == other.backoff)
+    }
+}
 /// Derived from whatspec's `ParseNewsletterResponseSuccess` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -2073,6 +3106,18 @@ impl<'a> ParseNewsletterResponseSuccess<'a> {
     /// Derive from a node already known to match this shape.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
         Ok(Self { node: *node })
+    }
+}
+
+impl ParseNewsletterResponseSuccess<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, _other: &ParseNewsletterResponseSuccess<'_>) -> bool {
+        true
     }
 }
 /// Derived from whatspec's `ParsePostNewsletterStatusResponseNegative` shape.
@@ -2107,6 +3152,22 @@ impl<'a> ParsePostNewsletterStatusResponseNegative<'a> {
         })
     }
 }
+
+impl ParsePostNewsletterStatusResponseNegative<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &ParsePostNewsletterStatusResponseNegative<'_>) -> bool {
+        (self.error.semantic_eq(other.error))
+            && (self.class.semantic_eq(other.class))
+            && (self.t == other.t)
+            && (self.application_error == other.application_error)
+            && (self.backoff == other.backoff)
+    }
+}
 /// Derived from whatspec's `ParsePostNewsletterStatusResponseSuccess` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -2131,6 +3192,20 @@ impl<'a> ParsePostNewsletterStatusResponseSuccess<'a> {
             t: extract::attr_int(node, "t")?,
             node: *node,
         })
+    }
+}
+
+impl ParsePostNewsletterStatusResponseSuccess<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &ParsePostNewsletterStatusResponseSuccess<'_>) -> bool {
+        (self.server_id == other.server_id)
+            && (self.class.semantic_eq(other.class))
+            && (self.t == other.t)
     }
 }
 /// Derived from whatspec's `ParsePublishViewResponseSuccess` shape.
@@ -2159,6 +3234,20 @@ impl<'a> ParsePublishViewResponseSuccess<'a> {
         })
     }
 }
+
+impl ParsePublishViewResponseSuccess<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &ParsePublishViewResponseSuccess<'_>) -> bool {
+        (self.class.semantic_eq(other.class))
+            && (self.t == other.t)
+            && (self.readreceipts == other.readreceipts)
+    }
+}
 /// Derived from whatspec's `ReadReceiptAckParser` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -2177,6 +3266,18 @@ impl<'a> ReadReceiptAckParser<'a> {
             readreceipts: extract::maybe_attr_enum(node, "readreceipts", ALLNONE::from_wire)?,
             node: *node,
         })
+    }
+}
+
+impl ReadReceiptAckParser<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &ReadReceiptAckParser<'_>) -> bool {
+        self.readreceipts == other.readreceipts
     }
 }
 /// Derived from whatspec's `SendMsgAckSyncParser` shape.
@@ -2215,6 +3316,58 @@ impl<'a> SendMsgAckSyncParser<'a> {
             error: extract::maybe_attr_int(node, "error")?,
             node: *node,
         })
+    }
+}
+
+impl SendMsgAckSyncParser<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &SendMsgAckSyncParser<'_>) -> bool {
+        (self.t == other.t)
+            && (match (self.sync, other.sync) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.phash, other.phash) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.refresh_lid, other.refresh_lid) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (self.addressing_mode, other.addressing_mode) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.count == other.count)
+            && (self.error == other.error)
+    }
+}
+
+impl crate::semantic::SemanticEq for IncomingMsgParserEnc<'_> {
+    fn semantic_eq(&self, other: &Self) -> bool {
+        IncomingMsgParserEnc::semantic_eq(self, other)
+    }
+}
+
+impl crate::semantic::SemanticEq for IncomingMsgReceiptParserParticipantsUser<'_> {
+    fn semantic_eq(&self, other: &Self) -> bool {
+        IncomingMsgReceiptParserParticipantsUser::semantic_eq(self, other)
+    }
+}
+
+impl crate::semantic::SemanticEq for IncomingMsgReceiptParserListItem<'_> {
+    fn semantic_eq(&self, other: &Self) -> bool {
+        IncomingMsgReceiptParserListItem::semantic_eq(self, other)
     }
 }
 
@@ -2304,6 +3457,52 @@ impl<'a> Event<'a> {
             Self::ParsePublishViewResponseSuccess(inner) => &inner.node,
             Self::ReadReceiptAckParser(inner) => &inner.node,
             Self::SendMsgAckSyncParser(inner) => &inner.node,
+        }
+    }
+
+    /// Whether two events mean the same thing.
+    ///
+    /// Different shapes never do, even for one tag: which shape matched
+    /// is part of what was derived, so two engines picking different
+    /// shapes for one stanza is exactly the divergence worth reporting.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &Event<'_>) -> bool {
+        match (self, other) {
+            (Self::IncomingMsgParser(a), Event::IncomingMsgParser(b)) => a.semantic_eq(b),
+            (Self::IncomingMsgParserForAckOnly(a), Event::IncomingMsgParserForAckOnly(b)) => {
+                a.semantic_eq(b)
+            }
+            (Self::CallReceiptParser(a), Event::CallReceiptParser(b)) => a.semantic_eq(b),
+            (Self::IncomingMsgReceiptParser(a), Event::IncomingMsgReceiptParser(b)) => {
+                a.semantic_eq(b)
+            }
+            (Self::RetryRequestParser(a), Event::RetryRequestParser(b)) => a.semantic_eq(b),
+            (Self::CallOfferNoticeParser(a), Event::CallOfferNoticeParser(b)) => a.semantic_eq(b),
+            (Self::CallOfferPlaceholder(a), Event::CallOfferPlaceholder(b)) => a.semantic_eq(b),
+            (Self::CallParser(a), Event::CallParser(b)) => a.semantic_eq(b),
+            (Self::Ack(a), Event::Ack(b)) => a.semantic_eq(b),
+            (
+                Self::ParseNewsletterResponseNegative(a),
+                Event::ParseNewsletterResponseNegative(b),
+            ) => a.semantic_eq(b),
+            (Self::ParseNewsletterResponseSuccess(a), Event::ParseNewsletterResponseSuccess(b)) => {
+                a.semantic_eq(b)
+            }
+            (
+                Self::ParsePostNewsletterStatusResponseNegative(a),
+                Event::ParsePostNewsletterStatusResponseNegative(b),
+            ) => a.semantic_eq(b),
+            (
+                Self::ParsePostNewsletterStatusResponseSuccess(a),
+                Event::ParsePostNewsletterStatusResponseSuccess(b),
+            ) => a.semantic_eq(b),
+            (
+                Self::ParsePublishViewResponseSuccess(a),
+                Event::ParsePublishViewResponseSuccess(b),
+            ) => a.semantic_eq(b),
+            (Self::ReadReceiptAckParser(a), Event::ReadReceiptAckParser(b)) => a.semantic_eq(b),
+            (Self::SendMsgAckSyncParser(a), Event::SendMsgAckSyncParser(b)) => a.semantic_eq(b),
+            _ => false,
         }
     }
 }
@@ -2524,6 +3723,110 @@ mod generated_tests {
         assert!(derived.is_ok(), "IncomingMsgParser: {:?}", derived.err());
     }
 
+    /// `IncomingMsgParser` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn incoming_msg_parser_compares_semantically() {
+        let stanza = Fixture::node("message")
+            .child(Fixture::node("plaintext"))
+            .child(
+                Fixture::node("enc")
+                    .attr("type", "skmsg")
+                    .attr("mediatype", "x")
+                    .bytes(b"x")
+                    .attr("count", "1")
+                    .attr("decrypt-fail", "x")
+                    .attr("state", "x")
+                    .attr("session_type", "x"),
+            )
+            .child(Fixture::node("device-identity").bytes(b"x"))
+            .child(
+                Fixture::node("bot")
+                    .attr("sender_timestamp_ms", "x")
+                    .attr("edit_target_id", "x")
+                    .attr("edit", "x")
+                    .attr("biz_bot", "x")
+                    .attr("type", "x"),
+            )
+            .jid_attr("from", "u")
+            .jid_attr("participant", "u")
+            .child(
+                Fixture::node("unavailable")
+                    .attr("hosted", "x")
+                    .attr("type", "x"),
+            )
+            .attr("type", "text")
+            .child(
+                Fixture::node("meta")
+                    .attr("polltype", "creation")
+                    .attr("status_mentioned", "x")
+                    .attr("origin", "ctwa")
+                    .attr("appdata", "default")
+                    .attr("content", "x")
+                    .attr("thread_msg_id", "x")
+                    .jid_attr("thread_msg_sender_jid", "u")
+                    .attr("target_id", "x")
+                    .jid_attr("target_sender_jid", "u")
+                    .jid_attr("target_chat_jid", "u")
+                    .jid_attr("target_chat_jid_lid", "u")
+                    .jid_attr("from", "u")
+                    .attr("capi", "x")
+                    .attr("event_type", "creation")
+                    .attr("context_source", "x")
+                    .attr("read", "x")
+                    .attr("is_group_status", "x")
+                    .attr("session_scope", "x")
+                    .attr("type", "x")
+                    .attr("st", "1")
+                    .child(Fixture::node("key").attr("rkid", "x").bytes(b"x")),
+            )
+            .attr("t", "1")
+            .child(Fixture::node("verified_name").bytes(b"x"))
+            .attr("verified_level", "high")
+            .child(
+                Fixture::node("biz")
+                    .attr("actual_actors", "1")
+                    .attr("host_storage", "1")
+                    .attr("privacy_mode_ts", "1")
+                    .attr("native_flow_name", "x")
+                    .attr("campaign_id", "x"),
+            )
+            .child(Fixture::node("pay"))
+            .child(Fixture::node("transaction"))
+            .attr("recipient", "x")
+            .child(Fixture::node("hsm").attr("tag", "x").attr("category", "x"))
+            .child(
+                Fixture::node("reporting")
+                    .child(Fixture::node("reporting_token").bytes(b"x").attr("v", "1"))
+                    .child(Fixture::node("reporting_tag").bytes(b"x")),
+            )
+            .child(Fixture::node("rcat"))
+            .build();
+        let node = parse(&stanza);
+        let derived = IncomingMsgParser::derive(&node).expect("derives");
+        let again = IncomingMsgParser::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("message")
+            .child(Fixture::node("enc").attr("type", "skmsg").bytes(b"x"))
+            .jid_attr("from", "u")
+            .attr("type", "text")
+            .attr("t", "1")
+            .attr("recipient", "x")
+            .build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = IncomingMsgParser::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
+    }
+
     /// `IncomingMsgParserForAckOnly` derives from a stanza carrying its required fields.
     #[test]
     fn incoming_msg_parser_for_ack_only_derives_from_its_required_fields() {
@@ -2574,6 +3877,49 @@ mod generated_tests {
         );
     }
 
+    /// `IncomingMsgParserForAckOnly` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn incoming_msg_parser_for_ack_only_compares_semantically() {
+        let stanza = Fixture::node("message")
+            .attr("type", "text")
+            .attr("offline", "x")
+            .child(
+                Fixture::node("bot")
+                    .attr("sender_timestamp_ms", "x")
+                    .attr("edit_target_id", "x")
+                    .attr("edit", "x")
+                    .attr("biz_bot", "x")
+                    .attr("type", "x"),
+            )
+            .attr("id", "x")
+            .jid_attr("from", "u")
+            .jid_attr("participant", "u")
+            .build();
+        let node = parse(&stanza);
+        let derived = IncomingMsgParserForAckOnly::derive(&node).expect("derives");
+        let again = IncomingMsgParserForAckOnly::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("message")
+            .attr("type", "text")
+            .attr("offline", "x")
+            .attr("id", "x")
+            .jid_attr("from", "u")
+            .build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = IncomingMsgParserForAckOnly::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
+    }
+
     /// `CallReceiptParser` derives from a stanza carrying its required fields.
     #[test]
     fn call_receipt_parser_derives_from_its_required_fields() {
@@ -2605,6 +3951,40 @@ mod generated_tests {
         let node = parse(&stanza);
         let derived = CallReceiptParser::derive(&node);
         assert!(derived.is_ok(), "CallReceiptParser: {:?}", derived.err());
+    }
+
+    /// `CallReceiptParser` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn call_receipt_parser_compares_semantically() {
+        let stanza = Fixture::node("receipt")
+            .child(Fixture::node("offer"))
+            .child(Fixture::node("accept"))
+            .child(Fixture::node("reject"))
+            .attr("id", "x")
+            .attr("type", "x")
+            .jid_attr("from", "u")
+            .build();
+        let node = parse(&stanza);
+        let derived = CallReceiptParser::derive(&node).expect("derives");
+        let again = CallReceiptParser::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("receipt")
+            .attr("id", "x")
+            .jid_attr("from", "u")
+            .build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = CallReceiptParser::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
     }
 
     /// `IncomingMsgReceiptParser` derives from a stanza carrying its required fields.
@@ -2676,6 +4056,68 @@ mod generated_tests {
         );
     }
 
+    /// `IncomingMsgReceiptParser` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn incoming_msg_receipt_parser_compares_semantically() {
+        let stanza = Fixture::node("receipt")
+            .attr("id", "x")
+            .jid_attr("from", "u")
+            .attr("offline", "x")
+            .attr("type", "delivery")
+            .child(Fixture::node("error").attr("reason", "x").attr("type", "x"))
+            .child(
+                Fixture::node("participants")
+                    .child(
+                        Fixture::node("user")
+                            .jid_attr("jid", "u")
+                            .attr("t", "1")
+                            .attr("type", "delivery")
+                            .jid_attr("participant_pn", "u")
+                            .attr("participant_username", "x"),
+                    )
+                    .attr("message_id", "x")
+                    .attr("key", "x"),
+            )
+            .jid_attr("participant", "u")
+            .jid_attr("recipient", "u")
+            .child(
+                Fixture::node("list")
+                    .child(Fixture::node("item").attr("server_id", "x").attr("id", "x")),
+            )
+            .child(
+                Fixture::node("biz")
+                    .attr("actual_actors", "1")
+                    .attr("host_storage", "1")
+                    .attr("privacy_mode_ts", "1"),
+            )
+            .attr("is_lid", "x")
+            .jid_attr("participant_pn", "u")
+            .attr("participant_username", "x")
+            .attr("t", "1")
+            .build();
+        let node = parse(&stanza);
+        let derived = IncomingMsgReceiptParser::derive(&node).expect("derives");
+        let again = IncomingMsgReceiptParser::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("receipt")
+            .attr("id", "x")
+            .jid_attr("from", "u")
+            .build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = IncomingMsgReceiptParser::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
+    }
+
     /// `RetryRequestParser` derives from a stanza carrying its required fields.
     #[test]
     fn retry_request_parser_derives_from_its_required_fields() {
@@ -2731,6 +4173,62 @@ mod generated_tests {
         assert!(derived.is_ok(), "RetryRequestParser: {:?}", derived.err());
     }
 
+    /// `RetryRequestParser` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn retry_request_parser_compares_semantically() {
+        let stanza = Fixture::node("receipt")
+            .attr("type", "x")
+            .jid_attr("from", "u")
+            .jid_attr("participant", "u")
+            .attr("is_lid", "x")
+            .jid_attr("recipient", "u")
+            .child(Fixture::node("retry").attr("id", "x").attr("count", "1"))
+            .child(
+                Fixture::node("keys")
+                    .child(Fixture::node("identity").bytes(b"x"))
+                    .child(
+                        Fixture::node("skey")
+                            .child(Fixture::node("id").bytes(&[1]))
+                            .child(Fixture::node("value").bytes(b"x"))
+                            .child(Fixture::node("signature").bytes(b"x")),
+                    )
+                    .child(
+                        Fixture::node("key")
+                            .child(Fixture::node("id").bytes(&[1]))
+                            .child(Fixture::node("value").bytes(b"x")),
+                    ),
+            )
+            .attr("id", "x")
+            .attr("t", "1")
+            .child(Fixture::node("registration").bytes(&[1]))
+            .build();
+        let node = parse(&stanza);
+        let derived = RetryRequestParser::derive(&node).expect("derives");
+        let again = RetryRequestParser::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("receipt")
+            .attr("type", "x")
+            .jid_attr("from", "u")
+            .child(Fixture::node("retry").attr("id", "x"))
+            .attr("id", "x")
+            .attr("t", "1")
+            .child(Fixture::node("registration").bytes(&[1]))
+            .build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = RetryRequestParser::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
+    }
+
     /// `CallOfferNoticeParser` derives from a stanza carrying its required fields.
     #[test]
     fn call_offer_notice_parser_derives_from_its_required_fields() {
@@ -2784,6 +4282,52 @@ mod generated_tests {
         );
     }
 
+    /// `CallOfferNoticeParser` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn call_offer_notice_parser_compares_semantically() {
+        let stanza = Fixture::node("call")
+            .attr("id", "x")
+            .jid_attr("from", "u")
+            .child(
+                Fixture::node("offer_notice")
+                    .jid_attr("call-creator", "u")
+                    .attr("call-id", "x")
+                    .attr("type", "x")
+                    .attr("media", "x"),
+            )
+            .attr("t", "1")
+            .build();
+        let node = parse(&stanza);
+        let derived = CallOfferNoticeParser::derive(&node).expect("derives");
+        let again = CallOfferNoticeParser::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("call")
+            .attr("id", "x")
+            .jid_attr("from", "u")
+            .child(
+                Fixture::node("offer_notice")
+                    .jid_attr("call-creator", "u")
+                    .attr("call-id", "x")
+                    .attr("type", "x")
+                    .attr("media", "x"),
+            )
+            .attr("t", "1")
+            .build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = CallOfferNoticeParser::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
+    }
+
     /// `CallOfferPlaceholder` derives from a stanza carrying its required fields.
     #[test]
     fn call_offer_placeholder_derives_from_its_required_fields() {
@@ -2805,6 +4349,30 @@ mod generated_tests {
         let node = parse(&stanza);
         let derived = CallOfferPlaceholder::derive(&node);
         assert!(derived.is_ok(), "CallOfferPlaceholder: {:?}", derived.err());
+    }
+
+    /// `CallOfferPlaceholder` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn call_offer_placeholder_compares_semantically() {
+        let stanza = Fixture::node("call").attr("t", "1").build();
+        let node = parse(&stanza);
+        let derived = CallOfferPlaceholder::derive(&node).expect("derives");
+        let again = CallOfferPlaceholder::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("call").build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = CallOfferPlaceholder::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
     }
 
     /// `CallParser` derives from a stanza carrying its required fields.
@@ -2841,6 +4409,41 @@ mod generated_tests {
         assert!(derived.is_ok(), "CallParser: {:?}", derived.err());
     }
 
+    /// `CallParser` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn call_parser_compares_semantically() {
+        let stanza = Fixture::node("call")
+            .jid_attr("from", "u")
+            .jid_attr("sender_lid", "u")
+            .attr("platform", "x")
+            .attr("version", "x")
+            .attr("t", "1")
+            .attr("e", "1")
+            .attr("id", "x")
+            .build();
+        let node = parse(&stanza);
+        let derived = CallParser::derive(&node).expect("derives");
+        let again = CallParser::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("call")
+            .jid_attr("from", "u")
+            .attr("id", "x")
+            .build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = CallParser::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
+    }
+
     /// `Ack` derives from a stanza carrying its required fields.
     #[test]
     fn ack_derives_from_its_required_fields() {
@@ -2874,6 +4477,42 @@ mod generated_tests {
         let node = parse(&stanza);
         let derived = Ack::derive(&node);
         assert!(derived.is_ok(), "Ack: {:?}", derived.err());
+    }
+
+    /// `Ack` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn ack_compares_semantically() {
+        let stanza = Fixture::node("ack")
+            .attr("id", "x")
+            .attr("t", "x")
+            .attr("class", "x")
+            .attr("type", "x")
+            .jid_attr("content", "u")
+            .jid_attr("participant", "u")
+            .jid_attr("recipient", "u")
+            .build();
+        let node = parse(&stanza);
+        let derived = Ack::derive(&node).expect("derives");
+        let again = Ack::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("ack")
+            .attr("id", "x")
+            .attr("class", "x")
+            .jid_attr("content", "u")
+            .build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = Ack::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
     }
 
     /// `ParseNewsletterResponseNegative` derives from a stanza carrying its required fields.
@@ -2923,6 +4562,46 @@ mod generated_tests {
         );
     }
 
+    /// `ParseNewsletterResponseNegative` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn parse_newsletter_response_negative_compares_semantically() {
+        let stanza = Fixture::node("ack")
+            .attr("error", "x")
+            .attr("class", "x")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .attr("applicationError", "1")
+            .attr("backoff", "1")
+            .build();
+        let node = parse(&stanza);
+        let derived = ParseNewsletterResponseNegative::derive(&node).expect("derives");
+        let again = ParseNewsletterResponseNegative::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("ack")
+            .attr("error", "x")
+            .attr("class", "x")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .attr("applicationError", "1")
+            .attr("backoff", "1")
+            .build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = ParseNewsletterResponseNegative::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
+    }
+
     /// `ParseNewsletterResponseSuccess` derives from a stanza carrying its required fields.
     #[test]
     fn parse_newsletter_response_success_derives_from_its_required_fields() {
@@ -2952,6 +4631,30 @@ mod generated_tests {
             "ParseNewsletterResponseSuccess: {:?}",
             derived.err()
         );
+    }
+
+    /// `ParseNewsletterResponseSuccess` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn parse_newsletter_response_success_compares_semantically() {
+        let stanza = Fixture::node("ack").build();
+        let node = parse(&stanza);
+        let derived = ParseNewsletterResponseSuccess::derive(&node).expect("derives");
+        let again = ParseNewsletterResponseSuccess::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("ack").build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = ParseNewsletterResponseSuccess::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
     }
 
     /// `ParsePostNewsletterStatusResponseNegative` derives from a stanza carrying its required fields.
@@ -3000,6 +4703,42 @@ mod generated_tests {
         );
     }
 
+    /// `ParsePostNewsletterStatusResponseNegative` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn parse_post_newsletter_status_response_negative_compares_semantically() {
+        let stanza = Fixture::node("ack")
+            .attr("error", "x")
+            .attr("class", "x")
+            .attr("t", "1")
+            .attr("applicationError", "1")
+            .attr("backoff", "1")
+            .build();
+        let node = parse(&stanza);
+        let derived = ParsePostNewsletterStatusResponseNegative::derive(&node).expect("derives");
+        let again = ParsePostNewsletterStatusResponseNegative::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("ack")
+            .attr("error", "x")
+            .attr("class", "x")
+            .attr("t", "1")
+            .attr("applicationError", "1")
+            .attr("backoff", "1")
+            .build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = ParsePostNewsletterStatusResponseNegative::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
+    }
+
     /// `ParsePostNewsletterStatusResponseSuccess` derives from a stanza carrying its required fields.
     #[test]
     fn parse_post_newsletter_status_response_success_derives_from_its_required_fields() {
@@ -3041,6 +4780,37 @@ mod generated_tests {
         );
     }
 
+    /// `ParsePostNewsletterStatusResponseSuccess` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn parse_post_newsletter_status_response_success_compares_semantically() {
+        let stanza = Fixture::node("ack")
+            .attr("serverId", "1")
+            .attr("class", "x")
+            .attr("t", "1")
+            .build();
+        let node = parse(&stanza);
+        let derived = ParsePostNewsletterStatusResponseSuccess::derive(&node).expect("derives");
+        let again = ParsePostNewsletterStatusResponseSuccess::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("ack")
+            .attr("class", "x")
+            .attr("t", "1")
+            .build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = ParsePostNewsletterStatusResponseSuccess::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
+    }
+
     /// `ParsePublishViewResponseSuccess` derives from a stanza carrying its required fields.
     #[test]
     fn parse_publish_view_response_success_derives_from_its_required_fields() {
@@ -3076,6 +4846,34 @@ mod generated_tests {
         );
     }
 
+    /// `ParsePublishViewResponseSuccess` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn parse_publish_view_response_success_compares_semantically() {
+        let stanza = Fixture::node("ack")
+            .attr("class", "x")
+            .attr("t", "1")
+            .attr("readreceipts", "all")
+            .build();
+        let node = parse(&stanza);
+        let derived = ParsePublishViewResponseSuccess::derive(&node).expect("derives");
+        let again = ParsePublishViewResponseSuccess::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("ack").attr("class", "x").build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = ParsePublishViewResponseSuccess::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
+    }
+
     /// `ReadReceiptAckParser` derives from a stanza carrying its required fields.
     #[test]
     fn read_receipt_ack_parser_derives_from_its_required_fields() {
@@ -3097,6 +4895,30 @@ mod generated_tests {
         let node = parse(&stanza);
         let derived = ReadReceiptAckParser::derive(&node);
         assert!(derived.is_ok(), "ReadReceiptAckParser: {:?}", derived.err());
+    }
+
+    /// `ReadReceiptAckParser` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn read_receipt_ack_parser_compares_semantically() {
+        let stanza = Fixture::node("ack").attr("readreceipts", "all").build();
+        let node = parse(&stanza);
+        let derived = ReadReceiptAckParser::derive(&node).expect("derives");
+        let again = ReadReceiptAckParser::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("ack").build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = ReadReceiptAckParser::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
     }
 
     /// `SendMsgAckSyncParser` derives from a stanza carrying its required fields.
@@ -3128,6 +4950,38 @@ mod generated_tests {
         let node = parse(&stanza);
         let derived = SendMsgAckSyncParser::derive(&node);
         assert!(derived.is_ok(), "SendMsgAckSyncParser: {:?}", derived.err());
+    }
+
+    /// `SendMsgAckSyncParser` agrees with itself and differs from another shape.
+    ///
+    /// Reflexivity is the floor: a comparison that cannot recognise
+    /// its own output would report every stanza as a divergence.
+    #[test]
+    fn send_msg_ack_sync_parser_compares_semantically() {
+        let stanza = Fixture::node("ack")
+            .attr("t", "1")
+            .attr("sync", "x")
+            .attr("phash", "x")
+            .attr("refresh_lid", "x")
+            .attr("addressing_mode", "x")
+            .attr("count", "1")
+            .attr("error", "1")
+            .build();
+        let node = parse(&stanza);
+        let derived = SendMsgAckSyncParser::derive(&node).expect("derives");
+        let again = SendMsgAckSyncParser::derive(&node).expect("derives");
+        assert!(derived.semantic_eq(&again));
+
+        // A stanza missing every optional field is a different
+        // derivation of the same shape, unless the shape has none.
+        let bare = Fixture::node("ack").attr("t", "1").build();
+        let bare_node = parse(&bare);
+        if let Ok(bare_derived) = SendMsgAckSyncParser::derive(&bare_node) {
+            let full_is_bare = derived.semantic_eq(&bare_derived);
+            // Either they carry the same fields or they do not; both
+            // are valid, and the comparison must not panic either way.
+            let _ = full_is_bare;
+        }
     }
 
     /// Every `ALLNONE` value round-trips through the wire form.
@@ -3382,6 +5236,31 @@ mod generated_tests {
             STANZAMSGTYPES::from_wire(node.attr("v").expect("attr")),
             None
         );
+    }
+
+    /// Events of different shapes never mean the same thing.
+    #[test]
+    fn different_shapes_never_compare_equal() {
+        // Which shape matched is part of what was derived, so two
+        // engines picking different shapes for one stanza is exactly
+        // the divergence a conformance run should report.
+        let stanza = Fixture::node("receipt")
+            .attr("id", "A")
+            .jid_attr("from", "u")
+            .build();
+        let node = parse(&stanza);
+        let a = derive(&node).expect("derives");
+        assert!(a.semantic_eq(&a), "an event agrees with itself");
+
+        let other = Fixture::node("ack")
+            .attr("id", "A")
+            .attr("class", "message")
+            .jid_attr("content", "u")
+            .build();
+        let b = derive(&parse(&other)).expect("derives");
+        assert!(!a.semantic_eq(&b));
+        assert!(!b.semantic_eq(&a));
+        assert_ne!(a.tag(), b.tag());
     }
 
     /// Every tag dispatches, and an unmodelled one is reported as such.

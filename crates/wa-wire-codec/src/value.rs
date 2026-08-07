@@ -95,6 +95,43 @@ impl<'a> Value<'a> {
         }
     }
 
+    /// Whether two values mean the same thing, whatever form each arrived in.
+    ///
+    /// This is the comparison a conformance run needs. Two engines can encode
+    /// one value differently and both be right — a token here, the same text as
+    /// bytes there — and calling that a divergence would bury the real ones.
+    #[must_use]
+    pub fn semantic_eq(self, other: Value<'_>) -> bool {
+        match (self, other) {
+            (Self::Nil, Value::Nil) => true,
+            (Self::Jid(a), Value::Jid(b)) => a.semantic_eq(b),
+            (Self::Packed(a), Value::Packed(b)) => a.semantic_eq(b),
+            (Self::Packed(packed), textual) => {
+                textual.as_str().is_some_and(|text| packed.eq_str(text))
+            }
+            (textual, Value::Packed(packed)) => {
+                textual.as_str().is_some_and(|text| packed.eq_str(text))
+            }
+            // A JID compared against text renders once and matches or does not;
+            // `eq_str` walks the parts, so nothing is built.
+            (Self::Jid(jid), textual) => textual
+                .as_str()
+                .is_some_and(|text| Value::Jid(jid).eq_str(text)),
+            (textual, Value::Jid(jid)) => textual
+                .as_str()
+                .is_some_and(|text| Value::Jid(jid).eq_str(text)),
+            (a, b) => match (a.as_str(), b.as_str()) {
+                (Some(x), Some(y)) => x == y,
+                // Two byte strings that are not valid text still compare, since
+                // being unreadable does not make them unequal.
+                _ => match (a.as_bytes(), b.as_bytes()) {
+                    (Some(x), Some(y)) => x == y,
+                    _ => false,
+                },
+            },
+        }
+    }
+
     /// Whether the value is textual in the sense the protocol means: anything
     /// that appears in an attribute position.
     #[must_use]
@@ -272,6 +309,64 @@ mod tests {
         assert_eq!(Value::Packed(packed()).as_bytes(), None);
         assert_eq!(Value::Packed(packed()).as_jid(), None);
         assert_eq!(Value::Jid(jid()).as_packed(), None);
+    }
+
+    #[test]
+    fn semantic_equality_looks_past_the_encoding() {
+        // One engine sends a token, another the same text as bytes. Both right.
+        assert!(Value::Token("read").semantic_eq(Value::Bytes(b"read")));
+        assert!(Value::Bytes(b"read").semantic_eq(Value::Token("read")));
+        assert!(!Value::Token("read").semantic_eq(Value::Bytes(b"delivery")));
+
+        // A packed digit run against the same digits as text.
+        let digits = Packed::new(Alphabet::Nibble, &[0x12, 0x34], false);
+        assert!(Value::Packed(digits).semantic_eq(Value::Token("1234")));
+        assert!(Value::Token("1234").semantic_eq(Value::Packed(digits)));
+        assert!(Value::Packed(digits).semantic_eq(Value::Bytes(b"1234")));
+        assert!(!Value::Packed(digits).semantic_eq(Value::Token("1235")));
+
+        // A JID against its rendering.
+        assert!(Value::Jid(jid()).semantic_eq(Value::Bytes(b"5511:3@s.whatsapp.net")));
+        assert!(Value::Bytes(b"5511:3@s.whatsapp.net").semantic_eq(Value::Jid(jid())));
+        assert!(!Value::Jid(jid()).semantic_eq(Value::Bytes(b"5511@s.whatsapp.net")));
+    }
+
+    #[test]
+    fn semantic_equality_is_reflexive_across_every_variant() {
+        for value in [
+            Value::Nil,
+            Value::Token("t"),
+            Value::Bytes(b"b"),
+            Value::Packed(packed()),
+            Value::Jid(jid()),
+        ] {
+            assert!(value.semantic_eq(value), "{value:?} differs from itself");
+        }
+    }
+
+    #[test]
+    fn nil_is_not_semantically_anything_else() {
+        // Absent is not the empty string, and not an empty digit run either.
+        for other in [
+            Value::Token(""),
+            Value::Bytes(b""),
+            Value::Packed(Packed::new(Alphabet::Nibble, &[], false)),
+            Value::Jid(jid()),
+        ] {
+            assert!(!Value::Nil.semantic_eq(other), "{other:?}");
+            assert!(!other.semantic_eq(Value::Nil), "{other:?}");
+        }
+    }
+
+    #[test]
+    fn unreadable_bytes_still_compare_to_themselves() {
+        // Not valid text, so `as_str` gives nothing — but identical bytes are
+        // not a divergence.
+        let invalid = Value::Bytes(&[0xff, 0xfe]);
+        assert!(invalid.semantic_eq(Value::Bytes(&[0xff, 0xfe])));
+        assert!(!invalid.semantic_eq(Value::Bytes(&[0xff, 0xfd])));
+        assert!(!invalid.semantic_eq(Value::Token("x")));
+        assert!(!invalid.semantic_eq(Value::Packed(packed())));
     }
 
     #[test]

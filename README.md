@@ -56,6 +56,7 @@ is parsed exactly once, host-side, and only if something subscribed to L1.
 | [`wa-wire-codec`](crates/wa-wire-codec) | parser for WhatsApp's binary-node encoding, over pluggable token tables |
 | [`wa-wire-adapter`](crates/wa-wire-adapter) | what an adapter must provide, and the plumbing every Rust adapter shares |
 | [`wa-wire-l1`](crates/wa-wire-l1) | typed canonical events, generated from whatspec's `incoming` domain |
+| [`wa-wire-conformance`](crates/wa-wire-conformance) | replays recordings through every engine and requires them to agree |
 
 All three are `no_std` with no dependencies beyond each other, and none of them
 allocates while reading.
@@ -88,6 +89,31 @@ If the two ever disagreed about what a path means, a decrypted message would be
 attributed to the wrong recipient — so the agreement is asserted in
 [an integration test](crates/wa-wire-codec/tests/envelope_integration.rs), not
 assumed.
+
+## Conformance
+
+The property that makes this more than a wrapper:
+
+> Given the same traffic, every conforming engine must produce the same L1.
+
+Four independent implementations reading one input find bugs that no single
+implementation's own tests can, because a bug and its test are usually written
+by the same person on the same afternoon. Divergence is the signal.
+
+```rust
+let report = compare(&engine_a, &engine_b, tokens::TABLE);
+for divergence in report.faults() {
+    eprintln!("{divergence}");
+}
+```
+
+Two layers, and they fail differently. A **frame** difference is not on its own
+a fault — the format has more than one way to say a thing, and two encodings of
+one stanza are both valid. A **derivation** difference is: the derivation is a
+pure function of the stanza, so two engines cannot both be right.
+
+That split is what keeps the report readable. Reporting every byte difference
+would bury the handful that matter.
 
 ## Development
 
