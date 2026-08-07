@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
-members = ["crates/wa-wire-adapter", "crates/wa-wire-codec", "crates/wa-wire-contract"]
+members = ["crates/wa-wire-adapter", "crates/wa-wire-codec",
+    "crates/wa-wire-l1", "crates/wa-wire-contract"]
 
 [workspace.package]
 edition = "2024"

@@ -55,6 +55,7 @@ is parsed exactly once, host-side, and only if something subscribed to L1.
 | [`wa-wire-contract`](crates/wa-wire-contract) | the normative envelope format and negotiation types |
 | [`wa-wire-codec`](crates/wa-wire-codec) | parser for WhatsApp's binary-node encoding, over pluggable token tables |
 | [`wa-wire-adapter`](crates/wa-wire-adapter) | what an adapter must provide, and the plumbing every Rust adapter shares |
+| [`wa-wire-l1`](crates/wa-wire-l1) | typed canonical events, generated from whatspec's `incoming` domain |
 
 All three are `no_std` with no dependencies beyond each other, and none of them
 allocates while reading.
@@ -108,7 +109,13 @@ requires no change:
 
 ```console
 python3 tools/generate-tokens.py
+python3 tools/generate-l1.py
 ```
+
+Both print what they could **not** express rather than dropping it silently. A
+derivation that quietly omitted a field would look complete and be wrong, and no
+conformance run could tell — every engine would agree on the same missing
+field.
 
 ## License
 

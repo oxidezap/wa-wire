@@ -1,0 +1,293 @@
+//! Deriving real stanza shapes.
+//!
+//! The generated code is exercised through the public surface, the way a host
+//! uses it. What is asserted here is not that the generator ran — the build
+//! proves that — but that the shapes it emitted actually match the stanzas
+//! WhatsApp sends.
+
+#![allow(clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+
+use wa_wire_l1::testing::{Fixture, parse};
+use wa_wire_l1::{DeriveError, Event, KNOWN_TAGS, PROVENANCE, UNMODELLED_FIELDS, derive};
+
+// --- dispatch --------------------------------------------------------------
+
+#[test]
+fn a_read_receipt_derives() {
+    let stanza = Fixture::node("receipt")
+        .attr("id", "ABCD1234")
+        .jid_attr("from", "5511999998888")
+        .attr("type", "read")
+        .attr("t", "1700000000")
+        .build();
+
+    let event = derive(&parse(&stanza)).expect("derives");
+    assert_eq!(event.tag(), "receipt");
+    assert!(event.node().attr_eq("id", "ABCD1234"));
+}
+
+#[test]
+fn a_message_derives() {
+    // The full shape: whatspec marks `recipient` and the typed `t` required,
+    // so a stanza without them is a different shape, not a broken one.
+    let stanza = Fixture::node("message")
+        .attr("id", "MSG1")
+        .jid_attr("from", "5511999998888")
+        .jid_attr("recipient", "5511888887777")
+        .attr("t", "1700000000")
+        .attr("type", "text")
+        .child(Fixture::node("enc").attr("type", "msg").bytes(b"cipher"))
+        .build();
+
+    let event = derive(&parse(&stanza)).expect("derives");
+    assert_eq!(event.tag(), "message");
+}
+
+#[test]
+fn an_ack_derives() {
+    let stanza = Fixture::node("ack")
+        .attr("id", "ACK1")
+        .attr("class", "message")
+        .jid_attr("from", "5511999998888")
+        .jid_attr("content", "5511888887777")
+        .attr("t", "1700000000")
+        .build();
+
+    let event = derive(&parse(&stanza)).expect("derives");
+    assert_eq!(event.tag(), "ack");
+}
+
+#[test]
+fn an_unknown_tag_is_reported_as_such() {
+    // Not an error in the frame — a stanza this build has no shape for. L0
+    // still carries it, which is the whole point of L0 being total.
+    let stanza = Fixture::node("presence").attr("type", "available").build();
+    assert_eq!(derive(&parse(&stanza)), Err(DeriveError::UnknownStanza));
+}
+
+#[test]
+fn a_known_tag_with_no_matching_shape_is_reported_apart_from_an_unknown_tag() {
+    // `receipt` has shapes, but none matches a stanza missing every required
+    // field. Telling this from `UnknownStanza` is what distinguishes "we do not
+    // model this" from "this changed".
+    let stanza = Fixture::node("receipt").build();
+    assert_eq!(
+        derive(&parse(&stanza)),
+        Err(DeriveError::NoMatchingShape { tag: "receipt" })
+    );
+}
+
+#[test]
+fn every_known_tag_is_distinct_and_non_empty() {
+    for (index, tag) in KNOWN_TAGS.iter().enumerate() {
+        assert!(!tag.is_empty());
+        for other in KNOWN_TAGS.iter().skip(index + 1) {
+            assert_ne!(tag, other, "duplicate tag in KNOWN_TAGS");
+        }
+    }
+    assert!(KNOWN_TAGS.contains(&"message"));
+    assert!(KNOWN_TAGS.contains(&"receipt"));
+    assert!(KNOWN_TAGS.contains(&"ack"));
+    assert!(KNOWN_TAGS.contains(&"call"));
+}
+
+#[test]
+fn a_derived_event_points_back_at_its_node() {
+    let stanza = Fixture::node("receipt")
+        .attr("id", "X")
+        .jid_attr("from", "u")
+        .build();
+    let node = parse(&stanza);
+    let event = derive(&node).expect("derives");
+    assert_eq!(event.node().tag(), node.tag());
+}
+
+// --- fields ----------------------------------------------------------------
+
+#[test]
+fn receipt_fields_are_extracted_with_their_declared_types() {
+    let stanza = Fixture::node("receipt")
+        .attr("id", "ABCD1234")
+        .jid_attr("from", "5511999998888")
+        .attr("type", "read")
+        .attr("t", "1700000000")
+        .build();
+
+    let Event::IncomingMsgReceiptParser(receipt) = derive(&parse(&stanza)).expect("derives") else {
+        panic!("expected the receipt shape");
+    };
+
+    assert!(receipt.id.eq_str("ABCD1234"));
+    assert_eq!(receipt.from.server(), "s.whatsapp.net");
+    assert!(receipt.from.user().eq_str("5511999998888"));
+    assert!(receipt.r#type.is_some(), "the enum resolved");
+}
+
+#[test]
+fn an_unknown_enum_value_falls_through_to_a_shape_that_does_not_type_it() {
+    // `type` is enum-valued in the message-receipt shape, so a value from a
+    // future release fails it — and the tag's next shape, which reads `type` as
+    // plain text, takes over.
+    //
+    // That fallthrough is the design working, not a hole: a stanza carrying one
+    // unfamiliar enum value still derives into *something*, and the consumer
+    // sees which shape matched rather than losing the stanza. What it must not
+    // do is silently invent a variant, and it does not.
+    let stanza = Fixture::node("receipt")
+        .attr("id", "ABCD")
+        .jid_attr("from", "u")
+        .attr("type", "invented-by-a-future-release")
+        .build();
+
+    let event = derive(&parse(&stanza)).expect("a shape still matches");
+    assert_eq!(event.tag(), "receipt");
+    assert!(
+        !matches!(event, Event::IncomingMsgReceiptParser(_)),
+        "the shape that types `type` must not claim an unknown value"
+    );
+
+    // The strict shape rejects it on its own, which is what forced the
+    // fallthrough.
+    assert_eq!(
+        wa_wire_l1::generated::IncomingMsgReceiptParser::derive(&parse(&stanza)),
+        Err(DeriveError::UnknownEnumValue { key: "type" })
+    );
+}
+
+#[test]
+fn repeated_children_derive_lazily_and_in_order() {
+    let stanza = Fixture::node("receipt")
+        .attr("id", "ABCD")
+        .jid_attr("from", "u")
+        .child(
+            Fixture::node("participants")
+                .child(
+                    Fixture::node("user")
+                        .jid_attr("jid", "first")
+                        .attr("t", "1700000001"),
+                )
+                .child(
+                    Fixture::node("user")
+                        .jid_attr("jid", "second")
+                        .attr("t", "1700000002"),
+                ),
+        )
+        .build();
+
+    let Event::IncomingMsgReceiptParser(receipt) = derive(&parse(&stanza)).expect("derives") else {
+        panic!("expected the receipt shape");
+    };
+
+    let participants = receipt.participants.expect("the participants child");
+    let users: Vec<_> = participants
+        .user()
+        .collect::<Result<_, _>>()
+        .expect("every user derives");
+
+    assert_eq!(users.len(), 2);
+    assert!(users[0].jid.user().eq_str("first"));
+    assert_eq!(users[0].t, 1_700_000_001);
+    assert!(users[1].jid.user().eq_str("second"));
+    assert_eq!(users[1].t, 1_700_000_002);
+}
+
+#[test]
+fn a_malformed_repeated_child_surfaces_per_item() {
+    // The iterator yields a Result per child, so one bad entry does not
+    // invalidate the ones around it.
+    let stanza = Fixture::node("receipt")
+        .attr("id", "ABCD")
+        .jid_attr("from", "u")
+        .child(
+            Fixture::node("participants")
+                .child(
+                    Fixture::node("user")
+                        .jid_attr("jid", "ok")
+                        .attr("t", "1700000001"),
+                )
+                .child(Fixture::node("user").jid_attr("jid", "broken")),
+        )
+        .build();
+
+    let Event::IncomingMsgReceiptParser(receipt) = derive(&parse(&stanza)).expect("derives") else {
+        panic!("expected the receipt shape");
+    };
+
+    let results: Vec<_> = receipt.participants.expect("participants").user().collect();
+    assert_eq!(results.len(), 2);
+    assert!(results[0].is_ok());
+    assert_eq!(results[1], Err(DeriveError::MissingAttr { key: "t" }));
+}
+
+#[test]
+fn an_optional_child_is_absent_rather_than_failing() {
+    let stanza = Fixture::node("receipt")
+        .attr("id", "ABCD")
+        .jid_attr("from", "u")
+        .build();
+
+    let Event::IncomingMsgReceiptParser(receipt) = derive(&parse(&stanza)).expect("derives") else {
+        panic!("expected the receipt shape");
+    };
+    assert!(receipt.participants.is_none());
+    assert!(receipt.error.is_none());
+}
+
+// --- purity ----------------------------------------------------------------
+
+#[test]
+fn deriving_the_same_stanza_twice_gives_the_same_event() {
+    // The property the whole layering rests on: derivation is a function of the
+    // stanza alone. If it were not, running it host-side would not be
+    // equivalent to running it in the engine.
+    let stanza = Fixture::node("receipt")
+        .attr("id", "ABCD")
+        .jid_attr("from", "u")
+        .attr("type", "delivery")
+        .build();
+    let node = parse(&stanza);
+
+    let first = derive(&node).expect("derives");
+    let second = derive(&node).expect("derives");
+    assert_eq!(first, second);
+}
+
+#[test]
+fn two_identical_stanzas_derive_identically() {
+    let build = || {
+        Fixture::node("receipt")
+            .attr("id", "ABCD")
+            .jid_attr("from", "u")
+            .attr("t", "1700000000")
+            .build()
+    };
+    let (a, b) = (build(), build());
+    assert_eq!(
+        derive(&parse(&a)).expect("derives"),
+        derive(&parse(&b)).expect("derives")
+    );
+}
+
+// --- provenance and honesty ------------------------------------------------
+
+#[test]
+fn provenance_is_recorded_in_full() {
+    assert!(PROVENANCE.is_complete());
+    assert!(PROVENANCE.whatsapp_version.starts_with("2."));
+    assert!(PROVENANCE.incoming_digest.starts_with("sha256:"));
+    assert!(PROVENANCE.matches(&PROVENANCE));
+}
+
+#[test]
+fn unmodelled_fields_are_named_rather_than_dropped_in_silence() {
+    // A derivation that quietly omitted a field would look complete and be
+    // wrong — and no conformance run could tell, because every engine would
+    // agree on the same missing field. So the gaps are part of the API.
+    for entry in UNMODELLED_FIELDS {
+        assert!(!entry.is_empty());
+        assert!(
+            entry.contains(':'),
+            "an entry must name what was dropped and why: {entry:?}"
+        );
+    }
+}

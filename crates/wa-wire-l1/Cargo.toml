@@ -1,0 +1,25 @@
+[package]
+name = "wa-wire-l1"
+version = "0.1.0"
+description = "The L1 derivation: typed canonical events from parsed stanzas, generated from whatspec"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+# Stanza fixtures. Exposed to dependents because an adapter and the conformance
+# runner both need to build stanzas, and a second copy would be a second thing
+# to keep true.
+testing = []
+
+[dependencies]
+wa-wire-codec = { path = "../wa-wire-codec", default-features = false }
+
+[dev-dependencies]
+wa-wire-l1 = { path = ".", features = ["testing"] }
+
+[lints]
+workspace = true

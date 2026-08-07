@@ -76,8 +76,15 @@ jobs:
 
       # Generated code is committed so a protocol change arrives as a reviewable
       # diff (RFC-009). Regenerating here is what rules out drift.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
       - name: Regenerate token dictionaries
         run: python3 tools/generate-tokens.py
+
+      - name: Regenerate the L1 derivation
+        run: python3 tools/generate-l1.py
 
       - name: Require no change
         run: |
