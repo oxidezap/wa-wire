@@ -12,9 +12,10 @@ use std::sync::{Arc, Mutex};
 use wa_wire_adapter::{CountingSink, Direction, NullSink};
 use wa_wire_codec::{Parser, tokens};
 use wa_wire_contract::EnvelopeRef;
-use wacore_binary::builder::NodeBuilder;
-use wacore_binary::marshal;
-use wacore_binary::node::{Node, OwnedNodeRef};
+use whatsapp_rust::types::events;
+use whatsapp_rust::wacore_binary::marshal;
+use whatsapp_rust::wacore_binary::node::Node;
+use whatsapp_rust::{NodeBuilder, OwnedNodeRef};
 
 /// A stanza shaped like the ones this adapter will really see.
 fn message_node() -> Node {
@@ -177,7 +178,7 @@ fn events_other_than_raw_node_are_ignored() {
     // The handler narrows its interest, but the bus may still deliver more, so
     // the filter has to hold on its own.
     let frames = tap(Arc::new(Event::Connected(
-        wacore::types::events::Connected::builder().build(),
+        events::Connected::builder().build(),
     )));
     assert!(frames.is_empty(), "only RawNode is forwarded");
 }

@@ -1607,8 +1607,6 @@ dependencies = [
  "wa-wire-adapter",
  "wa-wire-codec",
  "wa-wire-contract",
- "wacore",
- "wacore-binary",
  "whatsapp-rust",
 ]
 

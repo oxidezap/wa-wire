@@ -1468,6 +1468,9 @@ Portability is enforced too: the contract builds with no allocator and for
 - Capability claims are now **verified against stanzas** (D-036), so a claim
   that stops being true fails a test.
 - Recorded D-035 through D-038.
+- Adapter dependencies reduced to one. `whatsapp-rust` re-exports `wacore` and
+  `wacore_binary`, so naming them separately only added a way for them to drift
+  to a different version than the engine actually links.
 
 ### rev 9 — 2026-08-07
 

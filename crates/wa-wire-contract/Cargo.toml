@@ -8,13 +8,13 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
-[dependencies]
-
 [features]
 default = ["alloc"]
 # Encoding needs a growable buffer. Decoding never allocates, so a target that
 # only consumes envelopes can drop this.
 alloc = []
+
+[dependencies]
 
 [lints]
 workspace = true

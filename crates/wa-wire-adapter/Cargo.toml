@@ -8,14 +8,14 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
-[dependencies]
-wa-wire-contract = { path = "../wa-wire-contract", default-features = false }
-
 [features]
 default = ["alloc"]
 # Encoding a stanza needs a growable buffer. An adapter that hands stanzas to an
 # in-process consumer never encodes, so it can drop this.
 alloc = ["wa-wire-contract/alloc"]
+
+[dependencies]
+wa-wire-contract = { path = "../wa-wire-contract", default-features = false }
 
 [lints]
 workspace = true

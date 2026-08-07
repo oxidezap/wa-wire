@@ -22,12 +22,27 @@ cd adapters/whatsapp-rust
 cargo test
 ```
 
+### Dependencies
+
+One engine dependency, not three. `whatsapp-rust` re-exports `wacore` and
+`wacore_binary`, so naming them separately would add nothing except a way for
+them to drift to a different version than the engine actually links:
+
+```rust
+use whatsapp_rust::plugins::{ClientPlugin, PluginContext};
+use whatsapp_rust::types::events::{Event, EventHandler};
+use whatsapp_rust::{NodeBuilder, OwnedNodeRef};
+```
+
 ### Toolchain
 
-Pinned to nightly here, and not by choice: `whatsapp-rust` enables
-`wacore-binary/simd`, which needs `feature(portable_simd)`, and Cargo's feature
-unification means this crate cannot opt out. The `wa-wire` crates themselves
-build on stable — only an adapter is bound to its engine's toolchain.
+Pinned to nightly here, and not by choice. `whatsapp-rust` enables
+`wacore-binary/simd`, which needs `feature(portable_simd)`. This crate does not
+name `wacore-binary` at all and still cannot escape it — a feature cannot be
+turned off from a dependent.
+
+The `wa-wire` crates themselves build on stable. Only an adapter is bound to its
+engine's toolchain, which is part of what depending on an engine costs.
 
 ## Engine patch
 

@@ -54,10 +54,10 @@
 use std::sync::{Arc, Mutex};
 
 use wa_wire_adapter::{AdapterInfo, Capability, CapabilitySet, RawStanza, StanzaSink, Violation};
-use wacore::types::events::{Event, EventHandler, EventInterest, EventKind};
 use whatsapp_rust::plugins::{
     ClientPlugin, PluginCapability, PluginContext, PluginFuture, PluginManifest,
 };
+use whatsapp_rust::types::events::{Event, EventHandler, EventInterest, EventKind};
 
 /// The engine version this adapter was written against.
 pub const ENGINE_VERSION: &str = "0.7";
