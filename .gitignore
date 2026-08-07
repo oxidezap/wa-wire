@@ -1,1 +1,17 @@
+# Rust
 /target
+**/target
+
+# Node
+node_modules/
+dist/
+
+# Coverage
+coverage/
+*.profraw
+*.profdata
+lcov.info
+
+# Editors and OS
+.DS_Store
+*.swp

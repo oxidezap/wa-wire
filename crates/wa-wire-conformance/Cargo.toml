@@ -16,6 +16,9 @@ wa-wire-l1 = { path = "../wa-wire-l1" }
 
 [dev-dependencies]
 wa-wire-l1 = { path = "../wa-wire-l1", features = ["testing"] }
+# The cross-language fixtures are re-encoded by zapo with the real
+# dictionaries, so reading them needs the bundled table.
+wa-wire-codec = { path = "../wa-wire-codec", features = ["bundled-tokens"] }
 
 [lints]
 workspace = true

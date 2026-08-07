@@ -63,7 +63,12 @@ jobs:
   # Adapters are deliberately outside this matrix. Each needs its engine checked
   # out beside this repo and inherits that engine's toolchain, so building them
   # here would make the contract's CI depend on someone else's release cadence.
-  # Each adapter carries its own `cargo test`; see its README.
+  # Each adapter carries its own test command; see its README.
+  #
+  # What does run here is the cross-language check: the fixtures the zapo
+  # adapter writes are committed, and `cargo test -p wa-wire-conformance` reads
+  # them. That catches the two encoders drifting apart without needing either
+  # engine present.
 
   generated:
     name: generated code is fresh

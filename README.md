@@ -61,12 +61,19 @@ is parsed exactly once, host-side, and only if something subscribed to L1.
 All three are `no_std` with no dependencies beyond each other, and none of them
 allocates while reading.
 
-| Adapter | Engine | Mode |
+| Adapter | Engine | Modes |
 | --- | --- | --- |
-| [`whatsapp-rust`](adapters/whatsapp-rust) | `whatsapp-rust` | tap |
+| [`whatsapp-rust`](adapters/whatsapp-rust) | `whatsapp-rust` (Rust) | tap |
+| [`zapo`](adapters/zapo) | `zapo` (TypeScript) | tap, takeover |
 
 Adapters live outside the main workspace: each drags in a whole engine, and the
 contract and codec stay dependency-free on purpose.
+
+The boundary format is written twice — once in Rust, once in TypeScript, because
+an adapter has to run inside a JavaScript engine. Two descriptions of one format
+that are only ever tested separately are two formats waiting to diverge, so
+[cross-language fixtures](crates/wa-wire-conformance/tests/cross_language.rs)
+are written by one and read by the other.
 
 More arrive in the order set out in [`DESIGN.md` §8](DESIGN.md#8-implementation-plan).
 

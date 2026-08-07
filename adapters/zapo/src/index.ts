@@ -1,0 +1,51 @@
+/**
+ * wa-wire adapter for the zapo engine.
+ *
+ * `zapo` exposes an incoming stanza filter that runs against every inbound
+ * stanza before any handler, and that one hook is the whole adapter: observe,
+ * encode, hand on. Returning `true` from it also suppresses the engine's own
+ * dispatch, which is how takeover works without a fork.
+ *
+ * ```ts
+ * import { WaClient } from 'zapo-js'
+ * import { Mode, waWire } from '@oxidezap/wa-wire-adapter-zapo'
+ *
+ * const client = new WaClient({
+ *     plugins: [waWire({ sink: (stanza) => queue.push(stanza) })],
+ * })
+ * ```
+ *
+ * What it can and cannot do is in {@link INFO}, and asserted in this package's
+ * tests rather than left as a claim.
+ */
+
+export {
+    Capability,
+    has,
+    missing,
+    type AdapterInfo,
+} from './capability.js'
+export {
+    CONTRACT_VERSION,
+    Direction,
+    EncodeError,
+    FrameOrigin,
+    HEADER_LEN,
+    PlaintextStatus,
+    encodeEnvelope,
+    encodedLength,
+    fitsPrefix,
+    type Plaintext,
+    type Stanza,
+} from './envelope.js'
+export {
+    INFO,
+    Mode,
+    forward,
+    supports,
+    toEnvelope,
+    toStanza,
+    waWire,
+    type Options,
+    type StanzaSink,
+} from './adapter.js'
