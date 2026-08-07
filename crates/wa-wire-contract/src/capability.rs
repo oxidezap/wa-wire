@@ -22,6 +22,14 @@ pub enum Capability {
     L0Outbound,
     /// Raw request/response against a stanza, correlated by the engine.
     L0Request,
+    /// Emits the payloads it decrypted alongside the frame, so a consumer gets
+    /// L0-plain rather than only L0-wire.
+    ///
+    /// Separate from the inbound tap because the two live at different points
+    /// in an engine: the frame is available the moment a stanza is decoded,
+    /// while a plaintext only exists after Signal has run. An engine can
+    /// perfectly well offer one and not the other.
+    L0Plaintext,
     /// Suppresses the engine's own dispatch, leaving it as transport and acks.
     /// Never suppresses decryption — L0-plain depends on it.
     Takeover,
@@ -34,11 +42,12 @@ pub enum Capability {
 
 impl Capability {
     /// Every capability this contract version defines.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::L0InboundTap,
         Self::L0InboundAuthPhase,
         Self::L0Outbound,
         Self::L0Request,
+        Self::L0Plaintext,
         Self::Takeover,
         Self::ZeroCopyFrame,
         Self::DrainHook,
@@ -52,6 +61,7 @@ impl Capability {
             Self::L0InboundAuthPhase => "l0.inbound.auth-phase",
             Self::L0Outbound => "l0.outbound",
             Self::L0Request => "l0.request",
+            Self::L0Plaintext => "l0.plaintext",
             Self::Takeover => "l0.takeover",
             Self::ZeroCopyFrame => "l0.zero-copy-frame",
             Self::DrainHook => "lifecycle.drain-hook",
@@ -72,9 +82,10 @@ impl Capability {
             Self::L0InboundAuthPhase => 1,
             Self::L0Outbound => 2,
             Self::L0Request => 3,
-            Self::Takeover => 4,
-            Self::ZeroCopyFrame => 5,
-            Self::DrainHook => 6,
+            Self::L0Plaintext => 4,
+            Self::Takeover => 5,
+            Self::ZeroCopyFrame => 6,
+            Self::DrainHook => 7,
         }
     }
 }

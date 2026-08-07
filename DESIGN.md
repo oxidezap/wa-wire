@@ -1,11 +1,11 @@
 # wa-wire — Design Document
 
-> **Status:** **READY TO IMPLEMENT** — all nine RFCs accepted; no design blocker
-> remains. Start at §8 step 1.
+> **Status:** **IMPLEMENTING** — all nine RFCs accepted. Steps 1–3 of §8 are
+> done; step 4 is next.
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 7
+> **Last revised:** rev 10
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1336,7 +1336,7 @@ so step 0 is done and implementation can begin.
 | ~~0~~ | ~~RFC-008 boundary format, RFC-009 versioning~~ | — | **done in rev 7** |
 | ~~1~~ | ~~`wa-wire-contract` — envelope encode/decode, capability + provenance types~~ | — | **done in rev 8** — `no_std`, zero dependencies, allocation-free decoding; 99.7% line coverage |
 | ~~2~~ | ~~`wa-wire-codec` — binary-node parse over `whatspec` tokens~~ | — | **done in rev 9** — token table is a parameter, not a constant; 99.8% line coverage |
-| 3 | `whatsapp-rust` adapter, tap mode | first end-to-end proof | zero-copy is free here (`slice_bytes()`), so this is also the fast path reference |
+| ~~3~~ | ~~`whatsapp-rust` adapter, tap mode~~ | — | **done in rev 10** — plus `wa-wire-adapter`, the SDK every Rust adapter shares |
 | 4 | `wa-wire-l1` — derivation generated from `whatspec`, committed | conformance | host-side, single implementation, CI checks regeneration is a no-op |
 | 5 | `zapo` adapter | second engine | plugin + stanza filter; native takeover |
 | 6 | **Conformance runner** | the whole thesis | first point where the central claim becomes a test result |
@@ -1374,7 +1374,7 @@ Portability is enforced too: the contract builds with no allocator and for
 
 | Engine | Site | Change |
 | --- | --- | --- |
-| whatsapp-rust | `node_io.rs:307` | none — expose existing `slice_bytes()` |
+| whatsapp-rust | `node_io.rs:307` | **corrected in rev 10:** `slice_bytes()` needs a slice already inside the buffer, so it cannot hand over the whole thing. One method added upstream — `OwnedNodeRef::frame_bytes()`, a clone of the yoke's cart, so a refcount bump rather than a copy |
 | zapo | `transport/binary/decoder.ts:344` | emit `nodeBytes` alongside the node |
 | Baileys | `Utils/noise-handler.ts:196-198` | pass `result` into `onFrame` |
 | whatsmeow | `client.go:824-830` | carry `decompressed` with the node |
@@ -1433,10 +1433,41 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-032 | Parsing validates the whole tree up front, so every accessor afterwards is infallible | Pushing `Result` into `attrs()`, `children()` and `at_path()` would make the common path noisy to serve an error that validation already ruled out | 9 |
 | D-033 | Packed runs and JIDs stay in parts and compare/render on demand | Their text exists nowhere in the frame, so borrowing is impossible and joining would allocate. `eq_str` is the comparison L1 derivation actually needs, and it walks the parts | 9 |
 | D-034 | The codec parses only; re-encoding stays with the engine | An engine that cannot supply original bytes re-encodes in its own language and sets `frame_origin` (D-026). A host-side encoder would duplicate that with no caller | 9 |
+| D-035 | `l0.plaintext` is a capability of its own, separate from the inbound tap | The frame is available the moment a stanza is decoded; a plaintext only exists after Signal has run. An engine can offer one and not the other — `whatsapp-rust` does exactly that | 10 |
+| D-036 | An adapter's capability claims are **checked against its stanzas**, not merely declared | A declaration nobody verifies drifts from the code the first time an engine moves underneath. `AdapterInfo::verify` turns "this adapter is zero-copy" into a failing test | 10 |
+| D-037 | A sink receives the pre-encoding `RawStanza`, not a finished buffer | An in-process consumer then never pays for encoding, while a sidecar consumer encodes and writes. Same value, two costs, one adapter | 10 |
+| D-038 | Adapters live outside the main workspace | Each drags in a whole engine — tokio, TLS, protobuf — and the contract and codec are dependency-free on purpose. An adapter also inherits its engine's toolchain, which must not become the project's | 10 |
 
 ---
 
 ## Changelog
+
+### rev 10 — 2026-08-07
+
+- **Step 3 implemented: `wa-wire-adapter` (SDK) and the `whatsapp-rust` tap
+  adapter.** 100% line and function coverage across the workspace; clippy clean.
+- **Correction to RFC-008's patch table.** It recorded "none — expose existing
+  `slice_bytes()`" for `whatsapp-rust`. Wrong: `slice_bytes` takes a slice that
+  already points inside the buffer, so it cannot produce the buffer itself. One
+  method was added upstream — `OwnedNodeRef::frame_bytes()` — cloning the yoke's
+  cart, so still a refcount bump rather than a copy. The zero-copy claim holds;
+  the route to it did not.
+- **Bug found by testing against the real engine.** `TokenTable::single_byte`
+  applied a `-1`, treating tags as one-indexed. `whatsapp-rust`'s
+  `get_single_token` indexes by the tag byte directly — its table carries a
+  placeholder in slot 0 rather than shifting. The off-by-one parsed *cleanly*
+  and resolved every token to its neighbour, so nothing failed until a frame the
+  engine actually produced was fed through. Fixed, and pinned by a test against
+  the engine's own tag numbers.
+- **`l0.plaintext` added as a distinct capability (D-035).** `Event::RawNode`
+  fires where a stanza is decoded, necessarily before Signal runs, so this
+  adapter emits L0-wire and its envelopes carry an empty plaintext table.
+  Honest rather than degraded — most stanzas never had anything encrypted — but
+  a `<message>` crosses without its plaintext, and closing that needs a second
+  observation point inside the engine.
+- Capability claims are now **verified against stanzas** (D-036), so a claim
+  that stops being true fails a test.
+- Recorded D-035 through D-038.
 
 ### rev 9 — 2026-08-07
 

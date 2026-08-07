@@ -60,6 +60,11 @@ jobs:
       - name: Build for wasm32
         run: cargo build --workspace --target wasm32-unknown-unknown
 
+  # Adapters are deliberately outside this matrix. Each needs its engine checked
+  # out beside this repo and inherits that engine's toolchain, so building them
+  # here would make the contract's CI depend on someone else's release cadence.
+  # Each adapter carries its own `cargo test`; see its README.
+
   generated:
     name: generated code is fresh
     runs-on: ubuntu-latest

@@ -20,7 +20,8 @@ use crate::token::{
 // Small and explicit, so a test says what it means. Tags are 1-indexed on the
 // wire, so token 1 is `SINGLE[0]`.
 
-static SINGLE: [&str; 8] = [
+static SINGLE: [&str; 9] = [
+    "<none>",         // tag 0 — the LIST_EMPTY slot, never a real token
     "message",        // tag 1
     "type",           // tag 2
     "text",           // tag 3
@@ -919,34 +920,59 @@ mod bundled {
 
     #[test]
     fn known_tokens_resolve_at_their_wire_positions() {
-        // Tags are 1-indexed, so tag 1 is the first entry.
-        assert_eq!(tokens::TABLE.single_byte(2), Some("xmlstreamstart"));
-        assert_eq!(tokens::TABLE.single_byte(3), Some("xmlstreamend"));
-        assert_eq!(tokens::TABLE.single_byte(4), Some("s.whatsapp.net"));
-        assert_eq!(tokens::TABLE.single_byte(5), Some("type"));
-        assert_eq!(tokens::TABLE.single_byte(0), None);
-        assert_eq!(tokens::TABLE.single_byte(237), None);
+        // The tag byte indexes the table directly, so tag 1 is the *second* entry:
+        // slot 0 is the placeholder for LIST_EMPTY.
+        assert_eq!(tokens::TABLE.single_byte(1), Some("xmlstreamstart"));
+        assert_eq!(tokens::TABLE.single_byte(2), Some("xmlstreamend"));
+        assert_eq!(tokens::TABLE.single_byte(3), Some("s.whatsapp.net"));
+        assert_eq!(tokens::TABLE.single_byte(4), Some("type"));
+        assert_eq!(
+            tokens::TABLE.single_byte(0),
+            Some(""),
+            "the LIST_EMPTY slot"
+        );
+        assert_eq!(tokens::TABLE.single_byte(236), None);
     }
 
     #[test]
     fn a_realistic_message_stanza_parses() {
-        // <message from=<jid> type="text"><enc>…</enc></message>
-        // Tag 8 is "receipt"; 5 is "type". Built against the real table so the
-        // fixture would break if the dictionaries moved.
-        let frame = Frame::new(Slot::Token(1))
-            .attr(Slot::Token(5), Slot::Binary8(b"text".to_vec()))
+        // `<message type="text" id="…"><enc>cipher</enc></message>`, built from
+        // the real table's own tag numbers. If the dictionaries ever move, this
+        // fixture stops meaning what it says — which is the point.
+        const MESSAGE: u8 = 19;
+        const TYPE: u8 = 4;
+        const ID: u8 = 8;
+        const ENC: u8 = 29;
+        const TEXT: u8 = 56;
+
+        let frame = Frame::new(Slot::Token(MESSAGE))
+            .attr(Slot::Token(TYPE), Slot::Token(TEXT))
+            .attr(Slot::Token(ID), Slot::Binary8(b"ABCD1234".to_vec()))
             .children(vec![
-                Frame::new(Slot::Token(1)).value(Slot::Binary8(b"cipher".to_vec())),
+                Frame::new(Slot::Token(ENC)).value(Slot::Binary8(b"cipher".to_vec())),
             ])
             .bytes();
 
         let parser = Parser::new(tokens::TABLE);
         let node = parser.parse(&frame).expect("parses");
+        assert!(node.tag().eq_str("message"));
         assert!(node.attr_eq("type", "text"));
+        assert!(node.attr_eq("id", "ABCD1234"));
         assert_eq!(node.children().len(), 1);
-        assert_eq!(
-            node.at_path([0u16]).and_then(|n| n.content().as_bytes()),
-            Some(&b"cipher"[..])
-        );
+
+        let enc = node.at_path([0u16]).expect("the enc child");
+        assert!(enc.tag().eq_str("enc"));
+        assert_eq!(enc.content().as_bytes(), Some(&b"cipher"[..]));
+    }
+
+    #[test]
+    fn the_tag_byte_indexes_the_engines_table_directly() {
+        // Pinned against `whatsapp-rust`'s own `get_single_token`, which indexes
+        // by the tag byte. An off-by-one here resolves every token to its
+        // neighbour and parses cleanly while meaning something else entirely.
+        assert_eq!(tokens::TABLE.single_byte(19), Some("message"));
+        assert_eq!(tokens::TABLE.single_byte(4), Some("type"));
+        assert_eq!(tokens::TABLE.single_byte(29), Some("enc"));
+        assert_eq!(tokens::TABLE.single_byte(6), Some("from"));
     }
 }

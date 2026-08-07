@@ -1,0 +1,9 @@
+# Inherited from the engine, not chosen here. `whatsapp-rust` pins nightly and
+# turns on `wacore-binary/simd`, which needs `feature(portable_simd)`; Cargo's
+# feature unification means this crate cannot opt out of it.
+#
+# The wa-wire crates themselves build on stable. Only this adapter is bound to
+# the engine's toolchain, which is what depending on an engine costs.
+[toolchain]
+channel = "nightly-2026-06-16"
+components = ["rustfmt", "clippy"]

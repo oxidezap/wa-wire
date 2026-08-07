@@ -103,11 +103,16 @@ impl<'a> TokenTable<'a> {
         }
     }
 
-    /// The single-byte token for `tag`, which is 1-indexed on the wire.
+    /// The single-byte token for `tag`.
+    ///
+    /// The tag byte *is* the index. Slot 0 is never a real token — that byte
+    /// means `LIST_EMPTY` on the wire — so a table carries a placeholder there
+    /// rather than shifting everything by one. Getting this off by one silently
+    /// resolves every token to its neighbour, so it is pinned by a test against
+    /// the engine's own table.
     #[must_use]
     pub fn single_byte(&self, tag: u8) -> Option<&'a str> {
-        let index = usize::from(tag).checked_sub(1)?;
-        self.single_byte.get(index).copied()
+        self.single_byte.get(usize::from(tag)).copied()
     }
 
     /// The token at `index` of dictionary `dictionary`.
@@ -140,7 +145,7 @@ impl Default for TokenTable<'_> {
 mod tests {
     use super::*;
 
-    static SINGLE: [&str; 3] = ["alpha", "beta", "gamma"];
+    static SINGLE: [&str; 4] = ["<none>", "alpha", "beta", "gamma"];
     static DICT_A: [&str; 2] = ["one", "two"];
     static DICT_B: [&str; 1] = ["three"];
     static DICTS: [&[&str]; 2] = [&DICT_A, &DICT_B];
@@ -150,10 +155,12 @@ mod tests {
     }
 
     #[test]
-    fn single_byte_tokens_are_one_indexed() {
+    fn the_tag_byte_indexes_the_table_directly() {
         let table = table();
-        // Tag 0 is LIST_EMPTY, never a token, so indexing starts at 1.
-        assert_eq!(table.single_byte(0), None);
+        // Slot 0 is the placeholder for LIST_EMPTY; the engine's own table
+        // carries one, and shifting instead would resolve every token to its
+        // neighbour.
+        assert_eq!(table.single_byte(0), Some("<none>"));
         assert_eq!(table.single_byte(1), Some("alpha"));
         assert_eq!(table.single_byte(2), Some("beta"));
         assert_eq!(table.single_byte(3), Some("gamma"));
@@ -177,7 +184,7 @@ mod tests {
     #[test]
     fn sizes_are_reported() {
         let table = table();
-        assert_eq!(table.single_byte_len(), 3);
+        assert_eq!(table.single_byte_len(), 4);
         assert_eq!(table.dictionary_count(), 2);
     }
 
@@ -186,6 +193,7 @@ mod tests {
         let empty = TokenTable::empty();
         assert_eq!(empty.single_byte_len(), 0);
         assert_eq!(empty.dictionary_count(), 0);
+        assert_eq!(empty.single_byte(0), None);
         assert_eq!(empty.single_byte(1), None);
         assert_eq!(empty.dictionary(0, 0), None);
         assert_eq!(empty, TokenTable::default());

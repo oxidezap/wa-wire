@@ -3,6 +3,13 @@
 version = 4
 
 [[package]]
+name = "wa-wire-adapter"
+version = "0.1.0"
+dependencies = [
+ "wa-wire-contract",
+]
+
+[[package]]
 name = "wa-wire-codec"
 version = "0.1.0"
 dependencies = [

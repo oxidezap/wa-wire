@@ -18,7 +18,9 @@ use wa_wire_contract::{
     EnvelopeBuilder, EnvelopeRef, Flags, NodePath, PlaintextEntry, PlaintextStatus,
 };
 
-static SINGLE: [&str; 5] = ["message", "from", "enc", "to", "participants"];
+// Slot 0 is the placeholder for LIST_EMPTY: the tag byte indexes the table
+// directly, exactly as the engine's own table is laid out.
+static SINGLE: [&str; 6] = ["<none>", "message", "from", "enc", "to", "participants"];
 static DICTS: [&[&str]; 0] = [];
 
 fn table() -> TokenTable<'static> {

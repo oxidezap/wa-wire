@@ -1,0 +1,21 @@
+[package]
+name = "wa-wire-adapter"
+version = "0.1.0"
+description = "What a wa-wire adapter must provide, and the plumbing every Rust adapter shares"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+wa-wire-contract = { path = "../wa-wire-contract", default-features = false }
+
+[features]
+default = ["alloc"]
+# Encoding a stanza needs a growable buffer. An adapter that hands stanzas to an
+# in-process consumer never encodes, so it can drop this.
+alloc = ["wa-wire-contract/alloc"]
+
+[lints]
+workspace = true

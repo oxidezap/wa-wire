@@ -1,0 +1,37 @@
+[package]
+name = "wa-wire-adapter-whatsapp-rust"
+version = "0.1.0"
+description = "wa-wire adapter for the whatsapp-rust engine, in tap mode"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+repository = "https://github.com/oxidezap/wa-wire"
+authors = ["oxidezap"]
+
+# Its own workspace: this crate pulls in the whole engine — tokio, TLS, protobuf
+# — and putting that in the main workspace would make every `cargo test` there
+# pay for it. The contract and codec stay dependency-free on purpose.
+[workspace]
+
+[dependencies]
+wa-wire-adapter = { path = "../../crates/wa-wire-adapter" }
+whatsapp-rust = { path = "../../../whatsapp-rust", features = ["plugins"] }
+wacore = { path = "../../../whatsapp-rust/wacore" }
+# `simd` is on by default upstream and needs nightly. The adapter only reads
+# nodes, so the scalar path is enough and the crate stays buildable on stable.
+wacore-binary = { path = "../../../whatsapp-rust/wacore/binary", default-features = false }
+anyhow = "1"
+
+[dev-dependencies]
+wa-wire-codec = { path = "../../crates/wa-wire-codec" }
+wa-wire-contract = { path = "../../crates/wa-wire-contract" }
+
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "allow"
+module_name_repetitions = "allow"

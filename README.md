@@ -54,8 +54,17 @@ is parsed exactly once, host-side, and only if something subscribed to L1.
 | --- | --- |
 | [`wa-wire-contract`](crates/wa-wire-contract) | the normative envelope format and negotiation types |
 | [`wa-wire-codec`](crates/wa-wire-codec) | parser for WhatsApp's binary-node encoding, over pluggable token tables |
+| [`wa-wire-adapter`](crates/wa-wire-adapter) | what an adapter must provide, and the plumbing every Rust adapter shares |
 
-Both are `no_std` with no dependencies, and neither allocates while reading.
+All three are `no_std` with no dependencies beyond each other, and none of them
+allocates while reading.
+
+| Adapter | Engine | Mode |
+| --- | --- | --- |
+| [`whatsapp-rust`](adapters/whatsapp-rust) | `whatsapp-rust` | tap |
+
+Adapters live outside the main workspace: each drags in a whole engine, and the
+contract and codec stay dependency-free on purpose.
 
 More arrive in the order set out in [`DESIGN.md` §8](DESIGN.md#8-implementation-plan).
 
