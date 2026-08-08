@@ -212,9 +212,11 @@ What they could not express is reported in three lists, because it is three
 different things. `REQUEST_SCOPED_ASSERTIONS` are checks a pure derivation can
 never make: a response's `from` matching the request's `to` needs the request,
 and derivation sees one stanza. That list is a design limit and will not shrink.
-`UNTYPED_FIELDS` read as text where the spec declares an enum with no variants.
-`UNMODELLED_FIELDS` is the one that is actually work — four union mixins, still
-open.
+`UNTYPED_FIELDS` is **empty**: its one entry was an enum whatspec declared with
+no variants, which
+[oxidezap/whatspec#42](https://github.com/oxidezap/whatspec/pull/42) fixed at
+the source rather than here. `UNMODELLED_FIELDS` is the one that is actually
+work.
 
 ## License
 

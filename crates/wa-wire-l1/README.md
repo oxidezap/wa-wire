@@ -49,11 +49,21 @@ no conformance run could catch it — every engine would agree on the same missi
 field. So the generators print what they could not express. It is three lists
 because it is three different things:
 
-| Constant | What it means | Will it shrink? |
-| --- | --- | --- |
-| `REQUEST_SCOPED_ASSERTIONS` | checks a pure derivation cannot make | **no** — a design limit |
-| `UNTYPED_FIELDS` | crosses, but below its declared type | on a spec fix |
-| `UNMODELLED_FIELDS` | not modelled yet | yes — this is the work |
+| Constant | What it means | Count | Will it shrink? |
+| --- | --- | --- | --- |
+| `REQUEST_SCOPED_ASSERTIONS` | checks a pure derivation cannot make | 9 | **no** — a design limit |
+| `UNTYPED_FIELDS` | crosses, but below its declared type | 0 | fixed upstream |
+| `UNMODELLED_FIELDS` | not modelled yet | 4 | yes — this is the work |
+
+`UNTYPED_FIELDS` emptied without a line changing here. Its one entry was an
+`attrEnum` whatspec declared with no variants — the values lived on sibling
+shapes as literal guards — so the field read as text.
+[oxidezap/whatspec#42](https://github.com/oxidezap/whatspec/pull/42) found the
+cause: the extractor refused a numeric property key, and `{0:"0",1:"1",7:"7"}`
+is how that enum is written. Fixing it upstream turned this into a typed enum
+and recovered 33 more constraints in whatspec's other domains, which is the
+argument for reporting what a generator could not express instead of dropping
+it.
 
 ### Assertions no derivation can make
 

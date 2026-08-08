@@ -27,7 +27,7 @@ pub const PROVENANCE: Provenance<'static> = Provenance {
     whatsapp_version: "2.3000.1044659339",
     schema_version: "2.0.0",
     generator_version: "0.1.0",
-    incoming_digest: "sha256:feaaaa76d0925423d24405ee08e9c140e30729d853c044bf4e1d8c4da4900cc6",
+    incoming_digest: "sha256:18c955020acfc3ea86bedb4186aac951ccafdf26ede0b05554926a3157d7749e",
     proto_digest: "sha256:021d53059e7b35d8553c97c09567da8d6aba7278c7f2510242eab686bff3647a",
 };
 
@@ -144,6 +144,45 @@ impl CiphertextType {
             Self::Pkmsg => "pkmsg",
             Self::Msg => "msg",
             Self::Msmsg => "msmsg",
+        }
+    }
+}
+
+/// Wire values for `ENUM017`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ENUM017 {
+    /// `0`
+    N0,
+    /// `1`
+    N1,
+    /// `7`
+    N7,
+}
+
+impl ENUM017 {
+    /// Resolve a wire value, or `None` if this build does not know it.
+    #[must_use]
+    pub fn from_wire(value: Value<'_>) -> Option<Self> {
+        if value.eq_str("0") {
+            return Some(Self::N0);
+        }
+        if value.eq_str("1") {
+            return Some(Self::N1);
+        }
+        if value.eq_str("7") {
+            return Some(Self::N7);
+        }
+        None
+    }
+
+    /// The wire value this variant carries.
+    #[must_use]
+    pub const fn as_wire(self) -> &'static str {
+        match self {
+            Self::N0 => "0",
+            Self::N1 => "1",
+            Self::N7 => "7",
         }
     }
 }
@@ -3215,9 +3254,8 @@ pub struct ParsePublishViewResponseSuccess<'a> {
     pub t: Option<i64>,
     /// `readreceipts`, via `maybeAttrEnum`.
     pub readreceipts: Option<ENUMALLNONE>,
-    /// `edit`, via `attrEnum`. The spec
-    /// records no variants for it, so it crosses as text.
-    pub edit: Value<'a>,
+    /// `edit`, via `attrEnum`.
+    pub edit: ENUM017,
     /// The node this was derived from, for fields the shape does
     /// not model yet.
     pub node: NodeRef<'a>,
@@ -3230,7 +3268,7 @@ impl<'a> ParsePublishViewResponseSuccess<'a> {
             class: extract::attr_string(node, "class")?,
             t: extract::maybe_attr_int(node, "t")?,
             readreceipts: extract::maybe_attr_enum(node, "readreceipts", ENUMALLNONE::from_wire)?,
-            edit: extract::attr_string(node, "edit")?,
+            edit: extract::attr_enum(node, "edit", ENUM017::from_wire)?,
             node: *node,
         })
     }
@@ -3247,7 +3285,7 @@ impl ParsePublishViewResponseSuccess<'_> {
         (self.class.semantic_eq(other.class))
             && (self.t == other.t)
             && (self.readreceipts == other.readreceipts)
-            && (self.edit.semantic_eq(other.edit))
+            && (self.edit == other.edit)
     }
 }
 /// Derived from whatspec's `ReadReceiptAckParser` shape.
@@ -3612,8 +3650,7 @@ pub const UNMODELLED_FIELDS: [&str; 4] = [
 /// this today: the values live on sibling shapes as literal guards, and
 /// reconstructing the set from those would be inference. The field
 /// crosses as text, which is what the spec supports.
-pub const UNTYPED_FIELDS: [&str; 1] =
-    ["ParsePublishViewResponseSuccess.edit: attrEnum without variants"];
+pub const UNTYPED_FIELDS: [&str; 0] = [];
 
 /// Checks the spec states that L1 cannot make, by construction.
 ///
@@ -4833,7 +4870,7 @@ mod generated_tests {
     fn parse_publish_view_response_success_derives_from_its_required_fields() {
         let stanza = Fixture::node("ack")
             .attr("class", "x")
-            .attr("edit", "x")
+            .attr("edit", "0")
             .build();
         let node = parse(&stanza);
         let derived = ParsePublishViewResponseSuccess::derive(&node);
@@ -4856,7 +4893,7 @@ mod generated_tests {
             .attr("class", "x")
             .attr("t", "1")
             .attr("readreceipts", "all")
-            .attr("edit", "x")
+            .attr("edit", "0")
             .build();
         let node = parse(&stanza);
         let derived = ParsePublishViewResponseSuccess::derive(&node);
@@ -4877,7 +4914,7 @@ mod generated_tests {
             .attr("class", "x")
             .attr("t", "1")
             .attr("readreceipts", "all")
-            .attr("edit", "x")
+            .attr("edit", "0")
             .build();
         let node = parse(&stanza);
         let derived = ParsePublishViewResponseSuccess::derive(&node).expect("derives");
@@ -4888,7 +4925,7 @@ mod generated_tests {
         // derivation of the same shape, unless the shape has none.
         let bare = Fixture::node("ack")
             .attr("class", "x")
-            .attr("edit", "x")
+            .attr("edit", "0")
             .build();
         let bare_node = parse(&bare);
         if let Ok(bare_derived) = ParsePublishViewResponseSuccess::derive(&bare_node) {
@@ -5066,6 +5103,23 @@ mod generated_tests {
             CiphertextType::from_wire(node.attr("v").expect("attr")),
             None
         );
+    }
+
+    /// Every `ENUM017` value round-trips through the wire form.
+    #[test]
+    fn enum017_round_trips() {
+        #[allow(clippy::single_element_loop)]
+        for variant in [ENUM017::N0, ENUM017::N1, ENUM017::N7] {
+            let wire = variant.as_wire();
+            assert!(!wire.is_empty());
+            let stanza = Fixture::node("n").attr("v", wire).build();
+            let node = parse(&stanza);
+            let value = node.attr("v").expect("the attribute");
+            assert_eq!(ENUM017::from_wire(value), Some(variant));
+        }
+        let stanza = Fixture::node("n").attr("v", "not-a-variant").build();
+        let node = parse(&stanza);
+        assert_eq!(ENUM017::from_wire(node.attr("v").expect("attr")), None);
     }
 
     /// Every `ENUMALLNONE` value round-trips through the wire form.
