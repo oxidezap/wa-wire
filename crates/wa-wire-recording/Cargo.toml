@@ -1,0 +1,21 @@
+[package]
+name = "wa-wire-recording"
+version = "0.1.0"
+description = "The wa-wire recording container: envelopes at rest, with the provenance that makes them comparable"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+default = ["alloc"]
+# Writing needs a growable buffer. Reading never allocates, so a target that
+# only consumes recordings can drop this.
+alloc = ["wa-wire-contract/alloc"]
+
+[dependencies]
+wa-wire-contract = { path = "../wa-wire-contract", version = "0.1.0", default-features = false }
+
+[lints]
+workspace = true

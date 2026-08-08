@@ -26,6 +26,12 @@ import {
     encodeEnvelope,
     type Stanza,
 } from '../src/envelope.js'
+import {
+    ArtifactClass,
+    RecordKind,
+    encodeRecording,
+    type RecordInput,
+} from '../src/recording.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const OUT = join(HERE, '..', 'fixtures')
@@ -126,3 +132,49 @@ for (const [name, stanza] of fixtures) {
     writeFileSync(join(OUT, `${name}.bin`), bytes)
     console.log(`${name}.bin: ${bytes.length} bytes`)
 }
+
+/**
+ * A container written here and read by the Rust crate.
+ *
+ * Every part the two implementations could disagree on is present: metadata of
+ * each kind, a mark between two envelopes, an unknown ancillary tag, an unknown
+ * record kind, and a trailer.
+ */
+const containerRecords: RecordInput[] = [
+    { kind: RecordKind.Envelope, envelope: encodeEnvelope(fixtures[0]![1]) },
+    { kind: RecordKind.Mark, deltaUs: 1_500, label: 'stream:error' },
+    { kind: 0x7e, payload: new TextEncoder().encode('from a later writer') },
+    { kind: RecordKind.Envelope, envelope: encodeEnvelope(fixtures[1]![1]) },
+]
+
+const container = encodeRecording(
+    {
+        adapter: {
+            id: 'zapo',
+            version: '0.1.0',
+            engineVersion: '1.7',
+            contractVersion: 1,
+            capabilities: ['l0.inbound.tap', 'l0.plaintext', 'lifecycle.drain-hook'],
+        },
+        provenance: {
+            whatsappVersion: '2.3000.1044659339',
+            manifestHash: 'sha256:fixture',
+            generatorVersion: '0.1.0',
+        },
+        dictionary: 'whatspec@2.3000.1044659339',
+        artifactClass: ArtifactClass.Synthetic,
+        inputDigest: new TextEncoder().encode('cross-language-fixture'),
+        createdAt: 1_754_000_000_000n,
+        note: 'written by emit-fixtures.ts, read by cross_language.rs',
+        extra: [{ tag: 0x0042, value: new TextEncoder().encode('ancillary') }],
+    },
+    containerRecords,
+)
+writeFileSync(join(OUT, 'recording.wawr'), container)
+console.log(`recording.wawr: ${container.length} bytes`)
+
+// The same records with no trailer: what a ring buffer hands over when it is
+// frozen, and what the Rust reader must still read.
+const frozen = container.subarray(0, container.length - 13)
+writeFileSync(join(OUT, 'recording-truncated.wawr'), frozen)
+console.log(`recording-truncated.wawr: ${frozen.length} bytes`)
