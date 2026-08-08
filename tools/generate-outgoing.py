@@ -402,6 +402,57 @@ def accepts(shape_attrs: list[dict], shape_children: list[dict], other: dict) ->
     return True
 
 
+def indistinguishable(a: dict, b: dict) -> bool:
+    """Whether two shapes produce stanzas nothing can tell apart.
+
+    Mutual, not one-way: a shape strictly subsumed by another is unreachable
+    but still a different shape, and merging it would throw away fields the
+    other does not model. Two that each accept the other's stanzas are one
+    shape described twice.
+    """
+    return accepts(
+        a["attrs"], a["children"], written(b["attrs"], b["children"])
+    ) and accepts(b["attrs"], b["children"], written(a["attrs"], a["children"]))
+
+
+def merge_indistinguishable(
+    named: dict[str, dict],
+) -> tuple[dict[str, dict], list[tuple[str, str]]]:
+    """Fold shapes that are one stanza described by two builders.
+
+    whatspec records a module per builder, and two modules can build the same
+    stanza while differing in something invisible to a reader: whether a value
+    is handed in or computed, or whether one of them bothers to model an
+    optional attribute. Keeping both would be two types no stanza can choose
+    between, and the earlier would silently claim every stanza meant for the
+    later.
+
+    The richer one survives, since it models fields the other does not, and it
+    keeps its own name. Folded, not dropped: what merged is reported.
+
+    Computed from the spec on every run, so it un-merges by itself the day
+    whatspec records something that separates them.
+    """
+    kept: dict[str, dict] = {}
+    merged: list[tuple[str, str]] = []
+    for name, shape in named.items():
+        for other_name, other in kept.items():
+            if other["stanzaType"] != shape["stanzaType"]:
+                continue
+            if not indistinguishable(shape, other):
+                continue
+            # The one modelling more fields survives.
+            if len(readable(shape["attrs"])) > len(readable(other["attrs"])):
+                kept[other_name] = shape
+                merged.append((other_name, name))
+            else:
+                merged.append((name, other_name))
+            break
+        else:
+            kept[name] = shape
+    return kept, merged
+
+
 def unreachable_shapes(by_tag: dict[str, list[tuple[str, dict]]]) -> dict[str, str]:
     """Shapes an earlier shape in dispatch order always claims first.
 
@@ -603,6 +654,8 @@ def main() -> None:
             suffix += 1
         named[name] = shape
 
+    named, merged = merge_indistinguishable(named)
+
     emitter = Emitter()
     for name, shape in named.items():
         emitter.emit_struct(
@@ -742,6 +795,19 @@ def main() -> None:
         "/// dropped in silence.",
         f"pub const UNMODELLED_OUTGOING: [&str; {len(sorted(set(drops)))}] = [",
         *[f"    {rust_str(d)}," for d in sorted(set(drops))],
+        "];",
+        "",
+        "/// Builders that produce the same stanza as another, folded into it.",
+        "///",
+        "/// whatspec records a module per builder, and two modules can build one",
+        "/// stanza while differing in something no reader can see: whether a value",
+        "/// is handed in or computed, or whether one of them models an optional",
+        "/// attribute the other leaves out. The pair is `(folded, survivor)`.",
+        "///",
+        "/// Recomputed from the spec on every run, so a pair separates by itself",
+        "/// the day whatspec records something that tells them apart.",
+        f"pub const MERGED_OUTGOING: [(&str, &str); {len(merged)}] = [",
+        *[f"    ({rust_str(a)}, {rust_str(b)})," for a, b in sorted(merged)],
         "];",
         "",
         "/// Shapes no stanza can ever derive as, and which one claims them instead.",
@@ -908,13 +974,16 @@ def main() -> None:
     subprocess.run(["rustfmt", "--edition", "2024", str(TARGET)], check=True)
     for drop in sorted(set(drops)):
         print(f"  unmodelled: {drop}")
+    for folded, survivor in sorted(merged):
+        print(f"  merged: {folded} — one stanza with {survivor}")
     for name, claimant in sorted(shadowed.items()):
         print(f"  unreachable: {name} — {claimant} claims its stanzas")
     print(
         f"{TARGET.relative_to(ROOT)}: {len(named)} shapes "
         f"({len(shapes) - len(list(iq_shapes(json.loads(iq_bytes))))} stanza, "
         f"{len(iq_shapes(json.loads(iq_bytes)))} iq), {len(tags)} tags, "
-        f"{len(set(drops))} unmodelled, {len(shadowed)} unreachable"
+        f"{len(set(drops))} unmodelled, {len(merged)} merged, "
+        f"{len(shadowed)} unreachable"
     )
 
 

@@ -9,7 +9,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 33
+> **Last revised:** rev 34
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1957,11 +1957,46 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-109 | **Reverses D-106.** Outbound stanzas are derived, from a second generator over whatspec's `stanza` and `iq` domains | D-106 said the request-side domains were not consumed and left the bytes as the claim. `stanza/index.json` is 179 records every one of which is `direction: outgoing`, and `iq`'s `request` half describes 137 more. The gap was that nothing here read them, not that nothing described them | 33 |
 | D-110 | The outbound derivation is a separate generator, not a flag on the existing one | The two domains answer different questions. `incoming` records how WA Web *parses*, naming the accessor a reader calls; `stanza` and `iq` record how it *builds*, naming how the sender produces each value. Read backwards a builder is still a shape, but the vocabularies do not meet, and one generator serving both would be two generators sharing a file | 33 |
 | D-111 | A JID's flavour is enforced, not collapsed into "a JID" | Two `<ack class="notification">` builders differ in nothing but `to` being a device JID in one and a user JID in the other, and two spam reports in nothing but a group JID against a user JID. Reading all three as one type made one shape out of two and let either claim the other's stanzas | 33 |
-| D-112 | Shapes the dispatch can never reach are named, not reordered around | Four differ from an earlier shape in nothing a reader can see: whatspec separates an attribute the caller supplies from one the builder computes, which is a fact about the builder and not about the stanza, and an extra optional attribute discriminates nothing. Reordering moves the problem to the other shape; the generator detects the shadowing itself and emits the pair | 33 |
+| ~~D-112~~ | ~~Shapes the dispatch can never reach are named, not reordered around~~ | Four differ from an earlier shape in nothing a reader can see: whatspec separates an attribute the caller supplies from one the builder computes, which is a fact about the builder and not about the stanza, and an extra optional attribute discriminates nothing. Reordering moves the problem to the other shape; **Superseded by D-113.** The four were not four shapes; they were two, twice | 33 |
+| D-113 | **Supersedes D-112.** Builders producing one stanza are folded into one shape, and the fold is reported | Three of the four were two modules building the same stanza, differing only in whether a value is handed in or computed and whether one bothers to model an optional attribute. Keeping both is two types no stanza can choose between. Mutual indistinguishability, not one-way: a shape strictly subsumed by another is still a different shape and merging it would discard fields the survivor lacks | 34 |
+| D-114 | The fold is recomputed from the spec each run rather than listed | It un-merges by itself the day whatspec records something that separates a pair — which happened to one of them the same afternoon, when the literal inside `CUSTOM_STRING` stopped being dropped upstream | 34 |
 
 ---
 
 ## Changelog
+
+### rev 34 — 2026-08-08
+
+- **The four unreachable shapes were not four shapes.** Rev 33 recorded them as
+  a fact about the spec: pairs differing in nothing a reader can see, named
+  rather than reordered around. Reading the bundle rather than the IR showed
+  two different things wearing one description.
+  - **Three are one stanza described twice** (D-113). `WAWebHandleGrowthNotification`
+    and `WAWebHandleBotProfileNotification` both build
+    `<ack class="notification" id to type>`; one passes `type` through
+    `CUSTOM_STRING`, the other does not, and neither difference reaches the
+    wire. `WAWebReceiptAck` models an optional `participant` that
+    `WAWebHandleVoipCallReceipt` leaves out. They are folded, richer one
+    surviving, and `MERGED_OUTGOING` says which folded into which.
+  - **One was a loss in whatspec.** `WAWebHandleVoipOfferNotice` writes
+    `type: CUSTOM_STRING("offer_notice")` — a literal, in the bundle, dropped by
+    the extractor because a literal reaching the builder through the wire helper
+    fell through to "a string attribute". A bare literal in the same position
+    was already a pin, and `CUSTOM_STRING(enum)` already resolved.
+    [whatspec#43](https://github.com/oxidezap/whatspec/pull/43) closes it;
+    twelve attributes across two domains gain their value.
+- **The fold is computed, not listed** (D-114), so it undoes itself when the
+  spec grows a discriminator. That is not hypothetical: the `offer_notice` pair
+  separates the moment whatspec#43 lands and the vendored spec is refreshed.
+- **`UNREACHABLE_OUTGOING` is empty**, and stays as a constant because the
+  situation it names is possible. A shape strictly subsumed by another — rather
+  than mutually indistinguishable — would be a type nothing can reach, and
+  silence about that is worse than an empty list.
+- Worth recording about the upstream loss: **nothing counted it**. The extractor
+  believed it had read the attribute, so `dropsByReason` was unmoved and the
+  floor guards saw nothing. Unlike the enum gap in rev 30, which its own
+  diagnostics led me to, this one needed a consumer downstream noticing two
+  shapes it could not tell apart.
 
 ### rev 33 — 2026-08-08
 

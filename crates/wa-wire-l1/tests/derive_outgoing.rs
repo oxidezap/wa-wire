@@ -9,8 +9,8 @@
 
 use wa_wire_l1::testing::{Fixture, parse};
 use wa_wire_l1::{
-    DeriveError, Event, OUTGOING_TAGS, UNMODELLED_OUTGOING, UNREACHABLE_OUTGOING, derive,
-    derive_outgoing,
+    DeriveError, Event, MERGED_OUTGOING, OUTGOING_TAGS, UNMODELLED_OUTGOING, UNREACHABLE_OUTGOING,
+    derive, derive_outgoing,
 };
 
 /// The same stanza reads differently depending on which way it travelled.
@@ -138,26 +138,39 @@ fn the_generator_expressed_every_builder_attribute() {
     );
 }
 
-/// Four shapes can never be derived as themselves, and the spec is why.
+/// Nothing is left that no stanza can derive as.
 ///
-/// Each differs from an earlier shape in nothing a reader can see. whatspec
-/// distinguishes an attribute the caller supplies (`string`) from one the
-/// builder computes (`dynamic`), which is a fact about the *builder* and not
-/// about the stanza — on the wire they are one attribute. An extra optional
-/// attribute discriminates nothing either.
-///
-/// Named rather than dropped, and rather than reordered around: reordering
-/// moves the problem to the other shape. Closing it would mean whatspec
-/// recording something that separates them, which it does not today.
+/// The list exists because the situation is possible, not because it is
+/// expected: a shape strictly subsumed by another would be a type nothing can
+/// ever reach, and silence about it would be worse than the list.
 #[test]
-fn the_shapes_no_stanza_can_derive_as_are_named() {
+fn no_shape_is_left_unreachable() {
     assert!(
-        !UNREACHABLE_OUTGOING.is_empty(),
-        "if this is empty the spec grew a discriminator, which is good news \
-         and wants the list updated rather than deleted"
+        UNREACHABLE_OUTGOING.is_empty(),
+        "unreachable: {UNREACHABLE_OUTGOING:?}"
     );
-    for (shape, claimant) in UNREACHABLE_OUTGOING {
-        assert_ne!(shape, claimant, "a shape cannot shadow itself");
-        assert!(!shape.is_empty() && !claimant.is_empty());
+}
+
+/// Four builders describe a stanza another already describes, and are folded.
+///
+/// whatspec records a module per builder, and two modules can build one stanza
+/// while differing in something no reader can see: whether a value is handed
+/// in or computed at build time, or whether one of them models an optional
+/// attribute the other leaves out. Keeping both would be two types no stanza
+/// can choose between.
+///
+/// The list is recomputed from the spec on every run, so a pair separates by
+/// itself the day whatspec records something that tells them apart — and this
+/// test then says the list wants updating rather than deleting.
+#[test]
+fn builders_describing_one_stanza_are_folded_and_named() {
+    assert!(
+        !MERGED_OUTGOING.is_empty(),
+        "if this is empty the spec grew a discriminator, which is good news \
+         and wants the list updated rather than removed"
+    );
+    for (folded, survivor) in MERGED_OUTGOING {
+        assert_ne!(folded, survivor, "a shape cannot fold into itself");
+        assert!(!folded.is_empty() && !survivor.is_empty());
     }
 }

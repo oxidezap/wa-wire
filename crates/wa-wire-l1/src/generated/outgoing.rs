@@ -4119,50 +4119,6 @@ impl HandleGroupNotificationV2<'_> {
     }
 }
 
-/// Derived from whatspec's `WAWebHandleGrowthNotification` builder.
-#[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
-pub struct HandleGrowthNotification<'a> {
-    /// `id`, a `string` attribute.
-    pub id: Value<'a>,
-    /// `type`, a `dynamic` attribute.
-    pub r#type: Value<'a>,
-    /// `to`, a `dynamic` attribute.
-    pub to: Value<'a>,
-    /// The node this was derived from, for fields the shape does
-    /// not model yet.
-    pub node: NodeRef<'a>,
-}
-
-impl<'a> HandleGrowthNotification<'a> {
-    /// Derive from a node already known to match this shape.
-    ///
-    /// # Errors
-    ///
-    /// When a field the builder always writes is absent.
-    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
-        Ok(Self {
-            id: extract::attr_string(node, "id")?,
-            r#type: extract::attr_string(node, "type")?,
-            to: extract::attr_string(node, "to")?,
-            node: *node,
-        })
-    }
-}
-
-impl HandleGrowthNotification<'_> {
-    /// Whether two derivations mean the same thing.
-    ///
-    /// The originating node is excluded: two engines may encode one
-    /// stanza differently and both be right.
-    #[must_use]
-    pub fn semantic_eq(&self, other: &HandleGrowthNotification<'_>) -> bool {
-        (self.id.semantic_eq(other.id))
-            && (self.r#type.semantic_eq(other.r#type))
-            && (self.to.semantic_eq(other.to))
-    }
-}
-
 /// Derived from whatspec's `WAWebHandleIdentityChange` builder.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -4751,16 +4707,18 @@ impl HandleVoipCall2<'_> {
     }
 }
 
-/// Derived from whatspec's `WAWebHandleVoipCallReceipt` builder.
+/// Derived from whatspec's `WAWebReceiptAck` builder.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct HandleVoipCallReceipt<'a> {
-    /// `id`, a `string` attribute.
-    pub id: Value<'a>,
     /// `to`, a `user_jid` attribute.
     pub to: Jid<'a>,
+    /// `id`, a `string` attribute.
+    pub id: Value<'a>,
     /// `type`, a `dynamic` attribute.
     pub r#type: Value<'a>,
+    /// `participant`, a `optional` attribute.
+    pub participant: Option<Value<'a>>,
     /// The node this was derived from, for fields the shape does
     /// not model yet.
     pub node: NodeRef<'a>,
@@ -4774,9 +4732,10 @@ impl<'a> HandleVoipCallReceipt<'a> {
     /// When a field the builder always writes is absent.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
         Ok(Self {
-            id: extract::attr_string(node, "id")?,
             to: extract::attr_user_jid(node, "to")?,
+            id: extract::attr_string(node, "id")?,
             r#type: extract::attr_string(node, "type")?,
+            participant: extract::maybe_attr_string(node, "participant"),
             node: *node,
         })
     }
@@ -4789,53 +4748,14 @@ impl HandleVoipCallReceipt<'_> {
     /// stanza differently and both be right.
     #[must_use]
     pub fn semantic_eq(&self, other: &HandleVoipCallReceipt<'_>) -> bool {
-        (self.id.semantic_eq(other.id))
-            && (self.to.semantic_eq(other.to))
-            && (self.r#type.semantic_eq(other.r#type))
-    }
-}
-
-/// Derived from whatspec's `WAWebHandleVoipOfferNotice` builder.
-#[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
-pub struct HandleVoipOfferNotice<'a> {
-    /// `to`, a `user_jid` attribute.
-    pub to: Jid<'a>,
-    /// `id`, a `string` attribute.
-    pub id: Value<'a>,
-    /// `type`, a `string` attribute.
-    pub r#type: Value<'a>,
-    /// The node this was derived from, for fields the shape does
-    /// not model yet.
-    pub node: NodeRef<'a>,
-}
-
-impl<'a> HandleVoipOfferNotice<'a> {
-    /// Derive from a node already known to match this shape.
-    ///
-    /// # Errors
-    ///
-    /// When a field the builder always writes is absent.
-    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
-        Ok(Self {
-            to: extract::attr_user_jid(node, "to")?,
-            id: extract::attr_string(node, "id")?,
-            r#type: extract::attr_string(node, "type")?,
-            node: *node,
-        })
-    }
-}
-
-impl HandleVoipOfferNotice<'_> {
-    /// Whether two derivations mean the same thing.
-    ///
-    /// The originating node is excluded: two engines may encode one
-    /// stanza differently and both be right.
-    #[must_use]
-    pub fn semantic_eq(&self, other: &HandleVoipOfferNotice<'_>) -> bool {
         (self.to.semantic_eq(other.to))
             && (self.id.semantic_eq(other.id))
             && (self.r#type.semantic_eq(other.r#type))
+            && (match (self.participant, other.participant) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
     }
 }
 
@@ -4981,58 +4901,6 @@ impl PaymentNotificationHandler<'_> {
     }
 }
 
-/// Derived from whatspec's `WAWebReceiptAck` builder.
-#[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
-pub struct ReceiptAck<'a> {
-    /// `to`, a `user_jid` attribute.
-    pub to: Jid<'a>,
-    /// `id`, a `string` attribute.
-    pub id: Value<'a>,
-    /// `type`, a `dynamic` attribute.
-    pub r#type: Value<'a>,
-    /// `participant`, a `optional` attribute.
-    pub participant: Option<Value<'a>>,
-    /// The node this was derived from, for fields the shape does
-    /// not model yet.
-    pub node: NodeRef<'a>,
-}
-
-impl<'a> ReceiptAck<'a> {
-    /// Derive from a node already known to match this shape.
-    ///
-    /// # Errors
-    ///
-    /// When a field the builder always writes is absent.
-    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
-        Ok(Self {
-            to: extract::attr_user_jid(node, "to")?,
-            id: extract::attr_string(node, "id")?,
-            r#type: extract::attr_string(node, "type")?,
-            participant: extract::maybe_attr_string(node, "participant"),
-            node: *node,
-        })
-    }
-}
-
-impl ReceiptAck<'_> {
-    /// Whether two derivations mean the same thing.
-    ///
-    /// The originating node is excluded: two engines may encode one
-    /// stanza differently and both be right.
-    #[must_use]
-    pub fn semantic_eq(&self, other: &ReceiptAck<'_>) -> bool {
-        (self.to.semantic_eq(other.to))
-            && (self.id.semantic_eq(other.id))
-            && (self.r#type.semantic_eq(other.r#type))
-            && (match (self.participant, other.participant) {
-                (Some(a), Some(b)) => a.semantic_eq(b),
-                (None, None) => true,
-                _ => false,
-            })
-    }
-}
-
 /// Derived from whatspec's `WAWebSendReceiptJobCommon` builder.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -5115,6 +4983,10 @@ pub struct SendReceiptJobCommon2<'a> {
     pub id: Value<'a>,
     /// `to`, a `user_jid` attribute.
     pub to: Jid<'a>,
+    /// `recipient`, a `optional` attribute.
+    pub recipient: Option<Value<'a>>,
+    /// `participant`, a `optional` attribute.
+    pub participant: Option<Value<'a>>,
     /// The `<list>` child.
     pub list: alloc::boxed::Box<SendReceiptJobCommon2List<'a>>,
     /// The node this was derived from, for fields the shape does
@@ -5132,6 +5004,8 @@ impl<'a> SendReceiptJobCommon2<'a> {
         Ok(Self {
             id: extract::attr_string(node, "id")?,
             to: extract::attr_user_jid(node, "to")?,
+            recipient: extract::maybe_attr_string(node, "recipient"),
+            participant: extract::maybe_attr_string(node, "participant"),
             list: alloc::boxed::Box::new(SendReceiptJobCommon2List::derive(&extract::child(
                 node, "list",
             )?)?),
@@ -5147,132 +5021,6 @@ impl SendReceiptJobCommon2<'_> {
     /// stanza differently and both be right.
     #[must_use]
     pub fn semantic_eq(&self, other: &SendReceiptJobCommon2<'_>) -> bool {
-        (self.id.semantic_eq(other.id))
-            && (self.to.semantic_eq(other.to))
-            && (self.list.semantic_eq(&other.list))
-    }
-}
-
-/// Derived from whatspec's `WAWebSendReceiptJobCommon` builder.
-#[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
-pub struct SendReceiptJobCommon3ListItem<'a> {
-    /// `id`, a `string` attribute.
-    pub id: Value<'a>,
-    /// The node this was derived from, for fields the shape does
-    /// not model yet.
-    pub node: NodeRef<'a>,
-}
-
-impl<'a> SendReceiptJobCommon3ListItem<'a> {
-    /// Derive from a node already known to match this shape.
-    ///
-    /// # Errors
-    ///
-    /// When a field the builder always writes is absent.
-    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
-        Ok(Self {
-            id: extract::attr_string(node, "id")?,
-            node: *node,
-        })
-    }
-}
-
-impl SendReceiptJobCommon3ListItem<'_> {
-    /// Whether two derivations mean the same thing.
-    ///
-    /// The originating node is excluded: two engines may encode one
-    /// stanza differently and both be right.
-    #[must_use]
-    pub fn semantic_eq(&self, other: &SendReceiptJobCommon3ListItem<'_>) -> bool {
-        self.id.semantic_eq(other.id)
-    }
-}
-
-/// Derived from whatspec's `WAWebSendReceiptJobCommon` builder.
-#[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
-pub struct SendReceiptJobCommon3List<'a> {
-    /// The `<item>` child.
-    pub item: alloc::boxed::Box<SendReceiptJobCommon3ListItem<'a>>,
-    /// The node this was derived from, for fields the shape does
-    /// not model yet.
-    pub node: NodeRef<'a>,
-}
-
-impl<'a> SendReceiptJobCommon3List<'a> {
-    /// Derive from a node already known to match this shape.
-    ///
-    /// # Errors
-    ///
-    /// When a field the builder always writes is absent.
-    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
-        Ok(Self {
-            item: alloc::boxed::Box::new(SendReceiptJobCommon3ListItem::derive(&extract::child(
-                node, "item",
-            )?)?),
-            node: *node,
-        })
-    }
-}
-
-impl SendReceiptJobCommon3List<'_> {
-    /// Whether two derivations mean the same thing.
-    ///
-    /// The originating node is excluded: two engines may encode one
-    /// stanza differently and both be right.
-    #[must_use]
-    pub fn semantic_eq(&self, other: &SendReceiptJobCommon3List<'_>) -> bool {
-        self.item.semantic_eq(&other.item)
-    }
-}
-
-/// Derived from whatspec's `WAWebSendReceiptJobCommon` builder.
-#[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
-pub struct SendReceiptJobCommon3<'a> {
-    /// `id`, a `string` attribute.
-    pub id: Value<'a>,
-    /// `to`, a `user_jid` attribute.
-    pub to: Jid<'a>,
-    /// `recipient`, a `optional` attribute.
-    pub recipient: Option<Value<'a>>,
-    /// `participant`, a `optional` attribute.
-    pub participant: Option<Value<'a>>,
-    /// The `<list>` child.
-    pub list: alloc::boxed::Box<SendReceiptJobCommon3List<'a>>,
-    /// The node this was derived from, for fields the shape does
-    /// not model yet.
-    pub node: NodeRef<'a>,
-}
-
-impl<'a> SendReceiptJobCommon3<'a> {
-    /// Derive from a node already known to match this shape.
-    ///
-    /// # Errors
-    ///
-    /// When a field the builder always writes is absent.
-    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
-        Ok(Self {
-            id: extract::attr_string(node, "id")?,
-            to: extract::attr_user_jid(node, "to")?,
-            recipient: extract::maybe_attr_string(node, "recipient"),
-            participant: extract::maybe_attr_string(node, "participant"),
-            list: alloc::boxed::Box::new(SendReceiptJobCommon3List::derive(&extract::child(
-                node, "list",
-            )?)?),
-            node: *node,
-        })
-    }
-}
-
-impl SendReceiptJobCommon3<'_> {
-    /// Whether two derivations mean the same thing.
-    ///
-    /// The originating node is excluded: two engines may encode one
-    /// stanza differently and both be right.
-    #[must_use]
-    pub fn semantic_eq(&self, other: &SendReceiptJobCommon3<'_>) -> bool {
         (self.id.semantic_eq(other.id))
             && (self.to.semantic_eq(other.to))
             && (match (self.recipient, other.recipient) {
@@ -24175,8 +23923,6 @@ pub enum OutgoingEvent<'a> {
     HandleDisappearingModeNotification(HandleDisappearingModeNotification<'a>),
     /// `HandleGroupNotificationV2`.
     HandleGroupNotificationV2(HandleGroupNotificationV2<'a>),
-    /// `HandleGrowthNotification`.
-    HandleGrowthNotification(HandleGrowthNotification<'a>),
     /// `HandleIdentityChange`.
     HandleIdentityChange(HandleIdentityChange<'a>),
     /// `HandleMediaRetryNotification`.
@@ -24203,20 +23949,14 @@ pub enum OutgoingEvent<'a> {
     HandleVoipCall2(HandleVoipCall2<'a>),
     /// `HandleVoipCallReceipt`.
     HandleVoipCallReceipt(HandleVoipCallReceipt<'a>),
-    /// `HandleVoipOfferNotice`.
-    HandleVoipOfferNotice(HandleVoipOfferNotice<'a>),
     /// `HandleWaChat`.
     HandleWaChat(HandleWaChat<'a>),
     /// `OfflineResumePreAckHandler`.
     OfflineResumePreAckHandler(OfflineResumePreAckHandler<'a>),
     /// `PaymentNotificationHandler`.
     PaymentNotificationHandler(PaymentNotificationHandler<'a>),
-    /// `ReceiptAck`.
-    ReceiptAck(ReceiptAck<'a>),
     /// `SendReceiptJobCommon2`.
     SendReceiptJobCommon2(SendReceiptJobCommon2<'a>),
-    /// `SendReceiptJobCommon3`.
-    SendReceiptJobCommon3(SendReceiptJobCommon3<'a>),
     /// `VoipLinkCreateRequest`.
     VoipLinkCreateRequest(VoipLinkCreateRequest<'a>),
     /// `VoipLinkQueryRequest`.
@@ -24570,7 +24310,6 @@ impl OutgoingEvent<'_> {
             Self::HandleDigitalCommerceSubscriptionNotification(_) => "ack",
             Self::HandleDisappearingModeNotification(_) => "ack",
             Self::HandleGroupNotificationV2(_) => "ack",
-            Self::HandleGrowthNotification(_) => "ack",
             Self::HandleIdentityChange(_) => "ack",
             Self::HandleMediaRetryNotification(_) => "ack",
             Self::HandleMessageRetryRequest(_) => "ack",
@@ -24584,13 +24323,10 @@ impl OutgoingEvent<'_> {
             Self::HandleServerSyncNotification(_) => "ack",
             Self::HandleVoipCall2(_) => "ack",
             Self::HandleVoipCallReceipt(_) => "ack",
-            Self::HandleVoipOfferNotice(_) => "ack",
             Self::HandleWaChat(_) => "ack",
             Self::OfflineResumePreAckHandler(_) => "ack",
             Self::PaymentNotificationHandler(_) => "ack",
-            Self::ReceiptAck(_) => "ack",
             Self::SendReceiptJobCommon2(_) => "ack",
-            Self::SendReceiptJobCommon3(_) => "ack",
             Self::VoipLinkCreateRequest(_) => "call",
             Self::VoipLinkQueryRequest(_) => "call",
             Self::VoipWaitingRoomToggleCallLinkRequest(_) => "call",
@@ -24801,7 +24537,6 @@ impl OutgoingEvent<'_> {
             }
             Self::HandleDisappearingModeNotification(_) => "HandleDisappearingModeNotification",
             Self::HandleGroupNotificationV2(_) => "HandleGroupNotificationV2",
-            Self::HandleGrowthNotification(_) => "HandleGrowthNotification",
             Self::HandleIdentityChange(_) => "HandleIdentityChange",
             Self::HandleMediaRetryNotification(_) => "HandleMediaRetryNotification",
             Self::HandleMessageRetryRequest(_) => "HandleMessageRetryRequest",
@@ -24815,13 +24550,10 @@ impl OutgoingEvent<'_> {
             Self::HandleServerSyncNotification(_) => "HandleServerSyncNotification",
             Self::HandleVoipCall2(_) => "HandleVoipCall2",
             Self::HandleVoipCallReceipt(_) => "HandleVoipCallReceipt",
-            Self::HandleVoipOfferNotice(_) => "HandleVoipOfferNotice",
             Self::HandleWaChat(_) => "HandleWaChat",
             Self::OfflineResumePreAckHandler(_) => "OfflineResumePreAckHandler",
             Self::PaymentNotificationHandler(_) => "PaymentNotificationHandler",
-            Self::ReceiptAck(_) => "ReceiptAck",
             Self::SendReceiptJobCommon2(_) => "SendReceiptJobCommon2",
-            Self::SendReceiptJobCommon3(_) => "SendReceiptJobCommon3",
             Self::VoipLinkCreateRequest(_) => "VoipLinkCreateRequest",
             Self::VoipLinkQueryRequest(_) => "VoipLinkQueryRequest",
             Self::VoipWaitingRoomToggleCallLinkRequest(_) => "VoipWaitingRoomToggleCallLinkRequest",
@@ -25171,10 +24903,6 @@ impl OutgoingEvent<'_> {
                 OutgoingEvent::HandleGroupNotificationV2(a),
                 OutgoingEvent::HandleGroupNotificationV2(b),
             ) => a.semantic_eq(b),
-            (
-                OutgoingEvent::HandleGrowthNotification(a),
-                OutgoingEvent::HandleGrowthNotification(b),
-            ) => a.semantic_eq(b),
             (OutgoingEvent::HandleIdentityChange(a), OutgoingEvent::HandleIdentityChange(b)) => {
                 a.semantic_eq(b)
             }
@@ -25218,9 +24946,6 @@ impl OutgoingEvent<'_> {
             (OutgoingEvent::HandleVoipCallReceipt(a), OutgoingEvent::HandleVoipCallReceipt(b)) => {
                 a.semantic_eq(b)
             }
-            (OutgoingEvent::HandleVoipOfferNotice(a), OutgoingEvent::HandleVoipOfferNotice(b)) => {
-                a.semantic_eq(b)
-            }
             (OutgoingEvent::HandleWaChat(a), OutgoingEvent::HandleWaChat(b)) => a.semantic_eq(b),
             (
                 OutgoingEvent::OfflineResumePreAckHandler(a),
@@ -25230,11 +24955,7 @@ impl OutgoingEvent<'_> {
                 OutgoingEvent::PaymentNotificationHandler(a),
                 OutgoingEvent::PaymentNotificationHandler(b),
             ) => a.semantic_eq(b),
-            (OutgoingEvent::ReceiptAck(a), OutgoingEvent::ReceiptAck(b)) => a.semantic_eq(b),
             (OutgoingEvent::SendReceiptJobCommon2(a), OutgoingEvent::SendReceiptJobCommon2(b)) => {
-                a.semantic_eq(b)
-            }
-            (OutgoingEvent::SendReceiptJobCommon3(a), OutgoingEvent::SendReceiptJobCommon3(b)) => {
                 a.semantic_eq(b)
             }
             (OutgoingEvent::VoipLinkCreateRequest(a), OutgoingEvent::VoipLinkCreateRequest(b)) => {
@@ -25797,13 +25518,6 @@ pub fn derive_outgoing<'a>(node: &NodeRef<'a>) -> Result<OutgoingEvent<'a>, Deri
         // guarded by class=message, type=text
         if node.attr_eq("class", "message")
             && node.attr_eq("type", "text")
-            && let Ok(inner) = SendReceiptJobCommon3::derive(node)
-        {
-            return Ok(OutgoingEvent::SendReceiptJobCommon3(inner));
-        }
-        // guarded by class=message, type=text
-        if node.attr_eq("class", "message")
-            && node.attr_eq("type", "text")
             && let Ok(inner) = SendReceiptJobCommon2::derive(node)
         {
             return Ok(OutgoingEvent::SendReceiptJobCommon2(inner));
@@ -25973,17 +25687,11 @@ pub fn derive_outgoing<'a>(node: &NodeRef<'a>) -> Result<OutgoingEvent<'a>, Deri
                 inner,
             ));
         }
-        // guarded by class=call
-        if node.attr_eq("class", "call")
-            && let Ok(inner) = HandleVoipOfferNotice::derive(node)
-        {
-            return Ok(OutgoingEvent::HandleVoipOfferNotice(inner));
-        }
         // guarded by class=receipt
         if node.attr_eq("class", "receipt")
-            && let Ok(inner) = ReceiptAck::derive(node)
+            && let Ok(inner) = HandleVoipCallReceipt::derive(node)
         {
-            return Ok(OutgoingEvent::ReceiptAck(inner));
+            return Ok(OutgoingEvent::HandleVoipCallReceipt(inner));
         }
         // guarded by class=call
         if node.attr_eq("class", "call")
@@ -25991,23 +25699,11 @@ pub fn derive_outgoing<'a>(node: &NodeRef<'a>) -> Result<OutgoingEvent<'a>, Deri
         {
             return Ok(OutgoingEvent::HandleVoipCall2(inner));
         }
-        // guarded by class=receipt
-        if node.attr_eq("class", "receipt")
-            && let Ok(inner) = HandleVoipCallReceipt::derive(node)
-        {
-            return Ok(OutgoingEvent::HandleVoipCallReceipt(inner));
-        }
         // guarded by class=notification
         if node.attr_eq("class", "notification")
             && let Ok(inner) = HandleBotProfileNotification::derive(node)
         {
             return Ok(OutgoingEvent::HandleBotProfileNotification(inner));
-        }
-        // guarded by class=notification
-        if node.attr_eq("class", "notification")
-            && let Ok(inner) = HandleGrowthNotification::derive(node)
-        {
-            return Ok(OutgoingEvent::HandleGrowthNotification(inner));
         }
         // guarded by class=notification
         if node.attr_eq("class", "notification")
@@ -27322,6 +27018,22 @@ pub const OUTGOING_TAGS: [&str; 9] = [
 /// dropped in silence.
 pub const UNMODELLED_OUTGOING: [&str; 0] = [];
 
+/// Builders that produce the same stanza as another, folded into it.
+///
+/// whatspec records a module per builder, and two modules can build one
+/// stanza while differing in something no reader can see: whether a value
+/// is handed in or computed, or whether one of them models an optional
+/// attribute the other leaves out. The pair is `(folded, survivor)`.
+///
+/// Recomputed from the spec on every run, so a pair separates by itself
+/// the day whatspec records something that tells them apart.
+pub const MERGED_OUTGOING: [(&str, &str); 4] = [
+    ("HandleGrowthNotification", "HandleBotProfileNotification"),
+    ("HandleVoipCallReceipt", "ReceiptAck"),
+    ("HandleVoipOfferNotice", "HandleVoipCall2"),
+    ("SendReceiptJobCommon2", "SendReceiptJobCommon3"),
+];
+
 /// Shapes no stanza can ever derive as, and which one claims them instead.
 ///
 /// These differ from an earlier shape in nothing a reader can see: an
@@ -27332,12 +27044,7 @@ pub const UNMODELLED_OUTGOING: [&str; 0] = [];
 ///
 /// Listed rather than dropped, and rather than reordered around: reordering
 /// would only move the problem to the other shape.
-pub const UNREACHABLE_OUTGOING: [(&str, &str); 4] = [
-    ("HandleGrowthNotification", "HandleBotProfileNotification"),
-    ("HandleVoipCall2", "HandleVoipOfferNotice"),
-    ("HandleVoipCallReceipt", "ReceiptAck"),
-    ("SendReceiptJobCommon2", "SendReceiptJobCommon3"),
-];
+pub const UNREACHABLE_OUTGOING: [(&str, &str); 0] = [];
 
 #[cfg(test)]
 mod outgoing_tests {
@@ -29049,7 +28756,7 @@ mod outgoing_tests {
             .to_vec()
     }
 
-    fn lean_handle_voip_offer_notice() -> Vec<u8> {
+    fn lean_handle_voip_call2() -> Vec<u8> {
         Fixture::node("ack")
             .attr("class", "call")
             .jid_attr("to", "u")
@@ -29059,7 +28766,7 @@ mod outgoing_tests {
             .bytes()
             .to_vec()
     }
-    fn full_handle_voip_offer_notice() -> Vec<u8> {
+    fn full_handle_voip_call2() -> Vec<u8> {
         Fixture::node("ack")
             .attr("class", "call")
             .jid_attr("to", "u")
@@ -29069,9 +28776,41 @@ mod outgoing_tests {
             .bytes()
             .to_vec()
     }
-    fn wrong_pin_handle_voip_offer_notice() -> Vec<u8> {
+    fn wrong_pin_handle_voip_call2() -> Vec<u8> {
         Fixture::node("ack")
             .attr("class", "call-not")
+            .jid_attr("to", "u")
+            .attr("id", "x")
+            .attr("type", "x")
+            .build()
+            .bytes()
+            .to_vec()
+    }
+
+    fn lean_handle_voip_call_receipt() -> Vec<u8> {
+        Fixture::node("ack")
+            .attr("class", "receipt")
+            .jid_attr("to", "u")
+            .attr("id", "x")
+            .attr("type", "x")
+            .build()
+            .bytes()
+            .to_vec()
+    }
+    fn full_handle_voip_call_receipt() -> Vec<u8> {
+        Fixture::node("ack")
+            .attr("class", "receipt")
+            .jid_attr("to", "u")
+            .attr("id", "x")
+            .attr("type", "x")
+            .attr("participant", "x")
+            .build()
+            .bytes()
+            .to_vec()
+    }
+    fn wrong_pin_handle_voip_call_receipt() -> Vec<u8> {
+        Fixture::node("ack")
+            .attr("class", "receipt-not")
             .jid_attr("to", "u")
             .attr("id", "x")
             .attr("type", "x")
@@ -29165,39 +28904,7 @@ mod outgoing_tests {
             .to_vec()
     }
 
-    fn lean_receipt_ack() -> Vec<u8> {
-        Fixture::node("ack")
-            .attr("class", "receipt")
-            .jid_attr("to", "u")
-            .attr("id", "x")
-            .attr("type", "x")
-            .build()
-            .bytes()
-            .to_vec()
-    }
-    fn full_receipt_ack() -> Vec<u8> {
-        Fixture::node("ack")
-            .attr("class", "receipt")
-            .jid_attr("to", "u")
-            .attr("id", "x")
-            .attr("type", "x")
-            .attr("participant", "x")
-            .build()
-            .bytes()
-            .to_vec()
-    }
-    fn wrong_pin_receipt_ack() -> Vec<u8> {
-        Fixture::node("ack")
-            .attr("class", "receipt-not")
-            .jid_attr("to", "u")
-            .attr("id", "x")
-            .attr("type", "x")
-            .build()
-            .bytes()
-            .to_vec()
-    }
-
-    fn lean_send_receipt_job_common3() -> Vec<u8> {
+    fn lean_send_receipt_job_common2() -> Vec<u8> {
         Fixture::node("ack")
             .attr("class", "message")
             .attr("type", "text")
@@ -29208,7 +28915,7 @@ mod outgoing_tests {
             .bytes()
             .to_vec()
     }
-    fn full_send_receipt_job_common3() -> Vec<u8> {
+    fn full_send_receipt_job_common2() -> Vec<u8> {
         Fixture::node("ack")
             .attr("class", "message")
             .attr("type", "text")
@@ -29221,7 +28928,7 @@ mod outgoing_tests {
             .bytes()
             .to_vec()
     }
-    fn wrong_pin_send_receipt_job_common3() -> Vec<u8> {
+    fn wrong_pin_send_receipt_job_common2() -> Vec<u8> {
         Fixture::node("ack")
             .attr("class", "message-not")
             .attr("type", "text")
@@ -35539,10 +35246,16 @@ mod outgoing_tests {
             wrong_pin: Some(wrong_pin_handle_server_sync_notification),
         },
         Case {
-            shape: "HandleVoipOfferNotice",
-            lean: lean_handle_voip_offer_notice,
-            full: full_handle_voip_offer_notice,
-            wrong_pin: Some(wrong_pin_handle_voip_offer_notice),
+            shape: "HandleVoipCall2",
+            lean: lean_handle_voip_call2,
+            full: full_handle_voip_call2,
+            wrong_pin: Some(wrong_pin_handle_voip_call2),
+        },
+        Case {
+            shape: "HandleVoipCallReceipt",
+            lean: lean_handle_voip_call_receipt,
+            full: full_handle_voip_call_receipt,
+            wrong_pin: Some(wrong_pin_handle_voip_call_receipt),
         },
         Case {
             shape: "HandleWaChat",
@@ -35563,16 +35276,10 @@ mod outgoing_tests {
             wrong_pin: Some(wrong_pin_payment_notification_handler),
         },
         Case {
-            shape: "ReceiptAck",
-            lean: lean_receipt_ack,
-            full: full_receipt_ack,
-            wrong_pin: Some(wrong_pin_receipt_ack),
-        },
-        Case {
-            shape: "SendReceiptJobCommon3",
-            lean: lean_send_receipt_job_common3,
-            full: full_send_receipt_job_common3,
-            wrong_pin: Some(wrong_pin_send_receipt_job_common3),
+            shape: "SendReceiptJobCommon2",
+            lean: lean_send_receipt_job_common2,
+            full: full_send_receipt_job_common2,
+            wrong_pin: Some(wrong_pin_send_receipt_job_common2),
         },
         Case {
             shape: "VoipLinkCreateRequest",

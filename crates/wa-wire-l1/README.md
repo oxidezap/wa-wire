@@ -134,14 +134,20 @@ them as "a JID" makes one shape out of two and lets either claim the other's
 stanzas, so `attr_user_jid`, `attr_device_jid` and `attr_group_jid` are
 distinct. `g.us` is entry 45 of the token dictionary, not this crate's guess.
 
-### Four shapes no stanza can derive as
+### Builders that describe one stanza
 
-`UNREACHABLE_OUTGOING` names them, with the shape that claims their stanzas
-instead. Each differs from an earlier shape in nothing a reader can see:
-whatspec separates an attribute the caller supplies (`string`) from one the
-builder computes (`dynamic`), which is a fact about the builder rather than
-about the stanza, and an extra optional attribute discriminates nothing.
+whatspec records a module per builder, and two modules can build the same
+stanza while differing in something no reader can see: whether a value is
+handed in or computed at build time, or whether one of them models an optional
+attribute the other leaves out. Keeping both would be two types no stanza can
+choose between, so they are folded and `MERGED_OUTGOING` names the pairs.
 
-Named rather than reordered around — reordering moves the problem to the other
-shape — and worked out by the generator, which simulates its own dispatch over
-each shape's fixture rather than being told.
+The fold is recomputed from the spec on every run, so a pair separates by itself
+the day whatspec records something that tells them apart — which is what
+[whatspec#43](https://github.com/oxidezap/whatspec/pull/43) does for one of
+them, having found a literal the extractor was dropping.
+
+`UNREACHABLE_OUTGOING` is empty and stays for the case the fold does not cover:
+a shape *strictly* subsumed by another is still a different shape, merging it
+would discard fields the survivor lacks, and a type nothing can reach is worth
+naming rather than passing over.
