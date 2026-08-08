@@ -91,6 +91,12 @@ Both emit L0-plain. What they cover differs, and the
 stated rather than discovered: only the Rust one reaches its engine's own buffer
 and the auth phase, only the TypeScript one reports when handlers have drained.
 
+Neither reports **what the session sent**. A recording therefore holds the
+inbound half of a conversation and nothing the client replied. That was a limit
+of every engine until `whatsapp-rust` gained `Event::SentFrame`; it is now a
+decision waiting to be taken, since the contract's eight capabilities do not
+name it.
+
 Adapters live outside the main workspace: each drags in a whole engine, and the
 contract and codec stay dependency-free on purpose.
 

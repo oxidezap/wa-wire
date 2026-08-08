@@ -4,11 +4,12 @@
 > done and L1 now derives from both halves of L0-plain; steps 7–8 (Baileys,
 > hypermeow) remain. Two engines are measured agreeing on derived events
 > (rev 15), and both emit L0-plain — two of the four the definition of done
-> asks for, which is the largest gap left.
+> asks for, which is the largest gap left. Every recording holds one half of a
+> session: the inbound one. An engine can now report the other (rev 31).
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 30
+> **Last revised:** rev 31
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -125,25 +126,60 @@ Everything below was read in local checkouts on 2026-08-07.
 
 ### 3.1 `whatsapp-rust` already implements most of the proposed contract
 
+Line references are as of rev 31. This engine moves; where a claim depends on
+*where* something is rather than *that* it exists, the file is named so it can
+be re-checked rather than trusted.
+
 | Feature | Location | Note |
 | --- | --- | --- |
-| `Event::RawNode` | `src/client/node_io.rs:457` | dispatched **before any early return**, so IQ responses and `xmlstreamend` are included |
-| `RawNodeLease` | `src/client.rs:70-88` | atomic refcount; forwarding disables when the last lease drops |
-| Idle cost avoidance | `src/client/node_io.rs:325-331` | an `ack` skips even the `Arc::new` when nothing observes |
-| `send_node()` | `src/client/messaging.rs:109` | L0 out |
+| `Event::RawNode` | `src/client/node_io.rs:490` | dispatched **before any early return**, so IQ responses and `xmlstreamend` are included |
+| `Event::SentFrame` | `wacore/src/types/events.rs` | the outbound counterpart, added in upstream #1260 — see below |
+| `RawNodeLease` | `src/client.rs:93` | atomic refcount; forwarding disables when the last lease drops |
+| Idle cost avoidance | `src/client/node_io.rs` | an `ack` skips even the `Arc::new` when nothing observes |
+| `send_node()` | `src/client/messaging.rs:116` | L0 out |
 | `wait_for_node(NodeFilter)` | `src/client.rs` | raw request/response, zero-cost with no waiters |
-| Plugin host | `src/plugins/mod.rs:38-92` | capability bitflags (`CoreEvents`/`Tasks`/`Messaging`/`Iq`/`PluginEvents`), install/callback/drain timeouts, lease acquired from *declared interest* (`mod.rs:507-536`) |
-| ~60 typed event kinds | `wacore/src/types/events.rs:216-276` | close to a ready-made L1 vocabulary |
+| `StanzaInterceptor` | `src/client/interceptor.rs` | takeover, added in upstream #1239 — see below |
+| Plugin host | `src/plugins/mod.rs` | capability bitflags (`CoreEvents`/`Tasks`/`Messaging`/`Iq`/`PluginEvents`), install/callback/drain timeouts, lease acquired from *declared interest* |
+| ~60 typed event kinds | `wacore/src/types/events.rs:216` | close to a ready-made L1 vocabulary |
 | Runtime abstraction | `wacore/src/runtime.rs` | `Runtime` trait, `Send` dropped on wasm32 |
 
-**[VERIFIED] No takeover.** `Event::RawNode` is purely observational — the
-native pipeline runs afterwards regardless (`node_io.rs:510-553`). The
-`StanzaRouter` cannot be used to override a built-in handler either: it
-**panics** on duplicate tag registration (`src/handlers/router.rs:30-35`).
+**[VERIFIED, reversed in rev 31] Takeover exists.** Revisions 1-30 said it did
+not: `Event::RawNode` is purely observational, the native pipeline runs
+afterwards regardless, and `StanzaRouter::register` **panics** on duplicate tag
+registration (`src/handlers/router.rs:30-35`), so a built-in handler could not
+be replaced.
+
+The panic is still there. It stopped being the obstacle. `StanzaInterceptor`
+(upstream #1239) runs where dispatch would have and either steps aside or claims
+the stanza, skipping the built-in handler without going through the router.
+Claiming also turns the `<nack>` the client owed into an `<ack>`, since somebody
+did handle it.
+
+Five things are never offered: `success`, `failure`, `stream:error`, `ack`, and
+a server-initiated `<iq>` ping. See
+[Delivery modes](#delivery-modes-per-subscription-per-layer) for why that
+exclusion is structural rather than an oversight.
+
+**[VERIFIED, rev 31] The send side is observable.** `Event::SentFrame` carries
+one marshaled stanza exactly as it was handed to the Noise encryption, emitted
+once the transport accepted the write — the single point every send crosses.
+Frames that failed to encrypt or to write never appear, and neither do pre-Noise
+handshake frames.
+
+It is leased like `RawNode` (`acquire_sent_frame_forwarding()`), so nothing is
+cloned while nothing is listening. Before it, the only thing watching outbound
+traffic was a filtered one-shot waiter for a single expected stanza, and the
+paths that never build a `Node` at all — acks, delivery receipts, direct-encoded
+IQs — were invisible even to that.
+
+This matters here more than its size suggests: **it is the first engine-side
+support for recording both halves of a session**, which is what
+[RFC-010](#rfc-010--recording-container) would need in order to compare a
+candidate's *replies* rather than only what it was told.
 
 **[VERIFIED] Observation is not free and not neutral.** Enabling raw forwarding
 changes scheduling: `processes_inline()` returns `false` for `receipt` and `ack`
-once forwarding is on (`node_io.rs:565-582`), moving them off the read loop into
+once forwarding is on (`node_io.rs:648`), moving them off the read loop into
 spawned tasks. Observing therefore alters the execution path. This must be
 stated in the contract.
 
@@ -234,9 +270,13 @@ Convergence at the core layer has already started independently of this project.
 
 ### 3.4 `hypermeow` needs less patching than this document assumed
 
-**[VERIFIED, revised in rev 26]** The estimate below was written against
+**[VERIFIED, revised in rev 31]** The estimate below was written against
 upstream `whatsmeow`. The `hypermeow` fork has moved since, and most of what
 this section called for already exists there.
+
+`hypermeow`'s `main` has moved again since rev 26 — `events.UndecryptedMessage`
+now dispatches from the receive goroutine, and the privacy cache was fixed —
+but nothing there touches what this section claims.
 
 **What is already in the fork:**
 
@@ -252,8 +292,9 @@ this section called for already exists there.
   with `events.UndecryptedMessage` carrying the envelope verbatim.
 - L0 out is still `DangerousInternals().SendNode` (`internals.go:170`).
 
-**What was still missing, and is proposed in
-[polymorfa/hypermeow#5](https://github.com/polymorfa/hypermeow/pull/5):**
+**What is still missing on `main`, and is proposed in
+[polymorfa/hypermeow#5](https://github.com/polymorfa/hypermeow/pull/5) — open
+as of rev 31, so this is a branch and not yet a fact about the fork:**
 
 - **The frame bytes.** `RawNodeHandler` received the decoded node only, so an
   adapter had to re-encode. `handleFrame` had the decompressed buffer in scope
@@ -265,9 +306,22 @@ this section called for already exists there.
   unmarshal was being dropped behind a warning after the ratchet had already
   advanced.
 
-So the capability shape of a `hypermeow` adapter, with that PR, would be the
-widest of the three: tap, auth phase, takeover, zero-copy, plaintext and
-outbound. Without it, tap and takeover only, L0-wire and re-encoded.
+  Review found the same defect one layer deeper: `unpadMessage` runs inside
+  `decryptDM`/`decryptGroupMsg`, *after* the ratchet, so a padding failure lost
+  the plaintext too — the exact loss the hook exists to prevent. Both now return
+  the raw output alongside the unpad error. `RawNode` is also passed by value
+  rather than by pointer, which a benchmark showed cost one heap allocation per
+  stanza.
+
+So the capability shape of a `hypermeow` adapter, with that PR, would be tap,
+auth phase, takeover, zero-copy, plaintext and outbound sending. Without it, tap
+and takeover only, L0-wire and re-encoded.
+
+Rev 26 called that "the widest of the three". That is no longer true: it cannot
+observe what it sends, which `whatsapp-rust` gained in upstream #1260. The
+widest reading of the engines is now a moving target rather than a ranking, and
+[RFC-002](#rfc-002--capability-matrix) is where it is stated per capability
+instead of per engine.
 
 Still absent either way: no plugin system, no drain hook, and the node dispatch
 table stays private (`cli.nodeHandlers`).
@@ -281,8 +335,8 @@ authenticates with the same keys:
   (`connectionevents.go:48-51`); also treated as terminal in `request.go:35-37`.
   Doc: *"emitted when the client is disconnected by another client connecting
   with the same keys"* (`types/events/events.go:138`).
-- `whatsapp-rust`: `Event::StreamReplaced` (`wacore/src/types/events.rs:263, 1419`),
-  documented for `<conflict>`, 516 device removal, and 401 (`events.rs:1404`).
+- `whatsapp-rust`: `Event::StreamReplaced` (`wacore/src/types/events.rs:263, 943`),
+  documented for `<conflict>`, 516 device removal, and 401.
 - `Baileys`: `connectionReplaced = 440` (`src/Types/index.ts:31`).
 
 **This is the single most design-defining fact in the document.** Blue/green
@@ -297,9 +351,20 @@ request/response — without coordination. The contract this project needs to
 define is, to a large extent, **already written twice**. What is missing is the
 name, the neutral spec, and the conformance proof.
 
-But **no single engine has all of it**: `whatsapp-rust` has full L0 coverage and
-no takeover; `zapo` has takeover but does not cover the auth phase; `Baileys`
-has the broadest raw coverage and neither a plugin system nor takeover.
+But **no single engine has all of it** — though `whatsapp-rust` came close
+during rev 31. It now has takeover as well (`StanzaInterceptor`) and is the only
+engine that can observe what it *sends* (`Event::SentFrame`); what it still
+lacks is nothing this document has found. `zapo` has takeover but does not cover
+the auth phase and cannot observe outbound frames. `Baileys` has the broadest
+raw inbound coverage and neither a plugin system nor takeover. `hypermeow` with
+PR #5 covers inbound, auth phase, takeover, zero-copy and plaintexts, and has no
+plugin host, no drain hook and no outbound observation.
+
+**The conclusion this section drew still holds, for a changed reason.** It used
+to hold because every engine was missing something structural. It now holds
+because the engines are converging on the same surface at different speeds, and
+a contract pinned to whichever is furthest ahead this month is a contract that
+excludes the rest. Two of the three gaps closed in the two days before rev 31.
 
 ---
 
@@ -318,7 +383,7 @@ the core of [G6](#21-goals).
 ┌─────────────────────────────────────────────────────────────┐
 │ Layer 2 — ADAPTERS (one per engine)                         │
 │ zapo: plugin, no patch     whatsapp-rust: plugin, no patch  │
-│ Baileys: ws.on('frame')    hypermeow: ~20-line hook         │
+│ Baileys: ws.on('frame')    hypermeow: hook, no patch        │
 └─────────────────────────────────────────────────────────────┘
                             ▲ implements
 ┌─────────────────────────────────────────────────────────────┐
@@ -392,27 +457,45 @@ object in two projections.
 - **Payload:** `send`, `edit`, `react`, `revoke`, `presence`, group operations,
   media transfer.
 - **Status:** where 70% of the work and 100% of the semantic arguments live.
-- **[OQ-4](#oq-4-l2-in-v1)** — in or out of v1. Unresolved.
+- **[OQ-4](#oq-4--l2-in-v1--resolved-in-rev-6)** — in or out of v1. Unresolved.
 
 ### Delivery modes (per subscription, per layer)
 
 | Mode | Meaning | Engine support |
 | --- | --- | --- |
 | `tap` | observe; engine keeps processing natively | all four |
-| `takeover` | suppress native processing; engine becomes transport + acks | `zapo` only today |
+| `takeover` | suppress native processing; engine becomes transport + acks | `zapo`, `whatsapp-rust`, `hypermeow` |
 
 `takeover` is what makes an engine genuinely interchangeable — under takeover,
 engine-specific semantics stop mattering because the engine stops interpreting.
-It is also the mode that will require patching `whatsapp-rust`, whose
-`StanzaRouter` panics on duplicate registration
-(`src/handlers/router.rs:30-35`).
+
+**It no longer requires patching `whatsapp-rust`** (revised in rev 31). This
+document said it would, because `StanzaRouter::register` panics on a duplicate
+tag (`src/handlers/router.rs:30-35`) and there was no other way in. The panic is
+still there; it stopped being the obstacle. `StanzaInterceptor` (upstream #1239,
+`src/client/interceptor.rs`) runs where dispatch would have and either steps
+aside or claims the stanza, skipping the built-in handler without touching the
+router at all.
+
+Four tags are **never offered** to an interceptor — `success`, `failure`,
+`stream:error`, `ack` — and neither is a server-initiated `<iq>` ping. Each
+settles connection state: authentication, shutdown, reconnection, and the
+waiters a send blocks on. A claimed ping is a pong never sent, and the server
+drops the connection over it.
+
+That exclusion is the same line [RFC-003](#rfc-003--session-handoff-protocol)
+draws, arrived at independently, and it is why takeover here is **partial by
+construction rather than by omission**. An engine cannot hand over the stanzas
+that keep it connected and still be the transport. So the capability is not
+"takeover" but "takeover of everything except what the connection is made of",
+and D-103 records that the matrix must say which.
 
 ### Cost disclosure (normative)
 
 An adapter **must** declare when enabling a subscription changes engine
 behavior beyond adding a callback. Precedent:
 `whatsapp-rust`'s `processes_inline()` reroutes `receipt`/`ack` off the read
-loop once raw forwarding is enabled (`node_io.rs:565-582`). Silent scheduling
+loop once raw forwarding is enabled (`node_io.rs:648`). Silent scheduling
 changes under observation are a conformance violation.
 
 ---
@@ -425,25 +508,55 @@ Following the cultural precedent already set by `wa-store-migrate`'s loss
 reports and `whatspec`'s `dropsByReason`: **what cannot be done is declared
 explicitly, never silently degraded.**
 
-### Current state (verified 2026-08-07)
+### Current state (verified 2026-08-08)
 
-| Capability | whatsapp-rust | zapo | Baileys | whatsmeow / hypermeow |
+`hypermeow` is read at
+[polymorfa/hypermeow#5](https://github.com/polymorfa/hypermeow/pull/5), still
+open — its `main` has the raw-node hook (upstream #3) but neither the frame
+bytes nor the plaintexts. Rows marked *(PR #5)* are unavailable on `main`.
+
+| Capability | whatsapp-rust | zapo | Baileys | hypermeow |
 | --- | --- | --- | --- | --- |
-| L0 in, catch-all | ✅ `Event::RawNode` | ✅ stanza filter | ✅ `ws.on('frame')` | ❌ patch (~20 LOC) |
-| L0 in covers auth/stream phase | ✅ | ❌ `success`/`failure` protected | ✅ incl. `Uint8Array` frames | — |
-| L0 takeover | ❌ router panics | ✅ filter → `true` + auto-ack | ❌ observation only | ❌ |
-| L0 out | ✅ `send_node` | ✅ `sendNode` | ✅ `sendNode` | ⚠️ `DangerousInternals` |
+| L0 in, catch-all | ✅ `Event::RawNode` | ✅ stanza filter | ✅ `ws.on('frame')` | ✅ `RawNodeHandler` |
+| L0 in covers auth/stream phase | ✅ | ❌ `success`/`failure` protected | ✅ incl. `Uint8Array` frames | ✅ hook is the Noise frame callback |
+| L0 takeover | ⚠️ `StanzaInterceptor`, minus the five below | ✅ filter → `true` + auto-ack | ❌ observation only | ⚠️ `drop` return, whole-stanza |
+| L0 **out**, observed | ✅ `Event::SentFrame` (leased) | ❌ | ❌ | ❌ |
+| L0 out, sent | ✅ `send_node` | ✅ `sendNode` | ✅ `sendNode` | ⚠️ `DangerousInternals` |
 | Raw request/response | ✅ `wait_for_node` | ✅ `query` | ✅ `query` | ⚠️ `DangerousInternals` |
+| Per-`<enc>` plaintext | ✅ upstream #1240 | ❌ | ❌ | ✅ *(PR #5)* |
 | Plugin host | ✅ capability bitflags | ✅ tuple-typed | ❌ | ❌ |
 | Drain hook | ✅ `task_drain_timeout` | ✅ `registerDispose` | ❌ | ❌ |
-| Zero-copy frame bytes | ✅ **already retained** — `Yoke<NodeRef, BytesCart>` + `slice_bytes()` | one-line patch at `decoder.ts:344` | one-line patch at `noise-handler.ts:196` | small patch at `client.go:824` |
+| Zero-copy frame bytes | ✅ **already retained** — `Yoke<NodeRef, BytesCart>` + `backing_bytes()` | one-line patch at `decoder.ts:344` | one-line patch at `noise-handler.ts:196` | ✅ *(PR #5)* |
 | Runtime portability | native + wasm32 | node/bun/deno/browser | node (hard `ws`) | native |
+
+**Takeover is `⚠️` rather than `✅` where it is partial, and the partiality is
+the honest reading, not a shortfall.** `whatsapp-rust` never offers `success`,
+`failure`, `stream:error`, `ack`, or a server-initiated `<iq>` ping, because
+each settles connection state. An engine that handed those over would stop
+being able to stay connected. `zapo`'s filter can claim anything, which is
+broader and correspondingly easier to hang the connection with.
+
+**`L0 out, observed` is a distinct row from `L0 out, sent`** (D-102). Sending is
+what an adapter does; observing what left is what a *recording* needs, and until
+upstream #1260 no engine had it. A recording that captures only the inbound side
+holds one half of a conversation — see [RFC-010](#rfc-010--recording-container),
+which today records exactly that half.
+
+**The contract does not name this capability yet**, and the row is about engines
+rather than about us. `Capability::ALL` has eight members and none of them is
+"observe what was sent"; adding one is a contract change, which
+[RFC-009](#rfc-009--contract-versioning-and-provenance) says is deliberate and rare. This table
+records what an engine *could* provide, which is the input to that decision and
+not the decision.
 
 **Zero-copy was re-assessed in rev 7** (see RFC-008). The rev 1 entry — "no
 engine has it" — was wrong for `whatsapp-rust`: `OwnedNodeRef` is
-`Yoke<NodeRef<'static>, BytesCart>` (`wacore/binary/src/node.rs:902-903`), so
-the parsed node already borrows from a retained buffer and `slice_bytes()`
-already hands out zero-copy sub-views. In the other three the bytes sit in a
+`Yoke<NodeRef<'static>, BytesCart>` (`wacore/binary/src/node.rs:903`), so the
+parsed node already borrows from a retained buffer. Getting the *whole* buffer
+back needed one upstream method — `backing_bytes()`
+(`wacore/binary/src/node.rs:948`), added in rev 10 — because `slice_bytes()`
+takes a slice that already points inside the buffer and so cannot produce the
+buffer itself. In the other three the bytes sit in a
 local variable at the decode site. This is what made D-016 affordable enough to
 put in v1.
 
@@ -548,7 +661,7 @@ allocation.
 
 ### Isolation unit
 
-**[UNKNOWN]** — [OQ-1](#oq-1-isolation-unit). Sessions-as-tasks in one
+**[UNKNOWN]** — [OQ-1](#oq-1--isolation-unit--provisional-process-per-engine). Sessions-as-tasks in one
 multi-tenant process is cheap but one engine panic takes down neighbours;
 process-per-engine with N sessions inside bounds the blast radius at the cost of
 IPC. Current lean: **process per engine, N sessions inside**.
@@ -608,7 +721,7 @@ The conformance runner should reuse that machinery rather than duplicate it.
 ## RFC-006 — Store ownership
 
 **Status:** **ACCEPTED** (rev 7) — recommendation stands; the snapshot measurement refines Layer 3, it does not gate v1
-**Resolves:** [OQ-2](#oq-2--store-ownership)
+**Resolves:** [OQ-2](#oq-2--store-ownership--resolved-in-rev-7)
 **Blocks:** [RFC-003](#rfc-003--session-handoff-protocol) only — not Layers 1 or 2
 
 ### Why this is the expensive question
@@ -678,7 +791,7 @@ loss reporting.
 - Handoff: more expensive (read the store externally, translate, write) and
   lossy per the documented matrix.
 - Neutrality: maximum.
-- Limits: JS on the critical path ([OQ-3](#oq-3--wa-store-migrate-as-dependency-or-rust-port)),
+- Limits: JS on the critical path ([OQ-3](#oq-3--wa-store-migrate-port--decided-technically-open-on-governance)),
   and the translator must track each engine's internal schema, which changes
   without notice.
 
@@ -1002,14 +1115,16 @@ because the boundary never re-encodes.
 
 | Engine | Location | Variable | Patch |
 | --- | --- | --- | --- |
-| whatsapp-rust | `src/client/node_io.rs:307` | `OwnedNodeRef::new(buffer)` — `Yoke<NodeRef<'static>, BytesCart>` (`wacore/binary/src/node.rs:902-903`) | **none — already retained**; expose via existing `slice_bytes()` (`:929-931`) |
+| whatsapp-rust | `src/client/node_io.rs:337` | `OwnedNodeRef::new(buffer)` — `Yoke<NodeRef<'static>, BytesCart>` (`wacore/binary/src/node.rs:903`) | **none — already retained**; `backing_bytes()` (`:948`) returns the whole buffer as a refcount bump |
 | Baileys | `Utils/noise-handler.ts:196-198` | `const result = transport.decrypt(frame)` | pass `result` alongside `frame` into `onFrame` — one line |
 | whatsmeow | `client.go:823-830` | `decompressed` from `waBinary.Unpack(data)` | pass `decompressed` with the node into `handlerQueue` |
 | zapo | `transport/binary/decoder.ts:334-344` | `nodeBytes` in `decodeBinaryNodeStanza` | return/emit `nodeBytes` alongside the node |
 
 **This substantially lowers D-016's cost.** In `whatsapp-rust` zero-copy is
 already free — the parsed node borrows *from* the retained buffer, and
-`slice_bytes()` already returns zero-copy sub-views. In the other three the
+`backing_bytes()` returns the whole buffer without copying it. (Earlier
+revisions of this table named `slice_bytes()` here; that was corrected in rev
+10, and the table itself kept the stale name until rev 31.) In the other three the
 bytes sit in a local variable at the decode site; the patch is to propagate it.
 
 **Normative payload definition** (verified consistent across all four): the
@@ -1832,10 +1947,62 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-099 | What the generator cannot express is reported in three lists, not one | One list read as one backlog. Nine of its fifteen entries were assertions no pure derivation can ever make, and burying them next to six real gaps made the real ones look like the same kind of thing. Separated, one list is a design limit that will never shrink and the others are work | 30 |
 | D-100 | A response-to-request assertion is a design limit, not a gap | `derive` is a pure function of one stanza (D-010), so `from` matching the request's `to` is not something it can check — the request is not in scope and giving it one would end the purity that lets derivation run once, host-side. The assertions are emitted as text for the caller that does hold the request | 30 |
 | D-101 | Two spec fields differing only by category are both emitted, the second aliased | `verified_name` arrives as a child on one shape and an attribute on another. Dropping either would silently lose a reading; renaming the collision by its category keeps both and says which is which | 30 |
+| D-102 | Observing what an engine *sends* is a capability of its own, listed apart from being able to send | An adapter sends; a recording needs to know what left. Until upstream #1260 no engine could tell us, and folding the two into one row would have made the gap invisible — the matrix would have read `✅` for both while half of every session went unrecorded | 31 |
+| D-103 | Where takeover is partial, the matrix says which stanzas are excluded rather than scoring it | `whatsapp-rust` never offers the five tags that settle connection state, and that is the correct design — an engine that handed them over could not stay connected. A bare `✅` would claim more than is true and a bare `❌` would deny something real, so the cell carries the exclusion | 31 |
+| D-104 | An engine claim names its file, and only pins a line where the line is the claim | Three of this document's line references had drifted by rev 31 while every statement they supported was still true, which trains a reader to stop checking. The file is stable enough to find the thing; the line number was decoration that decayed | 31 |
 
 ---
 
 ## Changelog
+
+### rev 31 — 2026-08-08
+
+- **`whatsapp-rust` has takeover, and this document said it did not — while
+  also saying it did.** §3.1 and the RFC-002 matrix rested on
+  `StanzaRouter::register` panicking on a duplicate tag, so a built-in handler
+  could not be replaced. The panic is still there; upstream #1239 added
+  `StanzaInterceptor`, which runs where dispatch would have and never goes
+  through the router.
+  - **Step 9 of the implementation plan has recorded that since rev 13**
+    ("a pre-dispatch interceptor, merged upstream as #1239"), and the adapter's
+    own README documents the interceptor it rides. So this was not a fact the
+    document lacked — it was a fact recorded in one section and contradicted in
+    two others for eighteen revisions. A changelog that appends is good at
+    acquiring facts and bad at retiring them, and nothing here was checking the
+    older sections against the newer ones.
+  - Takeover there is partial, and the partiality is right: `success`,
+    `failure`, `stream:error`, `ack` and a server-initiated `<iq>` ping are
+    never offered, because each settles connection state. That is the same line
+    RFC-003 draws, reached independently (D-103).
+- **The send side became observable** (D-102). Upstream #1260 added
+  `Event::SentFrame` — one marshaled stanza as handed to the Noise encryption,
+  emitted at the single point every send crosses, leased so nothing is cloned
+  while nothing listens. The matrix gained a row for it, separate from `send_node`:
+  sending is what an adapter does, observing what left is what a recording needs.
+  - This is the first engine-side support for recording **both halves** of a
+    session. RFC-010 records the inbound half, which is all any engine could
+    give it until now. Nothing in the container changes yet — noted because the
+    constraint that shaped it has lifted, not because the format has.
+- **The capability matrix now reads `hypermeow` rather than `whatsmeow /
+  hypermeow`**, at PR #5 rather than at `main`, and says so. The fork's `main`
+  has the raw-node hook; the frame bytes and plaintexts are still a branch, and
+  a matrix that blurs the two overstates what an adapter could be built on today.
+- **Rev 26's "widest of the three" for `hypermeow` is retired.** It cannot
+  observe what it sends. The engines are converging on one surface at different
+  speeds, and a per-engine ranking goes stale faster than a per-capability
+  table; §3.6 now says that instead.
+- **Line references audited** (D-104). `events.rs:1419` → `943`,
+  `node_io.rs:307` → `337`, `node_io.rs:457` → `490`, `client.rs:70-88` → `93`,
+  `messaging.rs:109` → `116`. Every statement they supported was still true,
+  which is the problem: references that rot while their claims hold teach a
+  reader to stop checking them. Ranges that were decoration are now file-only.
+- **RFC-008's patch table still told the reader to use `slice_bytes()`** for the
+  whole buffer. Rev 10 already recorded that this cannot work — `slice_bytes`
+  takes a slice that already points inside the buffer — and added
+  `backing_bytes()` upstream. The correction had been written in the changelog
+  and never applied to the table, so the document contradicted itself for
+  twenty-one revisions.
+- **Every crate has a README.** Seven of ten had none.
 
 ### rev 30 — 2026-08-08
 

@@ -140,6 +140,21 @@ too, and a takeover consumer holds the stanza rather than waiting for payloads.
 Nothing in the engine says when incoming handlers have finished, so a consumer
 cannot know its queue is quiet. Absent rather than approximated.
 
+### What the engine can now do and this adapter does not
+
+`Event::SentFrame` ([#1260](https://github.com/oxidezap/whatsapp-rust/pull/1260))
+reports each marshaled stanza as it was handed to the Noise encryption — the
+outbound counterpart of `Event::RawNode`, leased the same way.
+
+This adapter does not surface it, because the contract has no capability for it:
+`l0.outbound` means *can send*, not *reports what was sent*, and the eight
+capabilities are a versioned surface rather than a list to append to. Naming a
+ninth is a contract decision, recorded as D-102 and not yet taken.
+
+Worth stating plainly rather than leaving as an absence: a recording made
+through this adapter contains what the session received and nothing it replied,
+and that is now a choice rather than a limit.
+
 ## Cost when nobody is listening
 
 `Event::RawNode` and `Event::DecryptedPayload` each sit behind a lease the
