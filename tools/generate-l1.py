@@ -525,6 +525,7 @@ def main() -> None:
         f"    schema_version: {rust_str(provenance['schemaVersion'])},",
         f"    generator_version: {rust_str(provenance['generatorVersion'])},",
         f"    incoming_digest: {rust_str(provenance['incomingDigest'])},",
+        f"    proto_digest: {rust_str(provenance['protoDigest'])},",
         "};",
         "",
     ]

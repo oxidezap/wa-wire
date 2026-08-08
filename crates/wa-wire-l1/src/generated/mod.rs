@@ -28,6 +28,7 @@ pub const PROVENANCE: Provenance<'static> = Provenance {
     schema_version: "2.0.0",
     generator_version: "0.1.0",
     incoming_digest: "sha256:feaaaa76d0925423d24405ee08e9c140e30729d853c044bf4e1d8c4da4900cc6",
+    proto_digest: "sha256:021d53059e7b35d8553c97c09567da8d6aba7278c7f2510242eab686bff3647a",
 };
 
 /// Wire values for `ALLNONE`.

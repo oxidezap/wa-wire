@@ -17,6 +17,13 @@ pub struct Provenance<'a> {
     pub generator_version: &'a str,
     /// SHA-256 of the `incoming` domain this build consumed.
     pub incoming_digest: &'a str,
+    /// SHA-256 of the `WAProto.proto` the payload derivation consumed.
+    ///
+    /// A second digest because the two halves of L1 come from two domains and
+    /// can move apart: WhatsApp can renumber a protobuf field without touching
+    /// how a stanza parses, and a recording has to say which build of each it
+    /// derived from.
+    pub proto_digest: &'a str,
 }
 
 impl Provenance<'_> {
@@ -26,7 +33,7 @@ impl Provenance<'_> {
     /// agreeing on it agree regardless of how their version strings read.
     #[must_use]
     pub fn matches(&self, other: &Provenance<'_>) -> bool {
-        self.incoming_digest == other.incoming_digest
+        self.incoming_digest == other.incoming_digest && self.proto_digest == other.proto_digest
     }
 
     /// Whether every field was recorded.
@@ -36,6 +43,7 @@ impl Provenance<'_> {
             && !self.schema_version.is_empty()
             && !self.generator_version.is_empty()
             && !self.incoming_digest.is_empty()
+            && !self.proto_digest.is_empty()
     }
 
     /// Convert to the contract's provenance, which carries the three fields
@@ -74,6 +82,7 @@ mod tests {
         schema_version: "2.0.0",
         generator_version: "0.1.0",
         incoming_digest: "sha256:aaaa",
+        proto_digest: "sha256:aaaa",
     };
 
     #[test]
@@ -89,6 +98,7 @@ mod tests {
 
         let other = Provenance {
             incoming_digest: "sha256:bbbb",
+            proto_digest: "sha256:bbbb",
             ..A
         };
         assert!(!A.matches(&other));
@@ -114,9 +124,29 @@ mod tests {
                 incoming_digest: "",
                 ..A
             },
+            Provenance {
+                proto_digest: "",
+                ..A
+            },
         ] {
             assert!(!blanked.is_complete());
         }
+    }
+
+    #[test]
+    fn the_two_domains_are_compared_independently() {
+        // WhatsApp can renumber a protobuf field without touching how a stanza
+        // parses, so two builds agreeing on one domain and not the other are
+        // not the same spec.
+        assert!(!A.matches(&Provenance {
+            proto_digest: "sha256:different",
+            ..A
+        }));
+        assert!(!A.matches(&Provenance {
+            incoming_digest: "sha256:different",
+            ..A
+        }));
+        assert!(A.matches(&A));
     }
 
     #[test]
@@ -141,6 +171,7 @@ mod tests {
             A,
             Provenance {
                 incoming_digest: "x",
+                proto_digest: "x",
                 ..A
             }
         );

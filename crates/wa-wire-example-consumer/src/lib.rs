@@ -45,6 +45,7 @@ use alloc::vec::Vec;
 
 use wa_wire_codec::{Parser, TokenTable};
 use wa_wire_contract::{Capability, CapabilitySet, Direction, EnvelopeRef};
+use wa_wire_l1::content::{MessageKind, derive_content};
 use wa_wire_l1::{Event, derive};
 
 /// What this consumer needs of whatever engine it is pointed at.
@@ -98,6 +99,16 @@ pub struct Tally {
     /// Counted separately because a consumer that cares which way a stanza was
     /// going should be comparable on that too.
     pub outbound: usize,
+
+    /// Plaintexts read, by the kind of message they turned out to be.
+    ///
+    /// The half of L0-plain that used to cross and go unread: the frame says a
+    /// `<message>` arrived, and only the payload says what it was.
+    pub messages_by_kind: BTreeMap<MessageKind, usize>,
+    /// Every message that carried text, in arrival order.
+    pub texts: Vec<String>,
+    /// Payloads that did not read as a message, by reason.
+    pub unreadable_payloads: usize,
 }
 
 impl Tally {
@@ -121,6 +132,24 @@ impl Tally {
         self.order.push(node.tag().to_string());
         if let Some(id) = node.attr("id").and_then(wa_wire_codec::Value::as_str) {
             self.ids.push(id.to_string());
+        }
+
+        // The plaintexts are the other half of L0-plain, and reading them is
+        // a separate derivation with a separate oracle: the stanza comes from
+        // whatspec, the payload from `waE2E.proto`.
+        for entry in decoded.entries().filter(|entry| entry.status.is_ok()) {
+            match derive_content(entry.payload) {
+                Ok(content) => {
+                    let seen = self.messages_by_kind.entry(content.kind).or_insert(0);
+                    *seen = seen.saturating_add(1);
+                    if let Some(text) = content.text {
+                        self.texts.push(text.to_string());
+                    }
+                }
+                Err(_) => {
+                    self.unreadable_payloads = self.unreadable_payloads.saturating_add(1);
+                }
+            }
         }
 
         match derive(&node) {
@@ -192,6 +221,119 @@ mod tests {
 
         assert_eq!(tally.inbound, 1);
         assert_eq!(tally.outbound, 1);
+    }
+
+    #[test]
+    fn a_stanza_that_derives_is_counted_by_tag_and_recorded_in_order() {
+        // The path the cross-engine test exercises, asserted here too: this
+        // crate's own coverage is not measured from the adapter workspace, so
+        // without this the busiest function in it would look untested.
+        use wa_wire_l1::testing::{FIXTURE_TABLE, Fixture};
+
+        let first = Fixture::node("receipt")
+            .attr("id", "ABCD1234")
+            .jid_attr("from", "5511999998888")
+            .attr("type", "read")
+            .build();
+        let second = Fixture::node("receipt")
+            .attr("id", "EFGH5678")
+            .jid_attr("from", "5511999998888")
+            .attr("type", "read")
+            .build();
+
+        let mut tally = Tally::default();
+        tally.accept(&envelope(first.bytes(), Flags::inbound()), FIXTURE_TABLE);
+        tally.accept(&envelope(second.bytes(), Flags::inbound()), FIXTURE_TABLE);
+
+        assert_eq!(tally.stanzas, 2);
+        assert_eq!(tally.derived, 2);
+        assert_eq!(tally.inbound, 2);
+        assert_eq!(tally.by_tag.get("receipt"), Some(&2));
+        assert_eq!(tally.order, ["receipt", "receipt"]);
+        assert_eq!(tally.ids, ["ABCD1234", "EFGH5678"]);
+        assert!(tally.skipped.is_empty());
+    }
+
+    #[test]
+    fn a_stanza_nobody_models_is_counted_apart_from_one_that_derives() {
+        use wa_wire_l1::testing::{FIXTURE_TABLE, Fixture};
+
+        let unmodelled = Fixture::node("presence").attr("type", "available").build();
+        let mut tally = Tally::default();
+        tally.accept(
+            &envelope(unmodelled.bytes(), Flags::inbound()),
+            FIXTURE_TABLE,
+        );
+
+        assert_eq!(tally.stanzas, 1);
+        assert_eq!(tally.derived, 0);
+        assert_eq!(tally.skipped.get(&Skipped::NotModelled), Some(&1));
+        assert_eq!(
+            tally.order,
+            ["presence"],
+            "a stanza with no event still happened, and the order says so"
+        );
+        assert!(tally.ids.is_empty(), "it carried no id");
+    }
+
+    #[test]
+    fn a_plaintext_that_crosses_the_boundary_is_read_as_a_message() {
+        // The point of L0-plain, end to end: the frame says a `<message>`
+        // arrived and only the payload says what it was. Before this the
+        // payload crossed and nothing read it.
+        use wa_wire_adapter::Plaintext;
+        use wa_wire_contract::NodePath;
+        use wa_wire_l1::testing::{FIXTURE_TABLE, Fixture};
+
+        let fixture = Fixture::node("message")
+            .attr("id", "ABCD1234")
+            .jid_attr("from", "5511999998888")
+            .child(Fixture::node("enc").attr("type", "msg"))
+            .build();
+        // waE2E.Message { conversation: "hello there" }
+        let payload = b"\x0a\x0bhello there";
+        let path = [0u8, 0];
+        let plaintexts = [Plaintext::ok(NodePath::from_le_bytes(&path), payload)];
+        let envelope = wa_wire_adapter::RawStanza::inbound(fixture.bytes())
+            .with_plaintexts(&plaintexts)
+            .encode_to_vec()
+            .expect("encodes");
+
+        let mut tally = Tally::default();
+        tally.accept(&envelope, FIXTURE_TABLE);
+
+        assert_eq!(
+            tally.messages_by_kind.get(&MessageKind::Conversation),
+            Some(&1)
+        );
+        assert_eq!(tally.texts, ["hello there"]);
+        assert_eq!(tally.unreadable_payloads, 0);
+    }
+
+    #[test]
+    fn a_payload_the_reader_cannot_make_sense_of_is_counted_rather_than_dropped() {
+        use wa_wire_adapter::Plaintext;
+        use wa_wire_contract::NodePath;
+        use wa_wire_l1::testing::{FIXTURE_TABLE, Fixture};
+
+        let fixture = Fixture::node("message").attr("id", "A").build();
+        // Declares 127 bytes and supplies none.
+        let path = [0u8, 0];
+        let plaintexts = [Plaintext::ok(
+            NodePath::from_le_bytes(&path),
+            b"\x0a\x7f\x01",
+        )];
+        let envelope = wa_wire_adapter::RawStanza::inbound(fixture.bytes())
+            .with_plaintexts(&plaintexts)
+            .encode_to_vec()
+            .expect("encodes");
+
+        let mut tally = Tally::default();
+        tally.accept(&envelope, FIXTURE_TABLE);
+
+        assert_eq!(tally.unreadable_payloads, 1);
+        assert!(tally.messages_by_kind.is_empty());
+        assert!(tally.texts.is_empty());
     }
 
     #[test]

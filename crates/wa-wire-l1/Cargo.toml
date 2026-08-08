@@ -16,9 +16,14 @@ default = []
 testing = []
 
 [dependencies]
-wa-wire-codec = { path = "../wa-wire-codec", default-features = false }
+wa-wire-codec = { path = "../wa-wire-codec", version = "0.1.0", default-features = false }
+wa-wire-proto = { path = "../wa-wire-proto", version = "0.1.0" }
 
 [dev-dependencies]
+# Points at this crate, to turn on `testing` for its own tests. Left without a
+# version on purpose: a version requirement would send cargo to the registry
+# for the crate it is in the middle of packaging. Dev-dependencies are dropped
+# from the published manifest, so nothing needs one.
 wa-wire-l1 = { path = ".", features = ["testing"] }
 
 [lints]

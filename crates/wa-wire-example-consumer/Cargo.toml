@@ -2,6 +2,9 @@
 name = "wa-wire-example-consumer"
 version = "0.1.0"
 description = "A wa-wire consumer, written once and run against any engine"
+# Nobody depends on an example. It exists so `cargo tree` can show what a
+# consumer does *not* link, and that argument is made in this repository.
+publish = false
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -12,12 +15,16 @@ authors.workspace = true
 # transport. A consumer talks to the boundary and nothing else, and `cargo tree`
 # is the proof.
 [dependencies]
-wa-wire-codec = { path = "../wa-wire-codec" }
-wa-wire-contract = { path = "../wa-wire-contract" }
-wa-wire-l1 = { path = "../wa-wire-l1" }
+wa-wire-codec = { path = "../wa-wire-codec", version = "0.1.0" }
+wa-wire-contract = { path = "../wa-wire-contract", version = "0.1.0" }
+wa-wire-l1 = { path = "../wa-wire-l1", version = "0.1.0" }
 
 [dev-dependencies]
-wa-wire-codec = { path = "../wa-wire-codec", features = ["bundled-tokens"] }
+wa-wire-codec = { path = "../wa-wire-codec", version = "0.1.0", features = ["bundled-tokens"] }
+# Stanza fixtures, so the derived path is exercised here rather than only from
+# the adapter workspace, where this crate's own coverage is not measured.
+wa-wire-l1 = { path = "../wa-wire-l1", version = "0.1.0", features = ["testing"] }
+wa-wire-adapter = { path = "../wa-wire-adapter", version = "0.1.0" }
 
 [lints]
 workspace = true

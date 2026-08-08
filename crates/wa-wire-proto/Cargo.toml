@@ -1,0 +1,14 @@
+[package]
+name = "wa-wire-proto"
+version = "0.1.0"
+description = "Zero-copy reader for the protobuf wire format, over payloads the boundary carries"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
