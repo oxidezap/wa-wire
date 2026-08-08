@@ -51,6 +51,7 @@ impl ComparisonProfile {
             | Divergence::Plaintext { .. }
             | Divergence::MalformedEnvelope { .. }
             | Divergence::UnparsableFrame { .. }
+            | Divergence::UndeclaredDirection { .. }
             | Divergence::Derivation { .. }
             | Divergence::DerivationOutcome { .. } => true,
 
@@ -61,6 +62,17 @@ impl ComparisonProfile {
             // Coverage lost by the candidate is a regression. Coverage gained
             // is an improvement, and an improvement must not fail a gate.
             Divergence::PlaintextCoverage { only_left, .. } => {
+                matches!(self, Self::Regression) && *only_left > 0
+            }
+
+            // The same rule, one layer out. Two adapters differing on whether
+            // they can see the outbound half were built against different
+            // engines; the same adapter that stopped seeing it has regressed.
+            //
+            // Never a fault under `Interop`: an adapter reports what its engine
+            // exposes, and failing the comparison for that would blame an
+            // engine for its observer.
+            Divergence::DirectionCoverage { only_left, .. } => {
                 matches!(self, Self::Regression) && *only_left > 0
             }
 

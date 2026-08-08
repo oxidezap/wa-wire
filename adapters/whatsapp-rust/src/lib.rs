@@ -276,6 +276,15 @@ where
             // there is nothing to wait for and holding it back would only
             // delay it.
             //
+            // Interleaved with the inbound half in whatever order the two
+            // tasks reach the sink, and deliberately not ordered against it.
+            // `SentFrame` is dispatched from the send path and `RawNode` from
+            // the read path; there is no ordering between them to preserve, so
+            // imposing one here would invent a sequence the engine does not
+            // have. What consumes this compares each direction as its own
+            // sequence for that reason — within a direction the order is the
+            // engine's own and is stable, and across them nothing is claimed.
+            //
             // `SentFrame` carries the *packed* buffer — the format byte the
             // binary protocol writes is still on the front, where `RawNode`
             // hands over a buffer `unpack` has already stripped. Forwarding it

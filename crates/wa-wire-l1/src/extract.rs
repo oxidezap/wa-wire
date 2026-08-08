@@ -199,6 +199,22 @@ pub fn attr_device_jid<'a>(node: &NodeRef<'a>, key: &'static str) -> Result<Jid<
     Ok(jid)
 }
 
+/// Walk to a descendant by the path a field says it lives at.
+///
+/// whatspec records a `sourcePath` for fields that are not on the node the
+/// shape names: an ack's paid-conversation data hangs off `<biz>`, and its
+/// pricing off `<biz><pricing>`. Reading those off the root finds nothing —
+/// and finds it silently, since the fixture that tested it was built the same
+/// wrong way.
+#[must_use]
+pub fn maybe_child_at<'a>(node: &NodeRef<'a>, path: &[&'static str]) -> Option<NodeRef<'a>> {
+    let mut current = *node;
+    for tag in path {
+        current = maybe_child(&current, tag)?;
+    }
+    Some(current)
+}
+
 /// A JID attribute that must name a group.
 ///
 /// Two outbound spam reports differ only here — one reports a group, the other
@@ -235,11 +251,53 @@ pub fn attr_user_jid<'a>(node: &NodeRef<'a>, key: &'static str) -> Result<Jid<'a
 /// is bytes that happen not to be text, and reading one as text would render
 /// ciphertext as mojibake rather than failing.
 pub fn content_string<'a>(node: &NodeRef<'a>) -> Result<Value<'a>, DeriveError> {
-    node.content()
+    let value = node
+        .content()
         .as_value()
         .ok_or(DeriveError::MissingContent {
             field: Field::Bytes,
-        })
+        })?;
+    // A raw body is bytes that may not be text. Tokens, packed runs and JIDs
+    // are text by construction and stay in parts; only the byte form can carry
+    // something that is not, and letting it through as a string means it
+    // renders later with replacement characters — a body silently altered
+    // rather than a body reported as unreadable.
+    if let Some(bytes) = value.as_bytes()
+        && core::str::from_utf8(bytes).is_err()
+    {
+        return Err(DeriveError::MissingContent {
+            field: Field::Bytes,
+        });
+    }
+    Ok(value)
+}
+
+/// A node's raw byte body, when it has one.
+///
+/// An optional `sameNode` mixin whose child reads the body makes the body
+/// optional: the mixin says the whole group may be absent, and a node without
+/// one is not a node with an empty one.
+#[must_use]
+pub fn maybe_content_bytes<'a>(node: &NodeRef<'a>) -> Option<&'a [u8]> {
+    node.content().as_bytes()
+}
+
+/// A node's body read as text, when it has one.
+#[must_use]
+pub fn maybe_content_string<'a>(node: &NodeRef<'a>) -> Option<Value<'a>> {
+    content_string(node).ok()
+}
+
+/// A node's body read as an unsigned integer, when it has one.
+///
+/// # Errors
+///
+/// When a body is present and too wide to be one.
+pub fn maybe_content_uint(node: &NodeRef<'_>) -> Result<Option<u64>, DeriveError> {
+    match maybe_content_bytes(node) {
+        Some(_) => content_uint(node).map(Some),
+        None => Ok(None),
+    }
 }
 
 /// A node's body read as an unsigned integer.

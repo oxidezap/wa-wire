@@ -9,8 +9,8 @@
 
 use wa_wire_l1::testing::{Fixture, parse};
 use wa_wire_l1::{
-    DeriveError, Event, MERGED_OUTGOING, OUTGOING_TAGS, UNMODELLED_OUTGOING, UNREACHABLE_OUTGOING,
-    derive, derive_outgoing,
+    DeriveError, MERGED_OUTGOING, OUTGOING_TAGS, UNMODELLED_OUTGOING, UNREACHABLE_OUTGOING, derive,
+    derive_outgoing,
 };
 
 /// The same stanza reads differently depending on which way it travelled.
@@ -33,10 +33,10 @@ fn one_stanza_two_readings_and_the_direction_decides() {
 
     assert_eq!(inbound.tag(), "ack");
     assert_eq!(outbound.tag(), "ack");
-    // Different types entirely: there is no comparison between them, and that
-    // is the point. Feeding an outbound stanza to `derive` yields an event
-    // named for what the server would have meant by it.
-    assert!(matches!(inbound, Event::Ack(_)));
+    // Two derivations, two types, and no comparison between them — which is
+    // the point. Both answered, and only one of them is right about a stanza
+    // that left. Which inbound shape it lands on moves with the spec and is
+    // not what this asserts; that it lands on one at all is the hazard.
 }
 
 /// A namespace and type select the `<iq>` a client built.

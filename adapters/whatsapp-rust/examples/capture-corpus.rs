@@ -148,6 +148,14 @@ impl FrameWriter {
 
 impl StanzaSink for FrameWriter {
     fn accept(&mut self, stanza: RawStanza<'_>) {
+        // Inbound only. These files are replayed as traffic the server sent,
+        // and the adapter now also reports what the client sent — writing both
+        // to one directory would feed a replay stanzas it never received, as
+        // though the server had said them.
+        if stanza.direction != wa_wire_adapter::Direction::Inbound {
+            return;
+        }
+
         // The tag is only for the filename, so a frame that will not parse is
         // still worth keeping — an engine disagreeing about it is a finding.
         let tag = wa_wire_codec::Parser::new(wa_wire_codec::tokens::TABLE)

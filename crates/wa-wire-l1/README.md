@@ -134,6 +134,23 @@ them as "a JID" makes one shape out of two and lets either claim the other's
 stanzas, so `attr_user_jid`, `attr_device_jid` and `attr_group_jid` are
 distinct. `g.us` is entry 45 of the token dictionary, not this crate's guess.
 
+### A field is read from the node it lives on
+
+whatspec records a `sourcePath` when a field hangs off a descendant rather than
+the node the shape names: an ack's paid-conversation data is on `<biz>`, its
+pricing on `<biz><pricing>`. Reading those off the root finds nothing, and
+finds it silently — the fixture was built the same wrong way, so the pair
+agreed with each other and with no stanza a server sends.
+
+That is the third defect this pairing has hidden, after `wireName` and the
+enum whatspec declared with no variants. A generator and its generated tests
+walk one spec by one rule; neither can catch the rule being wrong. The tests
+for all three are hand-written.
+
+An optional `sameNode` mixin's children come out optional, too — the mixin says
+the whole group may be absent — and a mixin group whose fields all hang off one
+child is absent when that child is, rather than deriving empty on every stanza.
+
 ### Builders that describe one stanza
 
 whatspec records a module per builder, and two modules can build the same

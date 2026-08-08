@@ -436,14 +436,91 @@ fn disagreeing_about_direction_is_a_fault() {
         Tables::shared(FIXTURE_TABLE),
     );
 
+    // Comparison is per direction now, so the two never meet at an index and
+    // there is nothing to call a direction mismatch. What is wrong here is
+    // narrower and worse: `engine-b` recorded a stanza travelling a way its own
+    // manifest does not claim to observe, so nothing downstream can tell
+    // whether the record is real.
     assert!(!report.agrees());
     assert_eq!(
         *report.faults().next().expect("a fault"),
-        Divergence::Direction {
-            index: 0,
-            left: Direction::Inbound,
-            right: Direction::Outbound,
+        Divergence::UndeclaredDirection {
+            adapter: "engine-b",
+            count: 1,
+            direction: Direction::Outbound,
         }
+    );
+}
+
+/// An adapter that declares the outbound half may record it, and a difference
+/// there is the engines' rather than the observers'.
+#[test]
+fn two_observers_of_the_outbound_half_are_compared_on_it() {
+    let watching = AdapterInfo::new(
+        "watching",
+        "0.1.0",
+        "1.0",
+        CapabilitySet::NONE
+            .with(Capability::L0InboundTap)
+            .with(Capability::L0OutboundObserved),
+    );
+    let a = outbound_envelope(receipt("AAAA"));
+    let b = outbound_envelope(receipt("BBBB"));
+    let (la, rb): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
+
+    let report = compare(
+        &Recording::new(watching, &la),
+        &Recording::new(watching, &rb),
+        Tables::shared(FIXTURE_TABLE),
+    );
+    assert!(
+        report
+            .divergences()
+            .any(|d| matches!(d, Divergence::Frame { .. })),
+        "two different sends are a difference, not coverage"
+    );
+    assert!(
+        !report
+            .divergences()
+            .any(|d| matches!(d, Divergence::DirectionCoverage { .. })),
+        "both sides watch the outbound half, so nothing is uncovered"
+    );
+}
+
+/// One observer of the outbound half and one without is coverage, not a fault.
+///
+/// Only one engine can report what it sent. Comparing a recording that has the
+/// outbound half against one that cannot have it would otherwise read as the
+/// second engine losing stanzas.
+#[test]
+fn an_observer_that_cannot_see_the_outbound_half_is_not_at_fault() {
+    let watching = AdapterInfo::new(
+        "watching",
+        "0.1.0",
+        "1.0",
+        CapabilitySet::NONE
+            .with(Capability::L0InboundTap)
+            .with(Capability::L0OutboundObserved),
+    );
+    let inbound = envelope(receipt("AAAA"));
+    let outbound = outbound_envelope(receipt("BBBB"));
+    let (la, rb): ([&[u8]; 2], [&[u8]; 1]) = ([&inbound, &outbound], [&inbound]);
+
+    let report = compare(
+        &Recording::new(watching, &la),
+        &recording("blind", &rb),
+        Tables::shared(FIXTURE_TABLE),
+    );
+    assert!(
+        report
+            .divergences()
+            .any(|d| matches!(d, Divergence::DirectionCoverage { .. })),
+        "the difference is what each could see"
+    );
+    assert!(
+        report.evaluate(ComparisonProfile::Interop) == Verdict::Pass,
+        "an observer's reach is not the engine's fault: {:?}",
+        report.divergences().collect::<Vec<_>>()
     );
 }
 

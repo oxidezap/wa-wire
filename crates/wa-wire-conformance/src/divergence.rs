@@ -162,6 +162,34 @@ pub enum Divergence<'a> {
         /// Nodes only the second has.
         only_right: usize,
     },
+    /// A recording carries stanzas travelling a way its manifest does not
+    /// claim to observe.
+    ///
+    /// Inconsistent with itself rather than with the other recording, so it is
+    /// a fault under every profile: nothing downstream can tell whether the
+    /// records are real or an artefact of however the file was assembled.
+    UndeclaredDirection {
+        /// Which adapter said one thing and recorded another.
+        adapter: &'a str,
+        /// How many such stanzas it carries.
+        count: usize,
+        /// The direction it did not claim.
+        direction: wa_wire_contract::Direction,
+    },
+    /// One recording observes a direction the other does not.
+    ///
+    /// Not a fault in the engine: an adapter can only report what its engine
+    /// exposes, and until one of them grew an outbound observation point every
+    /// recording held the inbound half of a session. Counting the difference
+    /// as missing stanzas would blame an engine for its observer.
+    DirectionCoverage {
+        /// Stanzas only the first recording observed travelling this way.
+        only_left: usize,
+        /// Stanzas only the second observed.
+        only_right: usize,
+        /// The direction neither could be compared on.
+        direction: wa_wire_contract::Direction,
+    },
     /// The two engines derived different events from the same stanza.
     Derivation {
         /// Which stanza.
@@ -203,7 +231,9 @@ impl Divergence<'_> {
             | Self::Plaintext { .. }
             | Self::FrameOrigin { .. }
             | Self::PlaintextStatus { .. }
-            | Self::PlaintextCoverage { .. } => Layer::L0,
+            | Self::PlaintextCoverage { .. }
+            | Self::DirectionCoverage { .. }
+            | Self::UndeclaredDirection { .. } => Layer::L0,
             Self::Derivation { .. } | Self::DerivationOutcome { .. } | Self::Provenance { .. } => {
                 Layer::L1
             }
@@ -224,13 +254,48 @@ impl Divergence<'_> {
             | Self::PlaintextCoverage { index, .. }
             | Self::Derivation { index, .. }
             | Self::DerivationOutcome { index, .. } => Some(*index),
-            Self::Length { .. } | Self::Provenance { .. } => None,
+            Self::Length { .. }
+            | Self::Provenance { .. }
+            | Self::DirectionCoverage { .. }
+            | Self::UndeclaredDirection { .. } => None,
+        }
+    }
+}
+
+impl Divergence<'_> {
+    /// The two coverage findings, split out so the main `Display` stays under
+    /// the line budget. Both say the same kind of thing — what one side could
+    /// see and the other could not — and neither is about a stanza.
+    fn fmt_coverage(&self, f: &mut fmt::Formatter<'_>) -> Option<fmt::Result> {
+        match self {
+            Self::UndeclaredDirection {
+                adapter,
+                count,
+                direction,
+            } => Some(write!(
+                f,
+                "[L0] {adapter} recorded {count} {direction} stanza(s) without declaring it \
+                 observes them"
+            )),
+            Self::DirectionCoverage {
+                only_left,
+                only_right,
+                direction,
+            } => Some(write!(
+                f,
+                "[L0] {direction} coverage differs: {only_left} stanza(s) observed only by one \
+                 side, {only_right} only by the other — the observer's reach, not the engine's"
+            )),
+            _ => None,
         }
     }
 }
 
 impl fmt::Display for Divergence<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(done) = self.fmt_coverage(f) {
+            return done;
+        }
         match self {
             Self::Length { left, right } => write!(
                 f,
@@ -296,6 +361,8 @@ impl fmt::Display for Divergence<'_> {
                 "[L0] stanza {index}: plaintext coverage differs ({only_left} node(s) only on \
                  one side, {only_right} only on the other) — not a fault on its own"
             ),
+            // Handled by `fmt_coverage` above.
+            Self::UndeclaredDirection { .. } | Self::DirectionCoverage { .. } => Ok(()),
             Self::Derivation { index, tag } => match tag {
                 Some(tag) => write!(f, "[L1] stanza {index} <{tag}>: derived events differ"),
                 None => write!(f, "[L1] stanza {index}: derived events differ"),

@@ -39,6 +39,9 @@ SCALAR_METHODS = {
     "contentBytes": ("&'a [u8]", "extract::content_bytes(node)?"),
     "contentString": ("Value<'a>", "extract::content_string(node)?"),
     "contentUint": ("u64", "extract::content_uint(node)?"),
+    "maybeContentBytes": ("Option<&'a [u8]>", "extract::maybe_content_bytes(node)"),
+    "maybeContentString": ("Option<Value<'a>>", "extract::maybe_content_string(node)"),
+    "maybeContentUint": ("Option<u64>", "extract::maybe_content_uint(node)?"),
 }
 
 # A JID method whose field is optional degrades to the maybe_ variant.
@@ -104,6 +107,10 @@ OPTIONAL_FORM = {
     "attrEnum": "maybeAttrEnum",
     "attrEnumValues": "maybeAttrEnum",
     "child": "maybeChild",
+    # A body is as optional as the mixin that reads it.
+    "contentBytes": "maybeContentBytes",
+    "contentString": "maybeContentString",
+    "contentUint": "maybeContentUint",
 }
 
 
@@ -159,6 +166,38 @@ def ordered_variants(spec_variants: list[dict]) -> list[dict]:
             -len(v["fields"]),
         ),
     )
+
+
+def evidence_path(variant: dict) -> tuple:
+    """The node a variant needs present before it can be the answer.
+
+    A variant whose fields all hang off one descendant is *about* that
+    descendant. `AckPaidGroupConversation` has a single optional field under
+    `<biz><pricing>`, so its `derive` succeeds on any node at all — and being
+    the last alternative tried, it turned every ack into a paid conversation
+    with no data in it.
+
+    The common prefix, so a variant reading `biz` and `biz/pricing` is
+    evidenced by `<biz>`. Empty when any field sits on the node itself, since
+    then the node is its own evidence.
+    """
+    paths = []
+    for field in variant["fields"]:
+        path = tuple(field.get("sourcePath") or ())
+        if not path:
+            return ()
+        paths.append(path)
+    if not paths:
+        return ()
+    prefix = paths[0]
+    for path in paths[1:]:
+        common = []
+        for a, b in zip(prefix, path):
+            if a != b:
+                break
+            common.append(a)
+        prefix = tuple(common)
+    return prefix
 
 
 def guards_of(variant: dict) -> list[tuple[str, str]]:
@@ -234,6 +273,37 @@ def semantic_compare(name: str, ty: str) -> str:
     return f"self.{name} == other.{name}"
 
 
+def path_binding(path: tuple) -> str:
+    """The local name a `sourcePath` is bound to inside `derive`."""
+    return "at_" + "_".join(snake(part) for part in path)
+
+
+def through_path(call: str, source: str, path: tuple, required: bool) -> str:
+    """Rewrite a read so it happens on the node the field lives on.
+
+    The primitives take the node as their first argument, so the whole change
+    is which node that is — and what an absent one means. Required: the
+    absence is this field's error. Optional: the absence is `None`, since a
+    field that may be missing may equally be missing along with its parent.
+    """
+    if not path:
+        return call
+    tag = rust_str(path[-1])
+    if required:
+        return call.replace(
+            "(node,", f"(&{source}.ok_or(DeriveError::MissingChild {{ tag: {tag} }})?,", 1
+        ).replace("(node)", f"(&{source}.ok_or(DeriveError::MissingChild {{ tag: {tag} }})?)", 1)
+    inner = call.replace("(node,", "(&at,", 1).replace("(node)", "(&at)", 1)
+    # The `?` belongs outside the match, not inside an arm that yields `None`.
+    if inner.endswith("?,"):
+        inner = inner[:-2]
+        return f"match {source} {{ Some(at) => {inner}?, None => None }},"
+    if inner.endswith("?"):
+        inner = inner[:-1]
+        return f"match {source} {{ Some(at) => {inner}?, None => None }}"
+    return f"match {source} {{ Some(at) => {inner}, None => None }}"
+
+
 def snake(name: str) -> str:
     out = re.sub(r"[^0-9a-zA-Z]+", "_", name)
     out = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", out)
@@ -304,7 +374,25 @@ class Emitter:
         accessors: list[str] = []
         comparisons: list[str] = []
 
-        for field in dedupe(self.flatten(fields, name), name):
+        resolved = dedupe(self.flatten(fields, name), name)
+
+        # One binding per distinct `sourcePath`, before the fields that use it.
+        #
+        # whatspec records the path when a field is not on the node the shape
+        # names — an ack's paid-conversation data hangs off `<biz>`, its pricing
+        # off `<biz><pricing>`. Reading those off the root finds nothing, and
+        # finds it silently: a fixture built the same wrong way agrees.
+        paths = sorted(
+            {tuple(f["sourcePath"]) for f in resolved if f.get("sourcePath")}
+        )
+        bindings = [
+            f"let {path_binding(path)} = extract::maybe_child_at(node, &["
+            + ", ".join(rust_str(part) for part in path)
+            + "]);"
+            for path in paths
+        ]
+
+        for field in resolved:
             emitted = self.emit_field(name, field, decls, inits, accessors, comparisons)
             if not emitted:
                 drops.append(f"{name}.{field['name']}: {field['method'] or 'mixin'}")
@@ -328,6 +416,7 @@ class Emitter:
             f"impl<'a> {name}<'a> {{",
             "    /// Derive from a node already known to match this shape.",
             "    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {",
+            *[f"        {b}" for b in bindings],
             "        Ok(Self {",
         ]
         struct += [f"            {line}" for line in inits]
@@ -457,13 +546,24 @@ class Emitter:
         for variant in ordered:
             case = pascal(variant["name"])
             guards = guards_of(variant)
-            condition = " && ".join(
+            conditions = [
                 f"node.attr_eq({rust_str(key)}, {rust_str(value)})"
                 for key, value in guards
-            )
+            ]
+            evidence = evidence_path(variant)
+            if evidence:
+                conditions.append(
+                    "extract::maybe_child_at(node, &["
+                    + ", ".join(rust_str(part) for part in evidence)
+                    + "]).is_some()"
+                )
+            condition = " && ".join(conditions)
             indent = "        "
             if condition:
-                lines.append(f"{indent}// guarded by " + ", ".join(f"{k}={v}" for k, v in guards))
+                described = [f"{k}={v}" for k, v in guards]
+                if evidence:
+                    described.append("<" + "><".join(evidence) + "> present")
+                lines.append(f"{indent}// guarded by " + ", ".join(described))
                 lines.append(f"{indent}if {condition}")
                 lines.append(f"{indent}    && let Ok(inner) = {enum_name}{case}::derive(node)")
                 lines.append(f"{indent}{{")
@@ -491,11 +591,23 @@ class Emitter:
 
     def flatten(self, fields: list[dict], owner: str) -> list[dict]:
         """Inline `sameNode` mixins — they parse the same node, so they are the
-        same struct's fields."""
+        same struct's fields.
+
+        An *optional* mixin's children come out optional. The mixin says the
+        whole group may be absent, and inlining it without saying so promotes
+        every child to unconditionally required: `NewsletterMessageAck` carries
+        six optional mixins whose children are each required *within* their
+        mixin, and flattening them flat made `edit` and two byte bodies
+        mandatory — so an ack carrying only `class` and `t`, which the spec
+        allows, did not derive.
+        """
         out: list[dict] = []
         for field in fields:
             if not field.get("method") and field.get("sameNode"):
-                out.extend(self.flatten(field.get("children", []), owner))
+                inner = self.flatten(field.get("children", []), owner)
+                if not field.get("required"):
+                    inner = [dict(child, required=False) for child in inner]
+                out.extend(inner)
             else:
                 out.append(field)
         return out
@@ -506,6 +618,12 @@ class Emitter:
     ) -> bool:
         method = field.get("method") or ""
         name = snake(field["name"])
+        # Where this field is read from. Without a `sourcePath` it is the node
+        # the shape names; with one it is a descendant that may be absent, so a
+        # required field turns the absence into its own error and an optional
+        # one turns it into `None`.
+        path = tuple(field.get("sourcePath") or ())
+        source = path_binding(path) if path else "node"
         # The spec records the field's name in the bundle's own casing and the
         # attribute's name on the wire separately, and they differ for fifty of
         # them. Reading by the former finds nothing and fails no test, because
@@ -526,7 +644,13 @@ class Emitter:
             if not field.get("required") and method in OPTIONAL_JID:
                 ty, call = f"Option<{ty}>", OPTIONAL_JID[method]
             decls += [doc, f"    pub {name}: {ty},"]
-            inits.append(f"{name}: {call.format(key=key)},")
+            inits.append(
+                f"{name}: "
+                + through_path(
+                    call.format(key=key), source, path, bool(field.get("required"))
+                )
+                + ("," if not through_path(call.format(key=key), source, path, bool(field.get("required"))).endswith(",") else "")
+            )
             comparisons.append(semantic_compare(name, ty))
             return True
 
@@ -546,7 +670,8 @@ class Emitter:
                 ty = enum_name
                 call = f"extract::attr_enum(node, {key}, {enum_name}::from_wire)?"
             decls += [doc, f"    pub {name}: {ty},"]
-            inits.append(f"{name}: {call},")
+            routed = through_path(call, source, path, bool(field.get("required")))
+            inits.append(f"{name}: {routed}" + ("" if routed.endswith(",") else ","))
             comparisons.append(f"self.{name} == other.{name}")
             return True
 
@@ -646,6 +771,44 @@ def fixture_value(field: dict, full: bool = False) -> str | None:
     return None
 
 
+def nest_by_source_path(parts_by_path: dict[tuple, list[str]]) -> str:
+    """Wrap each group of attributes in the children its `sourcePath` names.
+
+    A fixture that wrote them flat would agree with a reader that read them
+    flat, and the pair would pass while matching no stanza a server sends —
+    the same complicity that hid the `wireName` bug.
+
+    Paths are nested rather than emitted side by side, so `["biz"]` and
+    `["biz", "pricing"]` produce one `<biz>` carrying a `<pricing>`.
+    """
+    if not parts_by_path:
+        return ""
+    # Longest first, so a deeper path is built before the parent that holds it.
+    tree: dict[str, dict] = {}
+    for path, parts in parts_by_path.items():
+        node = tree
+        for step in path:
+            node = node.setdefault(step, {"__attrs": [], "__kids": {}})["__kids"]
+        # Re-walk to the owner of these attributes.
+        owner = tree
+        for step in path[:-1]:
+            owner = owner[step]["__kids"]
+        owner[path[-1]]["__attrs"].extend(parts)
+
+    def render(kids: dict[str, dict]) -> str:
+        out = ""
+        for tag, body in kids.items():
+            out += (
+                f".child(Fixture::node({rust_str(tag)})"
+                + "".join(body["__attrs"])
+                + render(body["__kids"])
+                + ")"
+            )
+        return out
+
+    return render(tree)
+
+
 def variant_fixture(variant: dict, full: bool = False) -> str:
     """A stanza satisfying one named alternative of a mixin group.
 
@@ -654,6 +817,7 @@ def variant_fixture(variant: dict, full: bool = False) -> str:
     """
     parts = ["Fixture::node(\"ack\")"]
     seen: set[str] = set()
+    nested: dict[tuple, list[str]] = {}
     for key, value in guards_of(variant):
         seen.add(key)
         parts.append(f".attr({rust_str(key)}, {rust_str(value)})")
@@ -661,13 +825,24 @@ def variant_fixture(variant: dict, full: bool = False) -> str:
         if not full and not field.get("required"):
             continue
         key = field.get("wireName") or field.get("tag") or field["name"]
-        if key in seen:
+        path = tuple(field.get("sourcePath") or ())
+        if (path, key) in seen or (not path and key in seen):
             continue
         value = fixture_value(field, full)
-        if value:
+        if not value:
+            continue
+        if path:
+            seen.add((path, key))
+            nested.setdefault(path, []).append(value)
+        else:
             seen.add(key)
             parts.append(value)
-    return "".join(parts)
+    # The node that evidences the variant, even when nothing required lives
+    # there: without it the dispatch will not select this variant at all.
+    evidence = evidence_path(variant)
+    if evidence and evidence not in nested:
+        nested[evidence] = []
+    return "".join(parts) + nest_by_source_path(nested)
 
 
 def union_fixture(field: dict, full: bool) -> str | None:
@@ -691,6 +866,7 @@ def union_fixture(field: dict, full: bool) -> str | None:
     )
     parts: list[str] = []
     seen: set[str] = set()
+    nested: dict[tuple, list[str]] = {}
     # The guards first: a variant with `edit="1"` needs that exact value, and a
     # generic `"x"` from the field below would contradict it.
     for key, value in guards_of(leanest):
@@ -700,13 +876,19 @@ def union_fixture(field: dict, full: bool) -> str | None:
         if not full and not inner.get("required"):
             continue
         key = inner.get("wireName") or inner.get("tag") or inner["name"]
-        if key in seen:
+        path = tuple(inner.get("sourcePath") or ())
+        if (path, key) in seen or (not path and key in seen):
             continue
         value = fixture_value(inner, full)
-        if value:
+        if not value:
+            continue
+        if path:
+            seen.add((path, key))
+            nested.setdefault(path, []).append(value)
+        else:
             seen.add(key)
             parts.append(value)
-    return "".join(parts) or None
+    return ("".join(parts) + nest_by_source_path(nested)) or None
 
 
 def fixture_for(tag: str, fields: list[dict], full: bool = False) -> str:
@@ -1151,6 +1333,7 @@ def main() -> None:
                 v
                 for v in ordered_variants(spec_variants)
                 if not guards_of(v)
+                and not evidence_path(v)
                 and not any(f.get("required") for f in v["fields"])
             ),
             None,

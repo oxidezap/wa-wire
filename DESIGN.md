@@ -9,7 +9,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 35
+> **Last revised:** rev 36
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1960,10 +1960,53 @@ Portability is enforced too: the contract builds with no allocator and for
 | ~~D-112~~ | ~~Shapes the dispatch can never reach are named, not reordered around~~ | Four differ from an earlier shape in nothing a reader can see: whatspec separates an attribute the caller supplies from one the builder computes, which is a fact about the builder and not about the stanza, and an extra optional attribute discriminates nothing. Reordering moves the problem to the other shape; **Superseded by D-113.** The four were not four shapes; they were two, twice | 33 |
 | D-113 | **Supersedes D-112.** Builders producing one stanza are folded into one shape, and the fold is reported | Three of the four were two modules building the same stanza, differing only in whether a value is handed in or computed and whether one bothers to model an optional attribute. Keeping both is two types no stanza can choose between. Mutual indistinguishability, not one-way: a shape strictly subsumed by another is still a different shape and merging it would discard fields the survivor lacks | 34 |
 | D-114 | The fold is recomputed from the spec each run rather than listed | It un-merges by itself the day whatspec records something that separates a pair — which happened to one of them the same afternoon, when the literal inside `CUSTOM_STRING` stopped being dropped upstream | 34 |
+| D-115 | A field is read from the node its `sourcePath` names | whatspec records the path when a field is not on the node the shape names — an ack's paid-conversation data hangs off `<biz>`, its pricing off `<biz><pricing>`. Reading them off the root found nothing and found it silently, since the fixture was built the same wrong way. The third instance of one failure: a generator and its generated tests walking one spec by one rule cannot catch the rule | 36 |
+| D-116 | An optional mixin's children are optional | A `sameNode` mixin says the whole group may be absent, and inlining it without carrying that across promoted every child to required. `NewsletterMessageAck` gained a mandatory `edit` and two mandatory byte bodies, so an ack carrying only `class` and `t` — which the spec allows — did not derive | 36 |
+| D-117 | A mixin group about a child is absent when that child is | A variant whose fields all hang off one descendant is *about* it. One has a single optional field under `<biz><pricing>`, so its derivation succeeded on any node at all and, being last, turned every ack into a paid conversation with no data in it — an absence reported as a presence | 36 |
+| D-118 | Each direction is compared as its own sequence | An engine dispatches what it received from the read path and what it sent from the send path, with no ordering between them. One merged sequence aligned by position would call a different interleaving a direction divergence and a frame divergence on every stanza after it. Within a direction the order is the engine's own and is stable | 36 |
+| D-119 | Whether a missing direction is a fault depends on who was watching | Two adapters that both observe the outbound half and disagree on how much there was have found something; one that cannot see it at all has not. Counting the second as missing stanzas blames an engine for its observer, which is the failure `l0.plaintext` coverage already avoids one layer in | 36 |
+| D-120 | A recording carrying a direction its manifest does not claim is a fault under every profile | Inconsistent with itself rather than with the other recording: nothing downstream can tell whether those records are real or an artefact of how the file was assembled | 36 |
 
 ---
 
 ## Changelog
+
+### rev 36 — 2026-08-08
+
+Review of the two previous revisions, and most of what it found was real.
+
+- **Three bugs in the derivation, all in the mixin work and all of a kind.**
+  - **`sourcePath` was ignored** (D-115), by the whole generator rather than
+    only the new part — it simply had no fields using it until the mixins
+    arrived. Thirty-four do, and every one of them read off the wrong node: a
+    real ack carrying `<biz paid_convo_id=…>` derived as an *empty* paid group
+    conversation and lost the data. The fixtures were built the same wrong way
+    and agreed, which is the third time that pairing has hidden a defect — the
+    other two were `wireName` and the enum-without-variants. The test is
+    hand-written for that reason.
+  - **An optional mixin made its children required** (D-116). Six of them sit
+    in `NewsletterMessageAck`, so an ack carrying only `class` and `t` did not
+    derive.
+  - **A mixin group about a child was never absent** (D-117), so every ack
+    carried an empty paid-conversation record. An absence reported as a
+    presence is the reading a consumer cannot recover from.
+- **The comparator aligned two directions by one index** (D-118). `SentFrame`
+  comes from the send path and `RawNode` from the read path, with no ordering
+  between them, so the same traffic replayed twice interleaves differently and
+  the comparison would report a divergence per stanza. Each direction is now
+  its own sequence.
+- **A recording without an outbound half was being read as one missing
+  stanzas** (D-119). Only one engine can report what it sent; the declared
+  capability decides whether a difference is the engines' or the observers'.
+  And a recording carrying a direction its manifest does not claim is now a
+  fault in itself (D-120).
+- **Smaller, and all real:** `derive_all` handed back outbound stanzas as
+  inbound events; `content_string` accepted bytes that are not text and let
+  them render later with replacements; `capture-corpus` would have written the
+  client's own sends into a corpus replayed as though the server had said them;
+  the TypeScript capability vocabulary had eight of nine, and nothing tied the
+  two lists together until now; and the violation message named the capability
+  for *sending* where the check wants the one for *observing*.
 
 ### rev 35 — 2026-08-08
 

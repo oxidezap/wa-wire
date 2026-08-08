@@ -14,6 +14,18 @@ export const Capability = {
     L0InboundAuthPhase: 'l0.inbound.auth-phase',
     /** Sends a raw stanza. */
     L0Outbound: 'l0.outbound',
+    /**
+     * Reports each stanza the engine sent, as it went to the wire.
+     *
+     * Distinct from {@link L0Outbound}, which is the ability to send. Sending
+     * is what an adapter does; knowing what left is what a recording needs.
+     *
+     * Named here even though this adapter does not have it: the vocabulary is
+     * the contract's, not one adapter's, and a consumer that cannot name a
+     * capability cannot require one either — it would discover the absence as
+     * missing traffic, which is the outcome this list exists to prevent.
+     */
+    L0OutboundObserved: 'l0.outbound.observed',
     /** Raw request/response against a stanza. */
     L0Request: 'l0.request',
     /** Emits the payloads it decrypted alongside the frame. */

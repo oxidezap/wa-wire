@@ -157,9 +157,9 @@ impl fmt::Display for Violation {
                 f,
                 "adapter delivered {count} plaintext(s) without declaring l0.plaintext"
             ),
-            Self::OutboundWithoutCapability => {
-                f.write_str("adapter delivered an outbound stanza without declaring l0.outbound")
-            }
+            Self::OutboundWithoutCapability => f.write_str(
+                "adapter delivered an outbound stanza without declaring l0.outbound.observed",
+            ),
         }
     }
 }

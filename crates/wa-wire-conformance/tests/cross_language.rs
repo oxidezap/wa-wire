@@ -307,3 +307,52 @@ fn a_recording_frozen_mid_write_there_is_still_readable_here() {
     );
     assert_eq!(recording.adapter().map(|a| a.id), Some("zapo"));
 }
+
+/// The capability vocabulary is one contract, written in two languages.
+///
+/// Rust and TypeScript both name the capabilities an adapter may declare, and
+/// nothing tied the two lists together — so the ninth was added to one and not
+/// the other, and a TypeScript consumer could not name, require or report
+/// `l0.outbound.observed` even though the contract defines it. Absence there
+/// looks like missing traffic, which is precisely what declaring capabilities
+/// exists to prevent.
+///
+/// Read from the source rather than from a fixture: the list is a handful of
+/// string constants, and a generated fixture would be a third description to
+/// keep in step.
+#[test]
+fn both_languages_name_the_same_capabilities() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../adapters/zapo/src/capability.ts");
+    let source = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+
+    for capability in wa_wire_contract::Capability::ALL {
+        let quoted = format!("'{}'", capability.identifier());
+        assert!(
+            source.contains(&quoted),
+            "{} names {capability} and {} does not",
+            "wa-wire-contract",
+            path.display()
+        );
+    }
+
+    // And nothing there that Rust does not have: a TypeScript adapter could
+    // otherwise declare a capability no host knows how to require.
+    for line in source.lines() {
+        let Some(start) = line.find(": 'l0.") else {
+            continue;
+        };
+        // Past `: '` to the opening quote's other side, then up to the close.
+        let rest = &line[start + 3..];
+        let Some(end) = rest.find('\'') else {
+            continue;
+        };
+        let identifier = &rest[..end];
+        assert!(
+            wa_wire_contract::Capability::from_identifier(identifier).is_some(),
+            "{} names {identifier} and wa-wire-contract does not",
+            path.display()
+        );
+    }
+}

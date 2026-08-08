@@ -16,6 +16,15 @@ pub enum Direction {
     Outbound,
 }
 
+impl core::fmt::Display for Direction {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Self::Inbound => "inbound",
+            Self::Outbound => "outbound",
+        })
+    }
+}
+
 /// Where the frame bytes in an envelope came from.
 ///
 /// The contract's fast path is [`Original`]: the engine hands over the exact

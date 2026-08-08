@@ -3,6 +3,7 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
+use wa_wire_adapter::Capability;
 use wa_wire_codec::{Parser, TokenTable};
 use wa_wire_contract::{Direction, EnvelopeRef, FrameOrigin, NodePath, PlaintextEntry};
 use wa_wire_l1::{DeriveError, Event, OutgoingEvent, derive, derive_outgoing};
@@ -162,31 +163,128 @@ pub fn compare<'a>(left: &Recording<'a>, right: &Recording<'a>, tables: Tables<'
         });
     }
 
-    if left.len() != right.len() {
-        report.push(Divergence::Length {
-            left: left.len(),
-            right: right.len(),
+    // Each direction is its own sequence, compared against its counterpart.
+    //
+    // One merged sequence would align by position across both, and position is
+    // not comparable across them: an engine dispatches what it received from
+    // the read path and what it sent from the send path, with no ordering
+    // between the two. The same traffic replayed twice can interleave
+    // differently, and an index-aligned comparison would call that a direction
+    // divergence and a frame divergence on every stanza after it.
+    //
+    // Within a direction the order is the engine's own and is deterministic,
+    // which is what makes the comparison mean something.
+    let (left_in, left_out) = split_by_direction(left);
+    let (right_in, right_out) = split_by_direction(right);
+
+    // A recording carrying a direction its own manifest does not claim is
+    // inconsistent with itself, and that is a fault whichever profile is
+    // asking. The adapter's `verify` refuses to emit one; a recording can
+    // still be assembled by hand or by a build that predates the check.
+    for (recording, outbound) in [(left, &left_out), (right, &right_out)] {
+        if !outbound.is_empty() && !recording.adapter().has(Capability::L0OutboundObserved) {
+            report.push(Divergence::UndeclaredDirection {
+                adapter: recording.id(),
+                count: outbound.len(),
+                direction: Direction::Outbound,
+            });
+        }
+    }
+
+    // Whether an outbound difference is a difference at all depends on who was
+    // watching. Two adapters that both observe the outbound half and disagree
+    // on how much of it there was have found something; one that cannot see it
+    // at all has not — until an engine grew an outbound observation point,
+    // none of them could, and counting that as missing stanzas blames an
+    // engine for its observer.
+    let both_observe = left.adapter().has(Capability::L0OutboundObserved)
+        && right.adapter().has(Capability::L0OutboundObserved);
+    if left_out.len() != right_out.len() && !both_observe {
+        report.push(Divergence::DirectionCoverage {
+            only_left: left_out.len(),
+            only_right: right_out.len(),
+            direction: Direction::Outbound,
         });
-        // Past a length difference every later index compares unrelated
-        // stanzas, so one report beats a hundred that all say the same thing.
-        return report;
     }
 
     let (left_parser, right_parser) = (Parser::new(tables.left), Parser::new(tables.right));
-    for index in 0..left.len() {
+    for (lefts, rights) in [(&left_in, &right_in), (&left_out, &right_out)] {
+        if lefts.is_empty() && rights.is_empty() {
+            continue;
+        }
+        if (lefts.is_empty() || rights.is_empty()) && !both_observe {
+            // One side could not see this direction. Already reported as
+            // coverage; comparing an empty sequence against a full one would
+            // add a length finding saying the same thing in worse terms.
+            continue;
+        }
+        compare_sequence(
+            &mut report,
+            (&left_parser, &right_parser),
+            left,
+            right,
+            lefts,
+            rights,
+        );
+    }
+
+    report
+}
+
+/// A recording's envelope positions, split by which way each stanza travelled.
+///
+/// An envelope that will not decode is counted as neither: it is reported as
+/// malformed by the comparison that reaches it, and guessing a direction for
+/// it would put it opposite a stanza it has nothing to do with.
+fn split_by_direction(recording: &Recording<'_>) -> (Vec<usize>, Vec<usize>) {
+    let mut inbound = Vec::new();
+    let mut outbound = Vec::new();
+    for index in 0..recording.len() {
+        // An envelope that will not decode goes with the inbound half: it is
+        // reported as malformed by the comparison that reaches it, and every
+        // recording has an inbound half to reach it from.
+        if recording.envelope(index).map(|e| e.flags().direction) == Some(Direction::Outbound) {
+            outbound.push(index);
+        } else {
+            inbound.push(index);
+        }
+    }
+    (inbound, outbound)
+}
+
+/// Compare one direction's stanzas, pairwise and in order.
+fn compare_sequence<'a>(
+    report: &mut Report<'a>,
+    parsers: (&Parser<'a>, &Parser<'a>),
+    left: &Recording<'a>,
+    right: &Recording<'a>,
+    lefts: &[usize],
+    rights: &[usize],
+) {
+    if lefts.len() != rights.len() {
+        report.push(Divergence::Length {
+            left: lefts.len(),
+            right: rights.len(),
+        });
+        // Past a length difference every later position compares unrelated
+        // stanzas, so one report beats a hundred that all say the same thing.
+        return;
+    }
+
+    for (&index, &other) in lefts.iter().zip(rights) {
         report.compared = report.compared.saturating_add(1);
 
-        let (Some(a), Some(b)) = (left.envelope(index), right.envelope(index)) else {
+        let (Some(a), Some(b)) = (left.envelope(index), right.envelope(other)) else {
             if left.envelope(index).is_none() {
                 report.push(Divergence::MalformedEnvelope {
                     adapter: left.id(),
                     index,
                 });
             }
-            if right.envelope(index).is_none() {
+            if right.envelope(other).is_none() {
                 report.push(Divergence::MalformedEnvelope {
                     adapter: right.id(),
-                    index,
+                    index: other,
                 });
             }
             continue;
@@ -200,30 +298,9 @@ pub fn compare<'a>(left: &Recording<'a>, right: &Recording<'a>, tables: Tables<'
             });
         }
 
-        compare_envelopes(&mut report, index, a, b);
-
-        // The direction picks the grammar, and picking wrong is worse than
-        // not deriving at all: an outbound `<ack>` satisfies the inbound
-        // shapes and means the opposite — the server acknowledging our send
-        // versus us acknowledging a delivery — so it would derive confidently
-        // and wrongly, and two engines agreeing on a wrong reading reports as
-        // agreement.
-        //
-        // A pair whose envelopes disagree on direction is already a
-        // `Divergence::Direction` above; here the left one decides, since
-        // there is no third answer to give.
-        compare_derivations(
-            &mut report,
-            (&left_parser, &right_parser),
-            index,
-            left,
-            right,
-            a,
-            b,
-        );
+        compare_envelopes(report, index, a, b);
+        compare_derivations(report, parsers, index, left, right, a, b);
     }
-
-    report
 }
 
 /// Compare everything in the envelope other than the frame bytes.

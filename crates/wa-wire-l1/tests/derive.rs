@@ -321,13 +321,20 @@ fn an_attribute_is_read_by_its_name_on_the_wire() {
     let node = parse(&stanza);
     let shape = ParseNewsletterResponseNegative::derive(&node)
         .expect("the wire spelling satisfies the shape");
-    assert_eq!(shape.application_error, 7);
+    // `Option`, because the mixin carrying it is optional — a shape does not
+    // require what its enclosing mixin says may be absent.
+    assert_eq!(shape.application_error, Some(7));
 
     // The bundle's spelling is not what the wire carries, so a stanza using it
-    // is missing the field. Reading by that name would have accepted this one.
+    // does not supply the field. Asserted by the value rather than by a
+    // failure: the field is optional — its own mixin says so — and a shape does
+    // not reject a stanza for leaving out what may be left out. What a reader
+    // going by the wrong name gets is `None` where a server sent a value.
     let wrong = with_wire_name("applicationError");
-    assert!(
-        ParseNewsletterResponseNegative::derive(&parse(&wrong)).is_err(),
+    let by_bundle_name = ParseNewsletterResponseNegative::derive(&parse(&wrong))
+        .expect("an optional field's absence is not a failure");
+    assert_eq!(
+        by_bundle_name.application_error, None,
         "camelCase is the bundle's name for this field, not the wire's"
     );
 }
@@ -359,8 +366,9 @@ fn an_outbound_stanza_derives_under_the_inbound_grammar() {
         "an outbound ack is accepted by an inbound shape: {:?}",
         derived.err()
     );
-    // And it is reported as the inbound event, which is the wrong reading.
-    assert!(matches!(derived.expect("derives"), Event::Ack(_)));
+    // And it is reported as an inbound event — which of them is not the point
+    // and moves as the spec does. That it answers at all is.
+    assert_eq!(derived.expect("derives").tag(), "ack");
 }
 
 // --- mixin groups ------------------------------------------------------------
@@ -450,4 +458,101 @@ fn the_generator_expressed_every_field() {
         UNMODELLED_FIELDS.is_empty(),
         "still unmodelled: {UNMODELLED_FIELDS:?}"
     );
+}
+
+/// A field is read from the node it lives on, not from the node that names it.
+///
+/// whatspec records a `sourcePath` when a field hangs off a descendant: an
+/// ack's paid-conversation data is on `<biz>`, its pricing on
+/// `<biz><pricing>`. Reading those off the root finds nothing, and finds it
+/// silently — the fixture that tested it was built the same wrong way, so the
+/// pair agreed with each other and with nothing a server sends.
+///
+/// Written by hand for that reason, like the `wireName` test above. Both are
+/// the same failure: a generator and its generated tests walking one spec by
+/// one rule cannot catch the rule being wrong.
+#[test]
+fn a_field_is_read_from_the_child_its_source_path_names() {
+    use wa_wire_l1::generated::AckPaidConversationOrAckPaidGroupConversation as Paid;
+
+    let with_biz = Fixture::node("ack")
+        .child(
+            Fixture::node("biz")
+                .attr("paid_convo_id", "PC-1")
+                .attr("pricing_model", "CBP")
+                .attr("billable", "true"),
+        )
+        .build();
+
+    let derived = Paid::derive(&parse(&with_biz)).expect("derives");
+    let Paid::AckPaidConversation(paid) = derived else {
+        panic!("a stanza carrying <biz> is a paid conversation, got {derived:?}");
+    };
+    assert!(paid.biz_paid_convo_id.eq_str("PC-1"));
+
+    // The same attributes written on the root are not the same stanza. Before
+    // `sourcePath` was honoured this was the *only* shape that derived.
+    let flat = Fixture::node("ack")
+        .attr("paid_convo_id", "PC-1")
+        .attr("pricing_model", "CBP")
+        .attr("billable", "true")
+        .build();
+    assert!(
+        !matches!(
+            Paid::maybe_derive(&parse(&flat)),
+            Some(Paid::AckPaidConversation(_))
+        ),
+        "attributes on the root are not the ones under <biz>"
+    );
+}
+
+/// An optional mixin does not make its children required.
+///
+/// `NewsletterMessageAck` carries six `sameNode` mixins, every one optional,
+/// and each has a child that is required *within* its mixin. Flattening them
+/// without carrying the optionality across promoted `edit` and two byte bodies
+/// to mandatory, so an ack with only `class` and `t` — which the spec allows —
+/// did not derive.
+#[test]
+fn an_optional_mixin_does_not_make_its_children_required() {
+    use wa_wire_l1::generated::NewsletterQuestionResponseAckOrNewsletterMessageAck as Group;
+
+    let bare = Fixture::node("ack")
+        .attr("class", "message")
+        .attr("t", "1")
+        .build();
+
+    let derived = Group::derive(&parse(&bare));
+    assert!(
+        derived.is_ok(),
+        "an ack carrying only what the shape requires must derive: {:?}",
+        derived.err()
+    );
+}
+
+/// An optional mixin group is absent when nothing evidences it.
+///
+/// `AckPaidGroupConversation` has one optional field, under `<biz><pricing>`.
+/// Its `derive` therefore succeeds on any node at all, and being the last
+/// alternative tried it turned every ack into a paid conversation carrying no
+/// data — an absence reported as a presence, which is the reading a consumer
+/// cannot recover from.
+#[test]
+fn a_mixin_group_about_a_child_is_absent_without_that_child() {
+    use wa_wire_l1::generated::AckPaidConversationOrAckPaidGroupConversation as Paid;
+
+    let plain = Fixture::node("ack").attr("id", "A1").build();
+    assert!(
+        Paid::maybe_derive(&parse(&plain)).is_none(),
+        "an ack with no <biz> is not a paid conversation of any kind"
+    );
+
+    // And with the node present it is, even though the field inside is optional.
+    let with_pricing = Fixture::node("ack")
+        .child(Fixture::node("biz").child(Fixture::node("pricing")))
+        .build();
+    assert!(matches!(
+        Paid::maybe_derive(&parse(&with_pricing)),
+        Some(Paid::AckPaidGroupConversation(_))
+    ));
 }

@@ -33,6 +33,23 @@ answer, and two engines agreeing on a wrong reading reports as agreement.
 A pair whose envelopes disagree on direction is a finding in its own right, and
 it is raised before either is derived.
 
+## Each direction is its own sequence
+
+An engine dispatches what it received from the read path and what it sent from
+the send path, and there is no ordering between the two. One merged sequence
+compared by position would call a different interleaving a divergence on every
+stanza after it, so the inbound halves are compared against each other and the
+outbound halves against each other. Within a direction the order is the
+engine's own and is stable.
+
+Whether a *missing* direction is a fault depends on who was watching. Two
+adapters that both observe the outbound half and disagree on how much of it
+there was have found something; one that cannot see it at all has not, and
+counting that as missing stanzas would blame an engine for its observer. The
+declared capability decides. A recording carrying a direction its own manifest
+does not claim is a fault under every profile — nothing downstream can tell
+whether those records are real.
+
 ## One body of evidence, two questions
 
 | Profile | Asks | A frame difference is |

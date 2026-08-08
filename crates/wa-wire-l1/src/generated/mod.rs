@@ -3506,13 +3506,14 @@ pub struct AckPaidConversationOrAckPaidGroupConversationAckPaidConversation<'a> 
 impl<'a> AckPaidConversationOrAckPaidGroupConversationAckPaidConversation<'a> {
     /// Derive from a node already known to match this shape.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        let at_biz = extract::maybe_child_at(node, &["biz"]);
         Ok(Self {
-            biz_paid_convo_id: extract::attr_string(node, "paid_convo_id")?,
-            biz_pricing_model: extract::attr_enum(node, "pricing_model", ENUMCBPNBPPMP::from_wire)?,
-            biz_billable: extract::attr_enum(node, "billable", ENUMFALSETRUE::from_wire)?,
-            biz_expiration_timestamp: extract::maybe_attr_int(node, "expiration_timestamp")?,
-            biz_pricing_category: extract::maybe_attr_string(node, "pricing_category"),
-            biz_pricing_type: extract::maybe_attr_enum(node, "pricing_type", ENUMFREECUSTOMERSERVICEFREEENTRYPOINTREGULAR::from_wire)?,
+            biz_paid_convo_id: extract::attr_string(&at_biz.ok_or(DeriveError::MissingChild { tag: "biz" })?, "paid_convo_id")?,
+            biz_pricing_model: extract::attr_enum(&at_biz.ok_or(DeriveError::MissingChild { tag: "biz" })?, "pricing_model", ENUMCBPNBPPMP::from_wire)?,
+            biz_billable: extract::attr_enum(&at_biz.ok_or(DeriveError::MissingChild { tag: "biz" })?, "billable", ENUMFALSETRUE::from_wire)?,
+            biz_expiration_timestamp: match at_biz { Some(at) => extract::maybe_attr_int(&at, "expiration_timestamp")?, None => None },
+            biz_pricing_category: match at_biz { Some(at) => extract::maybe_attr_string(&at, "pricing_category"), None => None },
+            biz_pricing_type: match at_biz { Some(at) => extract::maybe_attr_enum(&at, "pricing_type", ENUMFREECUSTOMERSERVICEFREEENTRYPOINTREGULAR::from_wire)?, None => None },
             biz_delivery_context: match extract::maybe_child(node, "delivery_context") { Some(child) => Some(alloc::boxed::Box::new(AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizDeliveryContext::derive(&child)?)), None => None },
             biz_origin: match extract::maybe_child(node, "origin") { Some(child) => Some(alloc::boxed::Box::new(AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOrigin::derive(&child)?)), None => None },
             biz_pricing: match extract::maybe_child(node, "pricing") { Some(child) => Some(alloc::boxed::Box::new(AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizPricing::derive(&child)?)), None => None },
@@ -3573,11 +3574,12 @@ pub struct AckPaidConversationOrAckPaidGroupConversationAckPaidGroupConversation
 impl<'a> AckPaidConversationOrAckPaidGroupConversationAckPaidGroupConversation<'a> {
     /// Derive from a node already known to match this shape.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        let at_biz_pricing = extract::maybe_child_at(node, &["biz", "pricing"]);
         Ok(Self {
-            biz_pricing_business_country_code: extract::maybe_attr_string(
-                node,
-                "business_country_code",
-            ),
+            biz_pricing_business_country_code: match at_biz_pricing {
+                Some(at) => extract::maybe_attr_string(&at, "business_country_code"),
+                None => None,
+            },
             node: *node,
         })
     }
@@ -3636,13 +3638,17 @@ impl<'a> AckPaidConversationOrAckPaidGroupConversation<'a> {
     /// Derive whichever alternative this node satisfies, or nothing.
     #[must_use]
     pub fn maybe_derive(node: &NodeRef<'a>) -> Option<Self> {
-        if let Ok(inner) =
-            AckPaidConversationOrAckPaidGroupConversationAckPaidConversation::derive(node)
+        // guarded by <biz> present
+        if extract::maybe_child_at(node, &["biz"]).is_some()
+            && let Ok(inner) =
+                AckPaidConversationOrAckPaidGroupConversationAckPaidConversation::derive(node)
         {
             return Some(Self::AckPaidConversation(inner));
         }
-        if let Ok(inner) =
-            AckPaidConversationOrAckPaidGroupConversationAckPaidGroupConversation::derive(node)
+        // guarded by <biz><pricing> present
+        if extract::maybe_child_at(node, &["biz", "pricing"]).is_some()
+            && let Ok(inner) =
+                AckPaidConversationOrAckPaidGroupConversationAckPaidGroupConversation::derive(node)
         {
             return Some(Self::AckPaidGroupConversation(inner));
         }
@@ -3677,17 +3683,17 @@ pub struct ParseNewsletterResponseNegative<'a> {
     pub class: Value<'a>,
     /// `t`, via `attrInt`.
     pub t: i64,
-    /// `edit`, via `attrString`.
-    pub edit: Value<'a>,
-    /// `frankingReportingTagElementValue`, via `contentBytes`.
-    pub franking_reporting_tag_element_value: &'a [u8],
+    /// `edit`, via `maybeAttrString`.
+    pub edit: Option<Value<'a>>,
+    /// `frankingReportingTagElementValue`, via `maybeContentBytes`.
+    pub franking_reporting_tag_element_value: Option<&'a [u8]>,
     /// `ackPaidAckPaidConversationOrAckPaidGroupConversationConversationMixinGroup`, one of `AckPaidConversation`, `AckPaidGroupConversation`.
     pub ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group:
         Option<AckPaidConversationOrAckPaidGroupConversation<'a>>,
-    /// `applicationError`, via `attrInt`.
-    pub application_error: i64,
-    /// `backoff`, via `attrInt`.
-    pub backoff: i64,
+    /// `applicationError`, via `maybeAttrInt`.
+    pub application_error: Option<i64>,
+    /// `backoff`, via `maybeAttrInt`.
+    pub backoff: Option<i64>,
     /// The node this was derived from, for fields the shape does
     /// not model yet.
     pub node: NodeRef<'a>,
@@ -3696,15 +3702,17 @@ pub struct ParseNewsletterResponseNegative<'a> {
 impl<'a> ParseNewsletterResponseNegative<'a> {
     /// Derive from a node already known to match this shape.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        let at_franking_reporting_tag =
+            extract::maybe_child_at(node, &["franking", "reporting_tag"]);
         Ok(Self {
             error: extract::attr_string(node, "error")?,
             class: extract::attr_string(node, "class")?,
             t: extract::attr_int(node, "t")?,
-            edit: extract::attr_string(node, "edit")?,
-            franking_reporting_tag_element_value: extract::content_bytes(node)?,
+            edit: extract::maybe_attr_string(node, "edit"),
+            franking_reporting_tag_element_value: match at_franking_reporting_tag { Some(at) => extract::maybe_content_bytes(&at), None => None },
             ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group: AckPaidConversationOrAckPaidGroupConversation::maybe_derive(node),
-            application_error: extract::attr_int(node, "application_error")?,
-            backoff: extract::attr_int(node, "backoff")?,
+            application_error: extract::maybe_attr_int(node, "application_error")?,
+            backoff: extract::maybe_attr_int(node, "backoff")?,
             node: *node,
         })
     }
@@ -3721,7 +3729,7 @@ impl ParseNewsletterResponseNegative<'_> {
         (self.error.semantic_eq(other.error))
             && (self.class.semantic_eq(other.class))
             && (self.t == other.t)
-            && (self.edit.semantic_eq(other.edit))
+            && (match (self.edit, other.edit) { (Some(a), Some(b)) => a.semantic_eq(b), (None, None) => true, _ => false })
             && (self.franking_reporting_tag_element_value == other.franking_reporting_tag_element_value)
             && (match (&self.ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group, &other.ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group) { (Some(a), Some(b)) => a.semantic_eq(b), (None, None) => true, _ => false })
             && (self.application_error == other.application_error)
@@ -3738,10 +3746,10 @@ pub struct NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterQuestion
     pub class: Value<'a>,
     /// `t`, via `attrInt`.
     pub t: i64,
-    /// `edit`, via `attrString`.
-    pub edit: Value<'a>,
-    /// `frankingReportingTagElementValue`, via `contentBytes`.
-    pub franking_reporting_tag_element_value: &'a [u8],
+    /// `edit`, via `maybeAttrString`.
+    pub edit: Option<Value<'a>>,
+    /// `frankingReportingTagElementValue`, via `maybeContentBytes`.
+    pub franking_reporting_tag_element_value: Option<&'a [u8]>,
     /// `ackPaidAckPaidConversationOrAckPaidGroupConversationConversationMixinGroup`, one of `AckPaidConversation`, `AckPaidGroupConversation`.
     pub ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group:
         Option<AckPaidConversationOrAckPaidGroupConversation<'a>>,
@@ -3753,12 +3761,14 @@ pub struct NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterQuestion
 impl<'a> NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterQuestionResponseAck<'a> {
     /// Derive from a node already known to match this shape.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        let at_franking_reporting_tag =
+            extract::maybe_child_at(node, &["franking", "reporting_tag"]);
         Ok(Self {
             response_server_id: extract::attr_string(node, "response_server_id")?,
             class: extract::attr_string(node, "class")?,
             t: extract::attr_int(node, "t")?,
-            edit: extract::attr_string(node, "edit")?,
-            franking_reporting_tag_element_value: extract::content_bytes(node)?,
+            edit: extract::maybe_attr_string(node, "edit"),
+            franking_reporting_tag_element_value: match at_franking_reporting_tag { Some(at) => extract::maybe_content_bytes(&at), None => None },
             ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group: AckPaidConversationOrAckPaidGroupConversation::maybe_derive(node),
             node: *node,
         })
@@ -3781,7 +3791,7 @@ impl NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterQuestionRespon
         (self.response_server_id.semantic_eq(other.response_server_id))
             && (self.class.semantic_eq(other.class))
             && (self.t == other.t)
-            && (self.edit.semantic_eq(other.edit))
+            && (match (self.edit, other.edit) { (Some(a), Some(b)) => a.semantic_eq(b), (None, None) => true, _ => false })
             && (self.franking_reporting_tag_element_value == other.franking_reporting_tag_element_value)
             && (match (&self.ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group, &other.ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group) { (Some(a), Some(b)) => a.semantic_eq(b), (None, None) => true, _ => false })
     }
@@ -3796,15 +3806,15 @@ pub struct NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterMessageA
     pub class: Value<'a>,
     /// `t`, via `attrInt`.
     pub t: i64,
-    /// `edit`, via `attrString`.
-    pub edit: Value<'a>,
-    /// `frankingReportingTagElementValue`, via `contentBytes`.
-    pub franking_reporting_tag_element_value: &'a [u8],
+    /// `edit`, via `maybeAttrString`.
+    pub edit: Option<Value<'a>>,
+    /// `frankingReportingTagElementValue`, via `maybeContentBytes`.
+    pub franking_reporting_tag_element_value: Option<&'a [u8]>,
     /// `ackPaidAckPaidConversationOrAckPaidGroupConversationConversationMixinGroup`, one of `AckPaidConversation`, `AckPaidGroupConversation`.
     pub ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group:
         Option<AckPaidConversationOrAckPaidGroupConversation<'a>>,
-    /// `rcatElementValue`, via `contentBytes`.
-    pub rcat_element_value: &'a [u8],
+    /// `rcatElementValue`, via `maybeContentBytes`.
+    pub rcat_element_value: Option<&'a [u8]>,
     /// The node this was derived from, for fields the shape does
     /// not model yet.
     pub node: NodeRef<'a>,
@@ -3813,14 +3823,17 @@ pub struct NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterMessageA
 impl<'a> NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterMessageAck<'a> {
     /// Derive from a node already known to match this shape.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        let at_franking_reporting_tag =
+            extract::maybe_child_at(node, &["franking", "reporting_tag"]);
+        let at_rcat = extract::maybe_child_at(node, &["rcat"]);
         Ok(Self {
             server_id: extract::maybe_attr_int(node, "server_id")?,
             class: extract::attr_string(node, "class")?,
             t: extract::attr_int(node, "t")?,
-            edit: extract::attr_string(node, "edit")?,
-            franking_reporting_tag_element_value: extract::content_bytes(node)?,
+            edit: extract::maybe_attr_string(node, "edit"),
+            franking_reporting_tag_element_value: match at_franking_reporting_tag { Some(at) => extract::maybe_content_bytes(&at), None => None },
             ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group: AckPaidConversationOrAckPaidGroupConversation::maybe_derive(node),
-            rcat_element_value: extract::content_bytes(node)?,
+            rcat_element_value: match at_rcat { Some(at) => extract::maybe_content_bytes(&at), None => None },
             node: *node,
         })
     }
@@ -3840,7 +3853,7 @@ impl NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterMessageAck<'_>
         (self.server_id == other.server_id)
             && (self.class.semantic_eq(other.class))
             && (self.t == other.t)
-            && (self.edit.semantic_eq(other.edit))
+            && (match (self.edit, other.edit) { (Some(a), Some(b)) => a.semantic_eq(b), (None, None) => true, _ => false })
             && (self.franking_reporting_tag_element_value == other.franking_reporting_tag_element_value)
             && (match (&self.ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group, &other.ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group) { (Some(a), Some(b)) => a.semantic_eq(b), (None, None) => true, _ => false })
             && (self.rcat_element_value == other.rcat_element_value)
@@ -4161,10 +4174,10 @@ pub struct ParsePostNewsletterStatusResponseNegative<'a> {
     /// `statusAckEditOrRevokeOrAdminRevokeMixinGroup`, one of `StatusAckEdit`, `StatusAckRevoke`, `StatusAckAdminRevoke`.
     pub status_ack_edit_or_revoke_or_admin_revoke_mixin_group:
         Option<StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke<'a>>,
-    /// `applicationError`, via `attrInt`.
-    pub application_error: i64,
-    /// `backoff`, via `attrInt`.
-    pub backoff: i64,
+    /// `applicationError`, via `maybeAttrInt`.
+    pub application_error: Option<i64>,
+    /// `backoff`, via `maybeAttrInt`.
+    pub backoff: Option<i64>,
     /// The node this was derived from, for fields the shape does
     /// not model yet.
     pub node: NodeRef<'a>,
@@ -4179,8 +4192,8 @@ impl<'a> ParsePostNewsletterStatusResponseNegative<'a> {
             t: extract::attr_int(node, "t")?,
             status_ack_edit_or_revoke_or_admin_revoke_mixin_group:
                 StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::maybe_derive(node),
-            application_error: extract::attr_int(node, "application_error")?,
-            backoff: extract::attr_int(node, "backoff")?,
+            application_error: extract::maybe_attr_int(node, "application_error")?,
+            backoff: extract::maybe_attr_int(node, "backoff")?,
             node: *node,
         })
     }
@@ -4272,8 +4285,8 @@ pub struct ParsePublishViewResponseSuccess<'a> {
     pub t: Option<i64>,
     /// `readreceipts`, via `maybeAttrEnum`.
     pub readreceipts: Option<ENUMALLNONE>,
-    /// `edit`, via `attrEnum`.
-    pub edit: ENUM017,
+    /// `edit`, via `maybeAttrEnum`.
+    pub edit: Option<ENUM017>,
     /// The node this was derived from, for fields the shape does
     /// not model yet.
     pub node: NodeRef<'a>,
@@ -4286,7 +4299,7 @@ impl<'a> ParsePublishViewResponseSuccess<'a> {
             class: extract::attr_string(node, "class")?,
             t: extract::maybe_attr_int(node, "t")?,
             readreceipts: extract::maybe_attr_enum(node, "readreceipts", ENUMALLNONE::from_wire)?,
-            edit: extract::attr_enum(node, "edit", ENUM017::from_wire)?,
+            edit: extract::maybe_attr_enum(node, "edit", ENUM017::from_wire)?,
             node: *node,
         })
     }
@@ -5617,7 +5630,10 @@ mod generated_tests {
             .attr("t", "1")
             .attr("edit", "x")
             .bytes(b"x")
-            .attr("business_country_code", "x")
+            .child(
+                Fixture::node("biz")
+                    .child(Fixture::node("pricing").attr("business_country_code", "x")),
+            )
             .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
@@ -5642,7 +5658,10 @@ mod generated_tests {
             .attr("t", "1")
             .attr("edit", "x")
             .bytes(b"x")
-            .attr("business_country_code", "x")
+            .child(
+                Fixture::node("biz")
+                    .child(Fixture::node("pricing").attr("business_country_code", "x")),
+            )
             .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
@@ -5678,8 +5697,8 @@ mod generated_tests {
             .attr("class", "message")
             .attr("t", "1")
             .attr("edit", "x")
-            .bytes(b"x")
-            .bytes(b"x")
+            .child(Fixture::node("franking").child(Fixture::node("reporting_tag").bytes(b"x")))
+            .child(Fixture::node("rcat").bytes(b"x"))
             .build();
         let node = parse(&stanza);
         let derived = ParseNewsletterResponseSuccess::derive(&node);
@@ -5703,9 +5722,12 @@ mod generated_tests {
             .attr("server_id", "1")
             .attr("t", "1")
             .attr("edit", "x")
-            .bytes(b"x")
-            .attr("business_country_code", "x")
-            .bytes(b"x")
+            .child(
+                Fixture::node("biz")
+                    .child(Fixture::node("pricing").attr("business_country_code", "x")),
+            )
+            .child(Fixture::node("franking").child(Fixture::node("reporting_tag").bytes(b"x")))
+            .child(Fixture::node("rcat").bytes(b"x"))
             .build();
         let node = parse(&stanza);
         let derived = ParseNewsletterResponseSuccess::derive(&node);
@@ -5727,9 +5749,12 @@ mod generated_tests {
             .attr("server_id", "1")
             .attr("t", "1")
             .attr("edit", "x")
-            .bytes(b"x")
-            .attr("business_country_code", "x")
-            .bytes(b"x")
+            .child(
+                Fixture::node("biz")
+                    .child(Fixture::node("pricing").attr("business_country_code", "x")),
+            )
+            .child(Fixture::node("franking").child(Fixture::node("reporting_tag").bytes(b"x")))
+            .child(Fixture::node("rcat").bytes(b"x"))
             .build();
         let node = parse(&stanza);
         let derived = ParseNewsletterResponseSuccess::derive(&node).expect("derives");
@@ -5742,8 +5767,8 @@ mod generated_tests {
             .attr("class", "message")
             .attr("t", "1")
             .attr("edit", "x")
-            .bytes(b"x")
-            .bytes(b"x")
+            .child(Fixture::node("franking").child(Fixture::node("reporting_tag").bytes(b"x")))
+            .child(Fixture::node("rcat").bytes(b"x"))
             .build();
         let bare_node = parse(&bare);
         if let Ok(bare_derived) = ParseNewsletterResponseSuccess::derive(&bare_node) {
@@ -6098,9 +6123,12 @@ mod generated_tests {
     #[test]
     fn ack_paid_conversation_or_ack_paid_group_conversation_selects_ack_paid_conversation() {
         let stanza = Fixture::node("ack")
-            .attr("paid_convo_id", "x")
-            .attr("pricing_model", "CBP")
-            .attr("billable", "false")
+            .child(
+                Fixture::node("biz")
+                    .attr("paid_convo_id", "x")
+                    .attr("pricing_model", "CBP")
+                    .attr("billable", "false"),
+            )
             .build();
         let node = parse(&stanza);
         let derived = AckPaidConversationOrAckPaidGroupConversation::derive(&node);
@@ -6131,28 +6159,31 @@ mod generated_tests {
     fn ack_paid_conversation_or_ack_paid_group_conversation_selects_ack_paid_conversation_with_every_field()
      {
         let stanza = Fixture::node("ack")
-            .attr("paid_convo_id", "x")
-            .attr("pricing_model", "CBP")
-            .attr("billable", "false")
-            .attr("expiration_timestamp", "1")
-            .attr("pricing_category", "x")
-            .attr("pricing_type", "free_customer_service")
-            .child(Fixture::node("delivery_context").attr("optimization_goal", "delivery"))
             .child(
-                Fixture::node("origin").attr("type", "x").child(
-                    Fixture::node("referral")
-                        .attr("source_type", "x")
-                        .child(Fixture::node("source_url").bytes(b"x")),
-                ),
-            )
-            .child(
-                Fixture::node("pricing")
-                    .attr("consumer_country_code", "x")
-                    .attr("business_country_code", "x")
-                    .attr("conversation_status", "1")
-                    .attr("latest_c2b_timestamp", "1")
-                    .attr("analytics_conversation_id", "x")
-                    .attr("b2c_timestamp", "1"),
+                Fixture::node("biz")
+                    .attr("paid_convo_id", "x")
+                    .attr("pricing_model", "CBP")
+                    .attr("billable", "false")
+                    .attr("expiration_timestamp", "1")
+                    .attr("pricing_category", "x")
+                    .attr("pricing_type", "free_customer_service")
+                    .child(Fixture::node("delivery_context").attr("optimization_goal", "delivery"))
+                    .child(
+                        Fixture::node("origin").attr("type", "x").child(
+                            Fixture::node("referral")
+                                .attr("source_type", "x")
+                                .child(Fixture::node("source_url").bytes(b"x")),
+                        ),
+                    )
+                    .child(
+                        Fixture::node("pricing")
+                            .attr("consumer_country_code", "x")
+                            .attr("business_country_code", "x")
+                            .attr("conversation_status", "1")
+                            .attr("latest_c2b_timestamp", "1")
+                            .attr("analytics_conversation_id", "x")
+                            .attr("b2c_timestamp", "1"),
+                    ),
             )
             .build();
         let node = parse(&stanza);
@@ -6166,9 +6197,12 @@ mod generated_tests {
         // A derivation carrying optional fields does not mean the
         // same as one without them.
         let bare = Fixture::node("ack")
-            .attr("paid_convo_id", "x")
-            .attr("pricing_model", "CBP")
-            .attr("billable", "false")
+            .child(
+                Fixture::node("biz")
+                    .attr("paid_convo_id", "x")
+                    .attr("pricing_model", "CBP")
+                    .attr("billable", "false"),
+            )
             .build();
         let bare_node = parse(&bare);
         if let Some(lean) = AckPaidConversationOrAckPaidGroupConversation::maybe_derive(&bare_node)
@@ -6181,7 +6215,9 @@ mod generated_tests {
     /// `AckPaidGroupConversation`'s own fields.
     #[test]
     fn ack_paid_conversation_or_ack_paid_group_conversation_selects_ack_paid_group_conversation() {
-        let stanza = Fixture::node("ack").build();
+        let stanza = Fixture::node("ack")
+            .child(Fixture::node("biz").child(Fixture::node("pricing")))
+            .build();
         let node = parse(&stanza);
         let derived = AckPaidConversationOrAckPaidGroupConversation::derive(&node);
         assert!(
@@ -6211,7 +6247,10 @@ mod generated_tests {
     fn ack_paid_conversation_or_ack_paid_group_conversation_selects_ack_paid_group_conversation_with_every_field()
      {
         let stanza = Fixture::node("ack")
-            .attr("business_country_code", "x")
+            .child(
+                Fixture::node("biz")
+                    .child(Fixture::node("pricing").attr("business_country_code", "x")),
+            )
             .build();
         let node = parse(&stanza);
         let Some(full) = AckPaidConversationOrAckPaidGroupConversation::maybe_derive(&node) else {
@@ -6223,7 +6262,9 @@ mod generated_tests {
 
         // A derivation carrying optional fields does not mean the
         // same as one without them.
-        let bare = Fixture::node("ack").build();
+        let bare = Fixture::node("ack")
+            .child(Fixture::node("biz").child(Fixture::node("pricing")))
+            .build();
         let bare_node = parse(&bare);
         if let Some(lean) = AckPaidConversationOrAckPaidGroupConversation::maybe_derive(&bare_node)
         {
@@ -6231,33 +6272,32 @@ mod generated_tests {
         }
     }
 
-    /// `AckPaidConversationOrAckPaidGroupConversation` always derives: `AckPaidGroupConversation`
-    /// requires nothing, so it accepts any node the richer
-    /// alternatives turned down.
-    ///
-    /// Not a defect — the spec declares a variant with no fields of
-    /// its own — but it means this group can never report that a
-    /// stanza matched none of its alternatives.
+    /// A node satisfying no `AckPaidConversationOrAckPaidGroupConversation` alternative yields none.
     #[test]
-    fn ack_paid_conversation_or_ack_paid_group_conversation_falls_back_to_ack_paid_group_conversation()
-     {
+    fn ack_paid_conversation_or_ack_paid_group_conversation_matches_nothing_when_no_variant_fits() {
         let stanza = Fixture::node("nothing-here").build();
         let node = parse(&stanza);
-        assert!(matches!(
-            AckPaidConversationOrAckPaidGroupConversation::maybe_derive(&node),
-            Some(AckPaidConversationOrAckPaidGroupConversation::AckPaidGroupConversation(_))
-        ));
+        assert!(AckPaidConversationOrAckPaidGroupConversation::maybe_derive(&node).is_none());
+        assert_eq!(
+            AckPaidConversationOrAckPaidGroupConversation::derive(&node),
+            Err(DeriveError::UnknownStanza)
+        );
     }
 
     /// Two different `AckPaidConversationOrAckPaidGroupConversation` alternatives never mean the same.
     #[test]
     fn ack_paid_conversation_or_ack_paid_group_conversation_alternatives_are_not_interchangeable() {
         let a = Fixture::node("ack")
-            .attr("paid_convo_id", "x")
-            .attr("pricing_model", "CBP")
-            .attr("billable", "false")
+            .child(
+                Fixture::node("biz")
+                    .attr("paid_convo_id", "x")
+                    .attr("pricing_model", "CBP")
+                    .attr("billable", "false"),
+            )
             .build();
-        let b = Fixture::node("ack").build();
+        let b = Fixture::node("ack")
+            .child(Fixture::node("biz").child(Fixture::node("pricing")))
+            .build();
         let (na, nb) = (parse(&a), parse(&b));
         let (Some(x), Some(y)) = (
             AckPaidConversationOrAckPaidGroupConversation::maybe_derive(&na),
@@ -6283,7 +6323,7 @@ mod generated_tests {
             .attr("response_server_id", "x")
             .attr("t", "1")
             .attr("edit", "x")
-            .bytes(b"x")
+            .child(Fixture::node("franking").child(Fixture::node("reporting_tag").bytes(b"x")))
             .build();
         let node = parse(&stanza);
         let derived = NewsletterQuestionResponseAckOrNewsletterMessageAck::derive(&node);
@@ -6319,8 +6359,11 @@ mod generated_tests {
             .attr("response_server_id", "x")
             .attr("t", "1")
             .attr("edit", "x")
-            .bytes(b"x")
-            .attr("business_country_code", "x")
+            .child(
+                Fixture::node("biz")
+                    .child(Fixture::node("pricing").attr("business_country_code", "x")),
+            )
+            .child(Fixture::node("franking").child(Fixture::node("reporting_tag").bytes(b"x")))
             .build();
         let node = parse(&stanza);
         let Some(full) = NewsletterQuestionResponseAckOrNewsletterMessageAck::maybe_derive(&node)
@@ -6338,7 +6381,7 @@ mod generated_tests {
             .attr("response_server_id", "x")
             .attr("t", "1")
             .attr("edit", "x")
-            .bytes(b"x")
+            .child(Fixture::node("franking").child(Fixture::node("reporting_tag").bytes(b"x")))
             .build();
         let bare_node = parse(&bare);
         if let Some(lean) =
@@ -6356,8 +6399,8 @@ mod generated_tests {
             .attr("class", "message")
             .attr("t", "1")
             .attr("edit", "x")
-            .bytes(b"x")
-            .bytes(b"x")
+            .child(Fixture::node("franking").child(Fixture::node("reporting_tag").bytes(b"x")))
+            .child(Fixture::node("rcat").bytes(b"x"))
             .build();
         let node = parse(&stanza);
         let derived = NewsletterQuestionResponseAckOrNewsletterMessageAck::derive(&node);
@@ -6393,9 +6436,12 @@ mod generated_tests {
             .attr("server_id", "1")
             .attr("t", "1")
             .attr("edit", "x")
-            .bytes(b"x")
-            .attr("business_country_code", "x")
-            .bytes(b"x")
+            .child(
+                Fixture::node("biz")
+                    .child(Fixture::node("pricing").attr("business_country_code", "x")),
+            )
+            .child(Fixture::node("franking").child(Fixture::node("reporting_tag").bytes(b"x")))
+            .child(Fixture::node("rcat").bytes(b"x"))
             .build();
         let node = parse(&stanza);
         let Some(full) = NewsletterQuestionResponseAckOrNewsletterMessageAck::maybe_derive(&node)
@@ -6412,8 +6458,8 @@ mod generated_tests {
             .attr("class", "message")
             .attr("t", "1")
             .attr("edit", "x")
-            .bytes(b"x")
-            .bytes(b"x")
+            .child(Fixture::node("franking").child(Fixture::node("reporting_tag").bytes(b"x")))
+            .child(Fixture::node("rcat").bytes(b"x"))
             .build();
         let bare_node = parse(&bare);
         if let Some(lean) =
@@ -6445,14 +6491,14 @@ mod generated_tests {
             .attr("response_server_id", "x")
             .attr("t", "1")
             .attr("edit", "x")
-            .bytes(b"x")
+            .child(Fixture::node("franking").child(Fixture::node("reporting_tag").bytes(b"x")))
             .build();
         let b = Fixture::node("ack")
             .attr("class", "message")
             .attr("t", "1")
             .attr("edit", "x")
-            .bytes(b"x")
-            .bytes(b"x")
+            .child(Fixture::node("franking").child(Fixture::node("reporting_tag").bytes(b"x")))
+            .child(Fixture::node("rcat").bytes(b"x"))
             .build();
         let (na, nb) = (parse(&a), parse(&b));
         let (Some(x), Some(y)) = (
