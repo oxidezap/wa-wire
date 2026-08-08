@@ -5,6 +5,7 @@ members = [
     "crates/wa-wire-codec",
     "crates/wa-wire-conformance",
     "crates/wa-wire-contract",
+    "crates/wa-wire-example-consumer",
     "crates/wa-wire-l1",
 ]
 

@@ -346,3 +346,80 @@ fn the_corpus_covers_the_tags_the_derivation_models() {
          mostly vacuous"
     );
 }
+
+// --- the consumer -----------------------------------------------------------
+
+/// One consumer, both engines, no branch on which.
+///
+/// `wa-wire-example-consumer` depends on the contract, the codec and the
+/// derivation — and on no engine at all. It cannot tell which of these
+/// recordings it is reading, because there is nothing in its dependency graph
+/// that could tell it.
+///
+/// This is the claim the project is for. Everything else — the envelope format,
+/// the adapters, the conformance suite — exists so that this function can be
+/// written once and produce the same answer twice.
+fn tally(envelopes: &[Vec<u8>]) -> wa_wire_example_consumer::Tally {
+    let mut tally = wa_wire_example_consumer::Tally::default();
+    for envelope in envelopes {
+        tally.accept(envelope, table());
+    }
+    tally
+}
+
+#[test]
+fn one_consumer_reads_both_engines_to_the_same_answer() {
+    let ours = tally(&whatsapp_rust_envelopes());
+    let theirs = tally(&zapo_envelopes());
+
+    assert_eq!(
+        ours, theirs,
+        "the same consumer code produced different answers from the two engines"
+    );
+}
+
+#[test]
+fn the_consumer_actually_did_something() {
+    // `Tally::default() == Tally::default()`, so the assertion above would hold
+    // over two empty runs. It has to be reading real stanzas for the equality
+    // to mean anything.
+    let tally = tally(&whatsapp_rust_envelopes());
+
+    assert_eq!(
+        tally.stanzas,
+        corpus().len(),
+        "every corpus stanza reached the consumer"
+    );
+    assert!(tally.derived >= 8, "and most of them derived an event");
+    assert_eq!(
+        tally.inbound, tally.stanzas,
+        "the corpus is inbound traffic"
+    );
+    // Two kinds, not one repeated. It is only two because the corpus's
+    // `<message>` and `<call>` stanzas match no shape the derivation models —
+    // worth knowing about the corpus, and not something this test can fix.
+    assert_eq!(
+        tally.by_tag.keys().copied().collect::<Vec<_>>(),
+        ["ack", "receipt"],
+        "the derivation covers these; a change here is a change in coverage"
+    );
+    assert!(
+        !tally.ids.is_empty(),
+        "and the consumer read attributes off them"
+    );
+}
+
+#[test]
+fn swapping_the_engine_is_not_swapping_the_bytes() {
+    // The equality above would be trivial if both engines handed over identical
+    // envelopes. They do not: the declared frame origin differs on every
+    // stanza, because one engine forwards the buffer it decoded and the other
+    // rebuilt it. The consumer is reading genuinely different input and
+    // reaching the same conclusion.
+    let ours = whatsapp_rust_envelopes();
+    let theirs = zapo_envelopes();
+    assert!(
+        ours.iter().zip(&theirs).all(|(a, b)| a != b),
+        "every envelope should differ in what it declares"
+    );
+}

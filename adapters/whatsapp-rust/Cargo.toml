@@ -36,6 +36,7 @@ wa-wire-codec = { path = "../../crates/wa-wire-codec", features = ["bundled-toke
 # only place that has one of them plus a way to read the other's recording.
 wa-wire-conformance = { path = "../../crates/wa-wire-conformance" }
 wa-wire-contract = { path = "../../crates/wa-wire-contract" }
+wa-wire-example-consumer = { path = "../../crates/wa-wire-example-consumer" }
 wa-wire-l1 = { path = "../../crates/wa-wire-l1" }
 whatsapp-rust-tokio-transport = { path = "../../../whatsapp-rust/transports/tokio-transport" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }

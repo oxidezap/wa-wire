@@ -31,6 +31,15 @@ name = "wa-wire-contract"
 version = "0.1.0"
 
 [[package]]
+name = "wa-wire-example-consumer"
+version = "0.1.0"
+dependencies = [
+ "wa-wire-codec",
+ "wa-wire-contract",
+ "wa-wire-l1",
+]
+
+[[package]]
 name = "wa-wire-l1"
 version = "0.1.0"
 dependencies = [

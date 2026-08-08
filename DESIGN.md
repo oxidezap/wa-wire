@@ -1463,10 +1463,33 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-058 | Capture takes its endpoint as configuration and knows nothing about the server | A tool that names one server becomes a dependency on it. An endpoint, an optional pairing hook and a TLS-verification feature cover a local test server and a real one with the same code | 16 |
 | D-059 | Captured frames are not scrubbed | A scrubber that misses a field is worse than none, because it invites trusting the output. Capture from a test account and review what gets committed | 16 |
 | D-060 | Encoder divergences are listed by name, not counted | A count going up says nothing about whether the new difference is a valid encoding choice or one engine being wrong. A named list makes each one a reviewed decision | 16 |
+| D-061 | The example consumer's dependency graph is enforced by a test | "Swap the engine and the consumer does not change" erodes with one convenience dependency, and nothing would fail to say so. The test is what says so | 17 |
 
 ---
 
 ## Changelog
+
+### rev 17 — 2026-08-07
+
+- **The thesis is now a passing test.** `wa-wire-example-consumer` is a consumer
+  written once and run against both engines, and
+  `one_consumer_reads_both_engines_to_the_same_answer` shows the same code
+  reaching the same answer from each. Until now the project had a contract, a
+  codec, a derivation, two adapters and a conformance suite — and not one line
+  showing anybody *using* them.
+- **What makes it hold is the absence** (D-061): the consumer depends on
+  `wa-wire-contract`, `wa-wire-codec` and `wa-wire-l1`, and on no engine,
+  runtime, transport or async. Code that cannot name an engine cannot be coupled
+  to one. Two tests enforce that graph rather than trusting it, because one
+  convenience dependency would end it silently.
+- **The equality is not vacuous**, and the tests say why: every corpus stanza
+  reaches the consumer, most derive an event, and the two engines' envelopes
+  differ on every single stanza — one declares the frame verbatim, the other
+  re-encoded. Different input, same conclusion.
+- **A coverage gap it surfaced**: the corpus's `<message>` and `<call>` stanzas
+  match no shape the derivation models, so only `ack` and `receipt` derive. That
+  is now asserted explicitly, so a change in derivation coverage shows up rather
+  than passing unnoticed.
 
 ### rev 16 — 2026-08-07
 

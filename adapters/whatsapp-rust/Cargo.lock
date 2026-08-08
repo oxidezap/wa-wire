@@ -1870,6 +1870,7 @@ dependencies = [
  "wa-wire-codec",
  "wa-wire-conformance",
  "wa-wire-contract",
+ "wa-wire-example-consumer",
  "wa-wire-l1",
  "whatsapp-rust",
  "whatsapp-rust-tokio-transport",
@@ -1892,6 +1893,15 @@ dependencies = [
 [[package]]
 name = "wa-wire-contract"
 version = "0.1.0"
+
+[[package]]
+name = "wa-wire-example-consumer"
+version = "0.1.0"
+dependencies = [
+ "wa-wire-codec",
+ "wa-wire-contract",
+ "wa-wire-l1",
+]
 
 [[package]]
 name = "wa-wire-l1"
