@@ -9,7 +9,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 38
+> **Last revised:** rev 39
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1982,6 +1982,26 @@ Portability is enforced too: the contract builds with no allocator and for
 
 ## Changelog
 
+### rev 39 — 2026-08-08
+
+- **Rev 38 claimed a defect in the shared design, and there was none.** Writing
+  the Go joiner, the lookahead did not count stanzas that crossed straight
+  through, so a receive path carrying nothing but acks would have held a
+  message for ever. I fixed it and wrote that the third implementation had
+  exposed a flaw the other two would share.
+  - It had not. Both age their pending stanzas *before* deciding whether the
+    new one is holdable — the TypeScript one says so in as many words — and
+    both have a test that ages with `<receipt>` stanzas, which is precisely the
+    case, so either would have failed had it been wrong.
+  - The defect was mine, in the new implementation, and my own test caught it.
+    That test caught it because it was written in the shape of the Rust one:
+    the value came from copying an existing test's design, not from a third
+    implementation revealing anything.
+  - Left as a correction rather than deleted, because the claim sent a reader
+    to audit two adapters that are fine, and credited an exercise with a
+    finding it did not make. A third implementation is worth having for the
+    reasons in D-121; this was not one of them.
+
 ### rev 38 — 2026-08-08
 
 - **The third engine, and the first the core cannot reach.** `whatsapp-rust`
@@ -2001,10 +2021,9 @@ Portability is enforced too: the contract builds with no allocator and for
   `hypermeow` reports the child index directly and nothing is inferred. The
   hook was written against that need, which is the advantage of contributing
   the observation point rather than working around one.
-- **A defect the third implementation exposed in the shared design.** The
-  lookahead counts later stanzas, and the first cut only counted the ones it
-  held: a receive path carrying nothing but acks would have held a message for
-  ever. Worth checking in the other two.
+- **A defect in the third implementation, corrected in rev 39.** The claim
+  first written here — that it exposed something in the shared design — was
+  wrong; see rev 39.
 - **D-022 turned out not to be needed** (D-122). The adapter was set aside as
   an MPL-2.0 subdirectory on the expectation of carrying patched `whatsmeow`
   files; it carries none, since the hooks went upstream where they are MPL-2.0
