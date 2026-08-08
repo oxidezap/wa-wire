@@ -144,8 +144,6 @@ impl SpamNewsletterReportRequest<'_> {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct BroadcastMessageRPCMeta<'a> {
-    /// `metering_type`, a `string` attribute.
-    pub metering_type: Value<'a>,
     /// The node this was derived from, for fields the shape does
     /// not model yet.
     pub node: NodeRef<'a>,
@@ -158,10 +156,10 @@ impl<'a> BroadcastMessageRPCMeta<'a> {
     ///
     /// When a field the builder always writes is absent.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
-        Ok(Self {
-            metering_type: extract::attr_string(node, "metering_type")?,
-            node: *node,
-        })
+        if !node.attr_eq("metering_type", "smb_mm") {
+            return Err(DeriveError::NoMatchingShape { tag: "meta" });
+        }
+        Ok(Self { node: *node })
     }
 }
 
@@ -171,8 +169,8 @@ impl BroadcastMessageRPCMeta<'_> {
     /// The originating node is excluded: two engines may encode one
     /// stanza differently and both be right.
     #[must_use]
-    pub fn semantic_eq(&self, other: &BroadcastMessageRPCMeta<'_>) -> bool {
-        self.metering_type.semantic_eq(other.metering_type)
+    pub fn semantic_eq(&self, _other: &BroadcastMessageRPCMeta<'_>) -> bool {
+        true
     }
 }
 
@@ -216,10 +214,6 @@ impl BroadcastMessageRPCBizInteractiveNativeFlow<'_> {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct BroadcastMessageRPCBizInteractive<'a> {
-    /// `type`, a `string` attribute.
-    pub r#type: Value<'a>,
-    /// `v`, a `string` attribute.
-    pub v: Value<'a>,
     /// The `<native_flow>` child.
     pub native_flow: alloc::boxed::Box<BroadcastMessageRPCBizInteractiveNativeFlow<'a>>,
     /// The node this was derived from, for fields the shape does
@@ -234,9 +228,13 @@ impl<'a> BroadcastMessageRPCBizInteractive<'a> {
     ///
     /// When a field the builder always writes is absent.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        if !node.attr_eq("type", "native_flow") {
+            return Err(DeriveError::NoMatchingShape { tag: "interactive" });
+        }
+        if !node.attr_eq("v", "1") {
+            return Err(DeriveError::NoMatchingShape { tag: "interactive" });
+        }
         Ok(Self {
-            r#type: extract::attr_string(node, "type")?,
-            v: extract::attr_string(node, "v")?,
             native_flow: alloc::boxed::Box::new(
                 BroadcastMessageRPCBizInteractiveNativeFlow::derive(&extract::child(
                     node,
@@ -255,9 +253,7 @@ impl BroadcastMessageRPCBizInteractive<'_> {
     /// stanza differently and both be right.
     #[must_use]
     pub fn semantic_eq(&self, other: &BroadcastMessageRPCBizInteractive<'_>) -> bool {
-        (self.r#type.semantic_eq(other.r#type))
-            && (self.v.semantic_eq(other.v))
-            && (self.native_flow.semantic_eq(&other.native_flow))
+        self.native_flow.semantic_eq(&other.native_flow)
     }
 }
 
@@ -339,10 +335,6 @@ impl BroadcastMessageRPCInteractiveNativeFlow<'_> {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct BroadcastMessageRPCInteractive<'a> {
-    /// `type`, a `string` attribute.
-    pub r#type: Value<'a>,
-    /// `v`, a `string` attribute.
-    pub v: Value<'a>,
     /// The `<native_flow>` child.
     pub native_flow: alloc::boxed::Box<BroadcastMessageRPCInteractiveNativeFlow<'a>>,
     /// The node this was derived from, for fields the shape does
@@ -357,9 +349,13 @@ impl<'a> BroadcastMessageRPCInteractive<'a> {
     ///
     /// When a field the builder always writes is absent.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        if !node.attr_eq("type", "native_flow") {
+            return Err(DeriveError::NoMatchingShape { tag: "interactive" });
+        }
+        if !node.attr_eq("v", "1") {
+            return Err(DeriveError::NoMatchingShape { tag: "interactive" });
+        }
         Ok(Self {
-            r#type: extract::attr_string(node, "type")?,
-            v: extract::attr_string(node, "v")?,
             native_flow: alloc::boxed::Box::new(BroadcastMessageRPCInteractiveNativeFlow::derive(
                 &extract::child(node, "native_flow")?,
             )?),
@@ -375,9 +371,7 @@ impl BroadcastMessageRPCInteractive<'_> {
     /// stanza differently and both be right.
     #[must_use]
     pub fn semantic_eq(&self, other: &BroadcastMessageRPCInteractive<'_>) -> bool {
-        (self.r#type.semantic_eq(other.r#type))
-            && (self.v.semantic_eq(other.v))
-            && (self.native_flow.semantic_eq(&other.native_flow))
+        self.native_flow.semantic_eq(&other.native_flow)
     }
 }
 
@@ -666,8 +660,6 @@ impl GroupHistoryReportingTokenUtils2<'_> {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct ResendBroadcastMsgMeta<'a> {
-    /// `metering_type`, a `string` attribute.
-    pub metering_type: Value<'a>,
     /// The node this was derived from, for fields the shape does
     /// not model yet.
     pub node: NodeRef<'a>,
@@ -680,10 +672,10 @@ impl<'a> ResendBroadcastMsgMeta<'a> {
     ///
     /// When a field the builder always writes is absent.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
-        Ok(Self {
-            metering_type: extract::attr_string(node, "metering_type")?,
-            node: *node,
-        })
+        if !node.attr_eq("metering_type", "smb_mm") {
+            return Err(DeriveError::NoMatchingShape { tag: "meta" });
+        }
+        Ok(Self { node: *node })
     }
 }
 
@@ -693,8 +685,8 @@ impl ResendBroadcastMsgMeta<'_> {
     /// The originating node is excluded: two engines may encode one
     /// stanza differently and both be right.
     #[must_use]
-    pub fn semantic_eq(&self, other: &ResendBroadcastMsgMeta<'_>) -> bool {
-        self.metering_type.semantic_eq(other.metering_type)
+    pub fn semantic_eq(&self, _other: &ResendBroadcastMsgMeta<'_>) -> bool {
+        true
     }
 }
 
@@ -947,8 +939,6 @@ impl SendGroupSkmsgJobBizInteractiveNativeFlow<'_> {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct SendGroupSkmsgJobBizInteractive<'a> {
-    /// `type`, a `string` attribute.
-    pub r#type: Value<'a>,
     /// The `<native_flow>` child.
     pub native_flow: alloc::boxed::Box<SendGroupSkmsgJobBizInteractiveNativeFlow<'a>>,
     /// The node this was derived from, for fields the shape does
@@ -966,8 +956,10 @@ impl<'a> SendGroupSkmsgJobBizInteractive<'a> {
         if !node.attr_eq("v", "1") {
             return Err(DeriveError::NoMatchingShape { tag: "interactive" });
         }
+        if !node.attr_eq("type", "native_flow") {
+            return Err(DeriveError::NoMatchingShape { tag: "interactive" });
+        }
         Ok(Self {
-            r#type: extract::attr_string(node, "type")?,
             native_flow: alloc::boxed::Box::new(SendGroupSkmsgJobBizInteractiveNativeFlow::derive(
                 &extract::child(node, "native_flow")?,
             )?),
@@ -983,8 +975,7 @@ impl SendGroupSkmsgJobBizInteractive<'_> {
     /// stanza differently and both be right.
     #[must_use]
     pub fn semantic_eq(&self, other: &SendGroupSkmsgJobBizInteractive<'_>) -> bool {
-        (self.r#type.semantic_eq(other.r#type))
-            && (self.native_flow.semantic_eq(&other.native_flow))
+        self.native_flow.semantic_eq(&other.native_flow)
     }
 }
 
@@ -4759,6 +4750,45 @@ impl HandleVoipCallReceipt<'_> {
     }
 }
 
+/// Derived from whatspec's `WAWebHandleVoipOfferNotice` builder.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct HandleVoipOfferNotice<'a> {
+    /// `to`, a `user_jid` attribute.
+    pub to: Jid<'a>,
+    /// `id`, a `string` attribute.
+    pub id: Value<'a>,
+    /// The node this was derived from, for fields the shape does
+    /// not model yet.
+    pub node: NodeRef<'a>,
+}
+
+impl<'a> HandleVoipOfferNotice<'a> {
+    /// Derive from a node already known to match this shape.
+    ///
+    /// # Errors
+    ///
+    /// When a field the builder always writes is absent.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Ok(Self {
+            to: extract::attr_user_jid(node, "to")?,
+            id: extract::attr_string(node, "id")?,
+            node: *node,
+        })
+    }
+}
+
+impl HandleVoipOfferNotice<'_> {
+    /// Whether two derivations mean the same thing.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &HandleVoipOfferNotice<'_>) -> bool {
+        (self.to.semantic_eq(other.to)) && (self.id.semantic_eq(other.id))
+    }
+}
+
 /// Derived from whatspec's `WAWebHandleWaChat` builder.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -5673,8 +5703,6 @@ impl StatusPublishPostNewsletterStatusRequest<'_> {
 pub struct QueryPrivacyDisallowedListPnJobList<'a> {
     /// `name`, a `string` attribute.
     pub name: Value<'a>,
-    /// `value`, a `string` attribute.
-    pub value: Value<'a>,
     /// The node this was derived from, for fields the shape does
     /// not model yet.
     pub node: NodeRef<'a>,
@@ -5687,9 +5715,11 @@ impl<'a> QueryPrivacyDisallowedListPnJobList<'a> {
     ///
     /// When a field the builder always writes is absent.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        if !node.attr_eq("value", "contact_blacklist") {
+            return Err(DeriveError::NoMatchingShape { tag: "list" });
+        }
         Ok(Self {
             name: extract::attr_string(node, "name")?,
-            value: extract::attr_string(node, "value")?,
             node: *node,
         })
     }
@@ -5702,7 +5732,7 @@ impl QueryPrivacyDisallowedListPnJobList<'_> {
     /// stanza differently and both be right.
     #[must_use]
     pub fn semantic_eq(&self, other: &QueryPrivacyDisallowedListPnJobList<'_>) -> bool {
-        (self.name.semantic_eq(other.name)) && (self.value.semantic_eq(other.value))
+        self.name.semantic_eq(other.name)
     }
 }
 
@@ -5869,8 +5899,6 @@ impl SetPrivacyJob2Category<'_> {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct SetPrivacyJob2<'a> {
-    /// `addressing_mode`, a `string` attribute.
-    pub addressing_mode: Value<'a>,
     /// The `<category>` child.
     pub category: alloc::boxed::Box<SetPrivacyJob2Category<'a>>,
     /// The node this was derived from, for fields the shape does
@@ -5886,7 +5914,6 @@ impl<'a> SetPrivacyJob2<'a> {
     /// When a field the builder always writes is absent.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
         Ok(Self {
-            addressing_mode: extract::attr_string(node, "addressing_mode")?,
             category: alloc::boxed::Box::new(SetPrivacyJob2Category::derive(&extract::child(
                 node, "category",
             )?)?),
@@ -5902,8 +5929,7 @@ impl SetPrivacyJob2<'_> {
     /// stanza differently and both be right.
     #[must_use]
     pub fn semantic_eq(&self, other: &SetPrivacyJob2<'_>) -> bool {
-        (self.addressing_mode.semantic_eq(other.addressing_mode))
-            && (self.category.semantic_eq(&other.category))
+        self.category.semantic_eq(&other.category)
     }
 }
 
@@ -11048,8 +11074,6 @@ impl PrivacyGetContactBlacklistRequest<'_> {
 pub struct QueryPrivacyDisallowedListPnJob2PrivacyList<'a> {
     /// `name`, a `string` attribute.
     pub name: Value<'a>,
-    /// `value`, a `string` attribute.
-    pub value: Value<'a>,
     /// The node this was derived from, for fields the shape does
     /// not model yet.
     pub node: NodeRef<'a>,
@@ -11062,9 +11086,11 @@ impl<'a> QueryPrivacyDisallowedListPnJob2PrivacyList<'a> {
     ///
     /// When a field the builder always writes is absent.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        if !node.attr_eq("value", "contact_blacklist") {
+            return Err(DeriveError::NoMatchingShape { tag: "list" });
+        }
         Ok(Self {
             name: extract::attr_string(node, "name")?,
-            value: extract::attr_string(node, "value")?,
             node: *node,
         })
     }
@@ -11077,7 +11103,7 @@ impl QueryPrivacyDisallowedListPnJob2PrivacyList<'_> {
     /// stanza differently and both be right.
     #[must_use]
     pub fn semantic_eq(&self, other: &QueryPrivacyDisallowedListPnJob2PrivacyList<'_>) -> bool {
-        (self.name.semantic_eq(other.name)) && (self.value.semantic_eq(other.value))
+        self.name.semantic_eq(other.name)
     }
 }
 
@@ -23949,6 +23975,8 @@ pub enum OutgoingEvent<'a> {
     HandleVoipCall2(HandleVoipCall2<'a>),
     /// `HandleVoipCallReceipt`.
     HandleVoipCallReceipt(HandleVoipCallReceipt<'a>),
+    /// `HandleVoipOfferNotice`.
+    HandleVoipOfferNotice(HandleVoipOfferNotice<'a>),
     /// `HandleWaChat`.
     HandleWaChat(HandleWaChat<'a>),
     /// `OfflineResumePreAckHandler`.
@@ -24323,6 +24351,7 @@ impl OutgoingEvent<'_> {
             Self::HandleServerSyncNotification(_) => "ack",
             Self::HandleVoipCall2(_) => "ack",
             Self::HandleVoipCallReceipt(_) => "ack",
+            Self::HandleVoipOfferNotice(_) => "ack",
             Self::HandleWaChat(_) => "ack",
             Self::OfflineResumePreAckHandler(_) => "ack",
             Self::PaymentNotificationHandler(_) => "ack",
@@ -24550,6 +24579,7 @@ impl OutgoingEvent<'_> {
             Self::HandleServerSyncNotification(_) => "HandleServerSyncNotification",
             Self::HandleVoipCall2(_) => "HandleVoipCall2",
             Self::HandleVoipCallReceipt(_) => "HandleVoipCallReceipt",
+            Self::HandleVoipOfferNotice(_) => "HandleVoipOfferNotice",
             Self::HandleWaChat(_) => "HandleWaChat",
             Self::OfflineResumePreAckHandler(_) => "OfflineResumePreAckHandler",
             Self::PaymentNotificationHandler(_) => "PaymentNotificationHandler",
@@ -24944,6 +24974,9 @@ impl OutgoingEvent<'_> {
                 a.semantic_eq(b)
             }
             (OutgoingEvent::HandleVoipCallReceipt(a), OutgoingEvent::HandleVoipCallReceipt(b)) => {
+                a.semantic_eq(b)
+            }
+            (OutgoingEvent::HandleVoipOfferNotice(a), OutgoingEvent::HandleVoipOfferNotice(b)) => {
                 a.semantic_eq(b)
             }
             (OutgoingEvent::HandleWaChat(a), OutgoingEvent::HandleWaChat(b)) => a.semantic_eq(b),
@@ -25578,6 +25611,13 @@ pub fn derive_outgoing<'a>(node: &NodeRef<'a>) -> Result<OutgoingEvent<'a>, Deri
         {
             return Ok(OutgoingEvent::HandleProfilePicNotification(inner));
         }
+        // guarded by class=call, type=offer_notice
+        if node.attr_eq("class", "call")
+            && node.attr_eq("type", "offer_notice")
+            && let Ok(inner) = HandleVoipOfferNotice::derive(node)
+        {
+            return Ok(OutgoingEvent::HandleVoipOfferNotice(inner));
+        }
         // guarded by class=notification, type=psa
         if node.attr_eq("class", "notification")
             && node.attr_eq("type", "psa")
@@ -25869,6 +25909,14 @@ pub fn derive_outgoing<'a>(node: &NodeRef<'a>) -> Result<OutgoingEvent<'a>, Deri
             && let Ok(inner) = GroupsUnlinkGroupsRequest::derive(node)
         {
             return Ok(OutgoingEvent::GroupsUnlinkGroupsRequest(inner));
+        }
+        // guarded by xmlns=privacy, type=get, to=s.whatsapp.net
+        if node.attr_eq("xmlns", "privacy")
+            && node.attr_eq("type", "get")
+            && node.attr_eq("to", "s.whatsapp.net")
+            && let Ok(inner) = QueryPrivacyDisallowedListPnJob2::derive(node)
+        {
+            return Ok(OutgoingEvent::QueryPrivacyDisallowedListPnJob2(inner));
         }
         // guarded by xmlns=tos, type=set, to=s.whatsapp.net
         if node.attr_eq("xmlns", "tos")
@@ -26202,14 +26250,6 @@ pub fn derive_outgoing<'a>(node: &NodeRef<'a>) -> Result<OutgoingEvent<'a>, Deri
             && let Ok(inner) = SpamStatusReportV2Request2::derive(node)
         {
             return Ok(OutgoingEvent::SpamStatusReportV2Request2(inner));
-        }
-        // guarded by xmlns=privacy, type=get, to=s.whatsapp.net
-        if node.attr_eq("xmlns", "privacy")
-            && node.attr_eq("type", "get")
-            && node.attr_eq("to", "s.whatsapp.net")
-            && let Ok(inner) = QueryPrivacyDisallowedListPnJob2::derive(node)
-        {
-            return Ok(OutgoingEvent::QueryPrivacyDisallowedListPnJob2(inner));
         }
         // guarded by xmlns=encrypt, type=get, to=s.whatsapp.net
         if node.attr_eq("xmlns", "encrypt")
@@ -26893,17 +26933,17 @@ pub fn derive_outgoing<'a>(node: &NodeRef<'a>) -> Result<OutgoingEvent<'a>, Deri
         }
     }
     if node.tag().eq_str("message") {
-        if let Ok(inner) = SendGroupSkmsgJob::derive(node) {
-            return Ok(OutgoingEvent::SendGroupSkmsgJob(inner));
-        }
-        if let Ok(inner) = SendMsgCreateFanoutStanza::derive(node) {
-            return Ok(OutgoingEvent::SendMsgCreateFanoutStanza(inner));
-        }
         if let Ok(inner) = BroadcastMessageRPC::derive(node) {
             return Ok(OutgoingEvent::BroadcastMessageRPC(inner));
         }
+        if let Ok(inner) = SendGroupSkmsgJob::derive(node) {
+            return Ok(OutgoingEvent::SendGroupSkmsgJob(inner));
+        }
         if let Ok(inner) = ResendBroadcastMsg::derive(node) {
             return Ok(OutgoingEvent::ResendBroadcastMsg(inner));
+        }
+        if let Ok(inner) = SendMsgCreateFanoutStanza::derive(node) {
+            return Ok(OutgoingEvent::SendMsgCreateFanoutStanza(inner));
         }
         if let Ok(inner) = SendMsgCreateDeviceStanza::derive(node) {
             return Ok(OutgoingEvent::SendMsgCreateDeviceStanza(inner));
@@ -26942,7 +26982,10 @@ pub fn derive_outgoing<'a>(node: &NodeRef<'a>) -> Result<OutgoingEvent<'a>, Deri
         }
     }
     if node.tag().eq_str("privacy") {
-        if let Ok(inner) = SetPrivacyJob2::derive(node) {
+        // guarded by addressing_mode=lid
+        if node.attr_eq("addressing_mode", "lid")
+            && let Ok(inner) = SetPrivacyJob2::derive(node)
+        {
             return Ok(OutgoingEvent::SetPrivacyJob2(inner));
         }
         if let Ok(inner) = QueryPrivacyDisallowedListPnJob::derive(node) {
@@ -27027,10 +27070,9 @@ pub const UNMODELLED_OUTGOING: [&str; 0] = [];
 ///
 /// Recomputed from the spec on every run, so a pair separates by itself
 /// the day whatspec records something that tells them apart.
-pub const MERGED_OUTGOING: [(&str, &str); 4] = [
+pub const MERGED_OUTGOING: [(&str, &str); 3] = [
     ("HandleGrowthNotification", "HandleBotProfileNotification"),
     ("HandleVoipCallReceipt", "ReceiptAck"),
-    ("HandleVoipOfferNotice", "HandleVoipCall2"),
     ("SendReceiptJobCommon2", "SendReceiptJobCommon3"),
 ];
 
@@ -27116,19 +27158,19 @@ mod outgoing_tests {
             .attr("to", "x")
             .attr("phash", "x")
             .attr("type", "x")
-            .child(Fixture::node("meta").attr("metering_type", "x"))
+            .child(Fixture::node("meta").attr("metering_type", "smb_mm"))
             .child(
                 Fixture::node("biz").child(
                     Fixture::node("interactive")
-                        .attr("type", "x")
-                        .attr("v", "x")
+                        .attr("type", "native_flow")
+                        .attr("v", "1")
                         .child(Fixture::node("native_flow").attr("name", "x")),
                 ),
             )
             .child(
                 Fixture::node("interactive")
-                    .attr("type", "x")
-                    .attr("v", "x")
+                    .attr("type", "native_flow")
+                    .attr("v", "1")
                     .child(Fixture::node("native_flow").attr("name", "x")),
             )
             .build()
@@ -27141,19 +27183,19 @@ mod outgoing_tests {
             .attr("to", "x")
             .attr("phash", "x")
             .attr("type", "x")
-            .child(Fixture::node("meta").attr("metering_type", "x"))
+            .child(Fixture::node("meta").attr("metering_type", "smb_mm"))
             .child(
                 Fixture::node("biz").child(
                     Fixture::node("interactive")
-                        .attr("type", "x")
-                        .attr("v", "x")
+                        .attr("type", "native_flow")
+                        .attr("v", "1")
                         .child(Fixture::node("native_flow").attr("name", "x")),
                 ),
             )
             .child(
                 Fixture::node("interactive")
-                    .attr("type", "x")
-                    .attr("v", "x")
+                    .attr("type", "native_flow")
+                    .attr("v", "1")
                     .child(Fixture::node("native_flow").attr("name", "x")),
             )
             .build()
@@ -27227,7 +27269,7 @@ mod outgoing_tests {
             .device_jid_attr("participant", "u", 1)
             .attr("type", "x")
             .attr("edit", "x")
-            .child(Fixture::node("meta").attr("metering_type", "x"))
+            .child(Fixture::node("meta").attr("metering_type", "smb_mm"))
             .child(
                 Fixture::node("enc")
                     .attr("v", "x")
@@ -27247,7 +27289,7 @@ mod outgoing_tests {
             .attr("type", "x")
             .attr("edit", "x")
             .attr("eph_setting", "x")
-            .child(Fixture::node("meta").attr("metering_type", "x"))
+            .child(Fixture::node("meta").attr("metering_type", "smb_mm"))
             .child(
                 Fixture::node("enc")
                     .attr("v", "x")
@@ -27293,7 +27335,7 @@ mod outgoing_tests {
                 Fixture::node("biz").child(
                     Fixture::node("interactive")
                         .attr("v", "1")
-                        .attr("type", "x")
+                        .attr("type", "native_flow")
                         .child(Fixture::node("native_flow").attr("name", "x")),
                 ),
             )
@@ -27322,7 +27364,7 @@ mod outgoing_tests {
                 Fixture::node("biz").child(
                     Fixture::node("interactive")
                         .attr("v", "1")
-                        .attr("type", "x")
+                        .attr("type", "native_flow")
                         .child(Fixture::node("native_flow").attr("name", "x")),
                 ),
             )
@@ -28819,6 +28861,37 @@ mod outgoing_tests {
             .to_vec()
     }
 
+    fn lean_handle_voip_offer_notice() -> Vec<u8> {
+        Fixture::node("ack")
+            .attr("class", "call")
+            .attr("type", "offer_notice")
+            .jid_attr("to", "u")
+            .attr("id", "x")
+            .build()
+            .bytes()
+            .to_vec()
+    }
+    fn full_handle_voip_offer_notice() -> Vec<u8> {
+        Fixture::node("ack")
+            .attr("class", "call")
+            .attr("type", "offer_notice")
+            .jid_attr("to", "u")
+            .attr("id", "x")
+            .build()
+            .bytes()
+            .to_vec()
+    }
+    fn wrong_pin_handle_voip_offer_notice() -> Vec<u8> {
+        Fixture::node("ack")
+            .attr("class", "call-not")
+            .attr("type", "offer_notice")
+            .jid_attr("to", "u")
+            .attr("id", "x")
+            .build()
+            .bytes()
+            .to_vec()
+    }
+
     fn lean_handle_wa_chat() -> Vec<u8> {
         Fixture::node("ack")
             .attr("class", "notification")
@@ -29133,14 +29206,22 @@ mod outgoing_tests {
 
     fn lean_query_privacy_disallowed_list_pn_job() -> Vec<u8> {
         Fixture::node("privacy")
-            .child(Fixture::node("list").attr("name", "x").attr("value", "x"))
+            .child(
+                Fixture::node("list")
+                    .attr("value", "contact_blacklist")
+                    .attr("name", "x"),
+            )
             .build()
             .bytes()
             .to_vec()
     }
     fn full_query_privacy_disallowed_list_pn_job() -> Vec<u8> {
         Fixture::node("privacy")
-            .child(Fixture::node("list").attr("name", "x").attr("value", "x"))
+            .child(
+                Fixture::node("list")
+                    .attr("value", "contact_blacklist")
+                    .attr("name", "x"),
+            )
             .build()
             .bytes()
             .to_vec()
@@ -29171,7 +29252,7 @@ mod outgoing_tests {
 
     fn lean_set_privacy_job2() -> Vec<u8> {
         Fixture::node("privacy")
-            .attr("addressing_mode", "x")
+            .attr("addressing_mode", "lid")
             .child(
                 Fixture::node("category")
                     .attr("name", "x")
@@ -29184,7 +29265,20 @@ mod outgoing_tests {
     }
     fn full_set_privacy_job2() -> Vec<u8> {
         Fixture::node("privacy")
-            .attr("addressing_mode", "x")
+            .attr("addressing_mode", "lid")
+            .child(
+                Fixture::node("category")
+                    .attr("name", "x")
+                    .attr("value", "x")
+                    .attr("dhash", "x"),
+            )
+            .build()
+            .bytes()
+            .to_vec()
+    }
+    fn wrong_pin_set_privacy_job2() -> Vec<u8> {
+        Fixture::node("privacy")
+            .attr("addressing_mode", "lid-not")
             .child(
                 Fixture::node("category")
                     .attr("name", "x")
@@ -30946,8 +31040,11 @@ mod outgoing_tests {
             .attr("type", "get")
             .attr("to", "s.whatsapp.net")
             .child(
-                Fixture::node("privacy")
-                    .child(Fixture::node("list").attr("name", "x").attr("value", "x")),
+                Fixture::node("privacy").child(
+                    Fixture::node("list")
+                        .attr("value", "contact_blacklist")
+                        .attr("name", "x"),
+                ),
             )
             .build()
             .bytes()
@@ -30959,8 +31056,11 @@ mod outgoing_tests {
             .attr("type", "get")
             .attr("to", "s.whatsapp.net")
             .child(
-                Fixture::node("privacy")
-                    .child(Fixture::node("list").attr("name", "x").attr("value", "x")),
+                Fixture::node("privacy").child(
+                    Fixture::node("list")
+                        .attr("value", "contact_blacklist")
+                        .attr("name", "x"),
+                ),
             )
             .build()
             .bytes()
@@ -30972,8 +31072,11 @@ mod outgoing_tests {
             .attr("type", "get")
             .attr("to", "s.whatsapp.net")
             .child(
-                Fixture::node("privacy")
-                    .child(Fixture::node("list").attr("name", "x").attr("value", "x")),
+                Fixture::node("privacy").child(
+                    Fixture::node("list")
+                        .attr("value", "contact_blacklist")
+                        .attr("name", "x"),
+                ),
             )
             .build()
             .bytes()
@@ -34938,7 +35041,7 @@ mod outgoing_tests {
             .to_vec()
     }
 
-    const CASES: [Case; 206] = [
+    const CASES: [Case; 207] = [
         Case {
             shape: "MessagePublishNewsletterRequest",
             lean: lean_message_publish_newsletter_request,
@@ -35258,6 +35361,12 @@ mod outgoing_tests {
             wrong_pin: Some(wrong_pin_handle_voip_call_receipt),
         },
         Case {
+            shape: "HandleVoipOfferNotice",
+            lean: lean_handle_voip_offer_notice,
+            full: full_handle_voip_offer_notice,
+            wrong_pin: Some(wrong_pin_handle_voip_offer_notice),
+        },
+        Case {
             shape: "HandleWaChat",
             lean: lean_handle_wa_chat,
             full: full_handle_wa_chat,
@@ -35351,7 +35460,7 @@ mod outgoing_tests {
             shape: "SetPrivacyJob2",
             lean: lean_set_privacy_job2,
             full: full_set_privacy_job2,
-            wrong_pin: None,
+            wrong_pin: Some(wrong_pin_set_privacy_job2),
         },
         Case {
             shape: "AbPropsGetExperimentConfigRequest",

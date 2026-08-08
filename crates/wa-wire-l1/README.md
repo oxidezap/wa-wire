@@ -143,9 +143,11 @@ attribute the other leaves out. Keeping both would be two types no stanza can
 choose between, so they are folded and `MERGED_OUTGOING` names the pairs.
 
 The fold is recomputed from the spec on every run, so a pair separates by itself
-the day whatspec records something that tells them apart — which is what
-[whatspec#43](https://github.com/oxidezap/whatspec/pull/43) does for one of
-them, having found a literal the extractor was dropping.
+the day whatspec records something that tells them apart. That has already
+happened once: [whatspec#43](https://github.com/oxidezap/whatspec/pull/43)
+stopped dropping the literal in `type: CUSTOM_STRING("offer_notice")`, and the
+two `<ack class="call">` builders came apart on the next spec refresh with no
+change here — four folds became three.
 
 `UNREACHABLE_OUTGOING` is empty and stays for the case the fold does not cover:
 a shape *strictly* subsumed by another is still a different shape, merging it

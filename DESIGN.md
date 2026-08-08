@@ -9,7 +9,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 34
+> **Last revised:** rev 35
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1964,6 +1964,18 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 35 — 2026-08-08
+
+- **The vendored spec was refreshed and a fold came undone by itself.**
+  [whatspec#43](https://github.com/oxidezap/whatspec/pull/43) merged, so
+  `type: CUSTOM_STRING("offer_notice")` is a pinned value rather than "a string
+  attribute", and the two `<ack class="call">` builders are two shapes again:
+  207 where there were 206, three folds where there were four.
+  - Nothing here changed to make that happen, which is what D-114 was for. The
+    generator recomputes the fold from the spec, so the answer tracks what the
+    spec can express rather than what it could express when someone last wrote
+    a list down.
 
 ### rev 34 — 2026-08-08
 
