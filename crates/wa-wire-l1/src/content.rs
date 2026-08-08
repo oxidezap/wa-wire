@@ -24,7 +24,7 @@
 //! - which kind of message is this, and
 //! - what does it say, when it says anything.
 //!
-//! A variant with no name here still crosses as [`MessageKind::Other`] with
+//! A variant with no name here still crosses as [`MessageKind::Unmodelled`] with
 //! its field number, for the same reason L0 is total: a protocol change must
 //! narrow what is understood, never what is delivered.
 

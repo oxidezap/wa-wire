@@ -29,7 +29,8 @@
 //! cargo test -p wa-wire-alloc-check
 //! ```
 
-#![cfg_attr(not(test), no_std)]
+// Not `no_std`, unlike everything it measures: installing a global allocator
+// is a `std` thing to do, and pretending otherwise only broke the doc build.
 
 #[cfg(test)]
 #[path = "lib_tests.rs"]
