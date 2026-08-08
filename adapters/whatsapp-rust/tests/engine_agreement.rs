@@ -187,44 +187,215 @@ fn table() -> wa_wire_codec::TokenTable<'static> {
     wa_wire_codec::tokens::TABLE
 }
 
-#[test]
-fn the_two_engines_derive_the_same_events_from_the_same_traffic() {
-    let ours = whatsapp_rust_envelopes();
-    let theirs = zapo_envelopes();
-    let names: Vec<_> = corpus().into_iter().map(|(name, _)| name).collect();
-    assert_eq!(
-        ours.len(),
-        theirs.len(),
-        "both engines must have seen the whole corpus; regenerate the recording"
-    );
+/// `hypermeow`'s declaration, as its own source states it.
+///
+/// Restated here rather than imported, for the same reason `zapo`'s is: a Go
+/// package cannot be linked into a Rust test. A mismatch shows up as the
+/// comparison refusing to run, not as this constant being wrong.
+const HYPERMEOW_INFO: AdapterInfo<'static> = AdapterInfo::new(
+    "hypermeow",
+    "0.1.0",
+    "0.0.0+frame-bytes-and-plaintext-hooks",
+    wa_wire_adapter::CapabilitySet::NONE
+        .with(wa_wire_adapter::Capability::L0InboundTap)
+        .with(wa_wire_adapter::Capability::L0InboundAuthPhase)
+        .with(wa_wire_adapter::Capability::L0Plaintext)
+        .with(wa_wire_adapter::Capability::ZeroCopyFrame),
+);
 
-    let ours_refs: Vec<&[u8]> = ours.iter().map(Vec::as_slice).collect();
-    let theirs_refs: Vec<&[u8]> = theirs.iter().map(Vec::as_slice).collect();
+/// Baileys' declaration, as its own source states it.
+const BAILEYS_INFO: AdapterInfo<'static> = AdapterInfo::new(
+    "baileys",
+    "0.1.0",
+    "7.0.0-rc14",
+    wa_wire_adapter::CapabilitySet::NONE
+        .with(wa_wire_adapter::Capability::L0InboundTap)
+        .with(wa_wire_adapter::Capability::L0InboundAuthPhase)
+        .with(wa_wire_adapter::Capability::L0Plaintext)
+        .with(wa_wire_adapter::Capability::ZeroCopyFrame),
+);
+
+/// The envelopes an out-of-process adapter wrote, one file each.
+///
+/// Files rather than a recording container: the container carries the claims a
+/// *gate* needs — which traffic, which adapter, whether the file is whole — and
+/// this test supplies all of them itself, building the recording around what it
+/// reads. `zapo` goes through a container only because it had one.
+fn replayed(adapter: &str, extension: &str) -> Vec<Vec<u8>> {
+    let dir = workspace(&format!("adapters/{adapter}/replay"));
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|error| {
+            panic!(
+                "{}: {error}\nrun the adapter's replay-corpus command",
+                dir.display()
+            )
+        })
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == extension))
+        .collect();
+    // Name order, which the replay wrote in corpus order.
+    paths.sort();
+    assert!(!paths.is_empty(), "{}: no envelopes", dir.display());
+
+    paths
+        .into_iter()
+        .map(|path| std::fs::read(&path).expect("an envelope reads"))
+        .collect()
+}
+
+/// What `whatsapp-rust`'s own encoder writes for each corpus stanza.
+///
+/// The adapter forwards verbatim, so its envelopes are the corpus bytes — and
+/// so are every other zero-copy engine's, which makes comparing those a
+/// comparison of nothing. Re-encoding is where four engines genuinely differ:
+/// each is entitled to write a value its own way, and the property under test
+/// is that all four still derive the same event.
+fn whatsapp_rust_reencoded() -> Vec<Vec<u8>> {
+    corpus()
+        .into_iter()
+        .map(|(name, frame)| {
+            let node = OwnedNodeRef::new(frame)
+                .unwrap_or_else(|error| panic!("{name}: the engine must decode it: {error}"));
+            let marshalled = whatsapp_rust::wacore_binary::marshal::marshal(&node.get().to_owned())
+                .unwrap_or_else(|error| panic!("{name}: the engine must re-encode it: {error}"));
+            // `marshal` writes the format byte the decoder strips.
+            RawStanza::inbound(&marshalled[1..])
+                .re_encoded()
+                .encode_to_vec()
+                .expect("envelope encodes")
+        })
+        .collect()
+}
+
+/// One engine's two streams over the corpus.
+///
+/// The **forwarded** one is what the adapter does in production; the
+/// **re-encoded** one is what its engine's encoder writes, and is the half
+/// where four independent implementations can actually differ.
+struct Replay {
+    info: AdapterInfo<'static>,
+    forwarded: Vec<Vec<u8>>,
+    reencoded: Vec<Vec<u8>>,
+}
+
+/// Every engine, and what it produced from the corpus.
+fn every_engine() -> Vec<Replay> {
+    vec![
+        Replay {
+            info: INFO,
+            forwarded: whatsapp_rust_envelopes(),
+            reencoded: whatsapp_rust_reencoded(),
+        },
+        Replay {
+            info: ZAPO_INFO,
+            // `zapo`'s filter hands it a node rather than a buffer, so what it
+            // forwards *is* its re-encoding. One stream, used as both.
+            forwarded: zapo_envelopes(),
+            reencoded: zapo_envelopes(),
+        },
+        Replay {
+            info: HYPERMEOW_INFO,
+            forwarded: replayed("hypermeow", "envelope"),
+            reencoded: replayed("hypermeow", "reencoded"),
+        },
+        Replay {
+            info: BAILEYS_INFO,
+            forwarded: replayed("baileys", "envelope"),
+            reencoded: replayed("baileys", "reencoded"),
+        },
+    ]
+}
+
+/// The property the project rests on, across every engine there is.
+///
+/// > Given the same traffic, every conforming engine must produce the same L1.
+///
+/// Pairwise rather than each against a reference. Agreement ought to be
+/// transitive, and a pair is what a report can name: "these two disagreed" is
+/// actionable where "someone disagreed with the reference" is a second
+/// investigation.
+///
+/// Four independent implementations reading one input find bugs no single
+/// implementation's tests can, because a bug and its test are usually written
+/// by the same person on the same afternoon. Two agreeing can be wrong the same
+/// way; four is the number the definition of done asks for.
+///
+/// # What this compares, and what it would not have
+///
+/// The **re-encoded** stream, not the forwarded one. Three of the four adapters
+/// are zero-copy and forward the corpus bytes untouched, so comparing what they
+/// forward compares nothing — three identical byte streams agree by
+/// construction, and the run would be green while proving only that a copy is a
+/// copy.
+///
+/// Re-encoding is where the engines are actually four. Each is entitled to
+/// write a value its own way, and they do: `hypermeow` and Baileys disagree on
+/// the bytes for five of the corpus stanzas. That the derivation still matches
+/// across all six pairs is the property, and it is only a property because the
+/// bytes differ.
+#[test]
+fn every_engine_derives_the_same_events_from_the_same_traffic() {
+    let engines = every_engine();
+    let names: Vec<_> = corpus().into_iter().map(|(name, _)| name).collect();
     let digest = corpus_digest();
     let declared = Comparability::declared(&digest, ArtifactClass::Replayed);
-    let report = compare(
-        &Recording::new(INFO, &ours_refs).with_comparability(declared),
-        &Recording::new(ZAPO_INFO, &theirs_refs).with_comparability(declared),
-        Tables::shared(table()),
-    );
-    assert_eq!(
-        report.incomparable(),
-        None,
-        "both sides must declare the same corpus before any verdict means anything"
-    );
 
-    let faults: Vec<_> = report.faults().collect();
-    assert!(
-        faults.is_empty(),
-        "the engines derived different events across {} stanzas:\n{}",
-        names.len(),
-        faults
-            .iter()
-            .map(|divergence| format!("  {divergence}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    );
-    assert!(report.agrees());
+    for replay in &engines {
+        for (what, envelopes) in [
+            ("forwarded", &replay.forwarded),
+            ("re-encoded", &replay.reencoded),
+        ] {
+            assert_eq!(
+                envelopes.len(),
+                names.len(),
+                "{} {what} {} of {} corpus stanzas; regenerate its replay",
+                replay.info.id,
+                envelopes.len(),
+                names.len()
+            );
+        }
+    }
+
+    // The re-encoded stream, which is the one that can differ.
+    for (index, left) in engines.iter().enumerate() {
+        for right in engines.iter().skip(index + 1) {
+            let (left_info, right_info) = (left.info, right.info);
+            let left_refs: Vec<&[u8]> = left.reencoded.iter().map(Vec::as_slice).collect();
+            let right_refs: Vec<&[u8]> = right.reencoded.iter().map(Vec::as_slice).collect();
+            let report = compare(
+                &Recording::new(left_info, &left_refs).with_comparability(declared),
+                &Recording::new(right_info, &right_refs).with_comparability(declared),
+                Tables::shared(table()),
+            );
+
+            assert_eq!(
+                report.incomparable(),
+                None,
+                "{} against {}: both sides must declare the same corpus before any \
+                 verdict means anything",
+                left_info.id,
+                right_info.id
+            );
+
+            let faults: Vec<_> = report.faults().collect();
+            assert!(
+                faults.is_empty(),
+                "{} and {} derived different events across {} stanzas:\n{}",
+                left_info.id,
+                right_info.id,
+                names.len(),
+                faults
+                    .iter()
+                    .map(|divergence| format!("  {divergence}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            );
+            assert!(report.agrees());
+        }
+    }
+
+    assert_eq!(engines.len(), 4, "the definition of done asks for four");
 }
 
 /// Stanzas whose two frames legitimately differ.

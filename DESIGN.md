@@ -1,15 +1,14 @@
 # wa-wire — Design Document
 
-> **Status:** **IMPLEMENTING** — ten RFCs accepted. Steps 1–6 and 9–13 of §8 are
-> done and L1 now derives from both halves of L0-plain; steps 7–8 (Baileys,
-> hypermeow) remain. Two engines are measured agreeing on derived events
-> (rev 15), and both emit L0-plain — two of the four the definition of done
-> asks for, which is the largest gap left. Every recording holds one half of a
+> **Status:** **IMPLEMENTING** — ten RFCs accepted. Five of the six items in
+> the definition of done are closed; publishing `wa-wire-contract` is the one
+> that is not. Four engines are measured agreeing on derived events (rev 43),
+> over six pairwise comparisons of one corpus. Every recording holds one half of a
 > session: the inbound one. An engine can now report the other (rev 31).
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 42
+> **Last revised:** rev 43
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1762,9 +1761,8 @@ No L2. No Layer 3 host.
    unreported: `UNMODELLED_FIELDS` and `UNTYPED_FIELDS` are empty, and the nine
    `REQUEST_SCOPED_ASSERTIONS` are a design limit rather than a backlog.
 4. Conformance suite (RFC-005) green: identical L0 in → identical L1 out across
-   all four engines. **Green for two of them as of rev 15.** The Go adapter is
-   cross-checked on the boundary format but not yet replayed against a corpus,
-   which needs the engine present.
+   all four engines. **Green for all four as of rev 43**, over six pairwise
+   comparisons of one corpus.
 5. Capability matrix machine-readable and enforced at setup. **Done in rev 20.**
    All five upgrade-gate criteria are measured as of rev 29: stanzas not lost,
    frames still parsing, the same L1, plaintext coverage held, and a
@@ -1983,10 +1981,34 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-125 | Baileys reports a plaintext's *child* index, chosen having watched two adapters resolve an `<enc>`-relative one | Both of the earlier engines report which `<enc>` decrypted, counting `<enc>` nodes, and their adapters must work out which child that is — ambiguous the moment a stanza carries anything else, and unresolvable for a fan-out `<message>`, so both give up and emit L0-wire. Designing the hook against a need already understood cost nothing and removed the case | 41 |
 | D-126 | Every joiner emits in arrival order, and a stanza waiting on payloads holds up the ones behind it | Emitting an unheld stanza the moment it arrives puts it ahead of a held one that came first. The comparison aligns by position, so the reordering reads as a divergence in whichever engine happened to be slower — a finding about timing wearing the clothes of a finding about behaviour. Holding the queue costs latency in the adapter and buys a recording whose order is the wire's | 42 |
 | D-127 | `pending` counts what waits on payloads; `queued` counts what has not left | Once stanzas leave in order the two stop being the same number, and a caller asking "is anything outstanding?" means the first while a caller asking "has everything drained?" means the second. One name for both would answer whichever question the reader did not ask | 42 |
+| D-128 | Conformance compares what each engine **re-encodes**, not what it forwards | Three of the four adapters are zero-copy and forward the corpus bytes untouched, so comparing those compares nothing: three identical streams agree by construction and the run is green while proving that a copy is a copy. Re-encoding is where four implementations can differ, and on this corpus two of them differ on five stanzas of fourteen | 43 |
+| D-129 | Each engine replays the corpus in its own process and writes envelopes as files | A container would carry the claims a gate needs — which traffic, which adapter, whether the file is whole — and the comparison supplies all of them itself. `zapo` goes through one only because it had one | 43 |
 
 ---
 
 ## Changelog
+
+### rev 43 — 2026-08-08
+
+- **The central claim is a four-engine test result.** One corpus, replayed
+  through every engine in its own process, compared pairwise across all six
+  pairs. Item 4 of the definition of done closes, leaving only publishing
+  `wa-wire-contract`.
+- **It compares what each engine re-encodes** (D-128), which is the difference
+  between a result and a formality. Three of the four adapters are zero-copy
+  and forward the corpus bytes untouched: comparing those is comparing three
+  identical byte streams, which agree by construction. Each engine's own
+  encoder is where four implementations genuinely differ — `hypermeow` and
+  Baileys write different bytes for five of the fourteen corpus stanzas — and
+  that the derivation matches anyway is the property.
+  - Checked by corrupting one engine's re-encoding, which the test catches and
+    names the disagreeing pair for.
+- Two new replay commands, one per out-of-process engine, writing envelopes as
+  files rather than containers (D-129).
+- **What four engines have not yet found.** Every finding so far has come from
+  real captured traffic meeting the derivation, and not one from two engines
+  disagreeing. That was the argument for a third and fourth; the argument is
+  not yet paid off, and saying so is more useful than the number four.
 
 ### rev 42 — 2026-08-08
 

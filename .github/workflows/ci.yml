@@ -65,6 +65,13 @@ jobs:
   # here would make the contract's CI depend on someone else's release cadence.
   # Each adapter carries its own test command; see its README.
   #
+  # The four-engine conformance run is outside it for the same reason, and by
+  # the same trade: it needs all four engines present at once. It lives in
+  # `adapters/whatsapp-rust/tests/engine_agreement.rs` and is run by hand after
+  # each adapter's replay command. What CI can check without an engine is that
+  # the boundary format still agrees across the three languages, which is
+  # below.
+  #
   # What does run here is the cross-language check: the fixtures the zapo and
   # hypermeow adapters write are committed, and `cargo test -p wa-wire-conformance`
   # reads them. That catches the three encoders drifting apart without needing

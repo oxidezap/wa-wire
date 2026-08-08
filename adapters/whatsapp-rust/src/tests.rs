@@ -71,6 +71,9 @@ fn tap(event: Arc<Event>) -> Vec<Vec<u8>> {
     captured.lock().expect("sink lock").clone()
 }
 
+/// What a sink saw: which way each stanza went, and its frame.
+type Seen = Arc<Mutex<Vec<(Direction, Vec<u8>)>>>;
+
 #[test]
 fn a_raw_node_reaches_the_sink_byte_for_byte() {
     let node = message_node();
@@ -555,7 +558,7 @@ fn sent_frame_event(node: &Node) -> Arc<Event> {
 #[test]
 fn a_sent_frame_crosses_unpacked_and_outbound() {
     let node = message_node();
-    let captured: Arc<Mutex<Vec<(Direction, Vec<u8>)>>> = Arc::new(Mutex::new(Vec::new()));
+    let captured: Seen = Arc::new(Mutex::new(Vec::new()));
     let sink = {
         let captured = Arc::clone(&captured);
         move |stanza: RawStanza<'_>| {

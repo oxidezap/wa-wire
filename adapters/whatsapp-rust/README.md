@@ -155,6 +155,28 @@ Worth stating plainly rather than leaving as an absence: a recording made
 through this adapter contains what the session received and nothing it replied,
 and that is now a choice rather than a limit.
 
+## Four engines, one corpus
+
+[`tests/engine_agreement.rs`](tests/engine_agreement.rs) is where the project's
+central claim is a test result rather than a sentence. It replays one corpus
+through every engine and requires the derived events to match across all six
+pairs.
+
+The two out-of-process engines write their envelopes first:
+
+```console
+cd adapters/hypermeow && go run ./cmd/replay-corpus
+cd adapters/baileys   && npx tsx scripts/replay-corpus.ts
+cd adapters/zapo      && npx tsx scripts/emit-recording.ts
+```
+
+It compares what each engine **re-encodes**, not what it forwards. Three of the
+four adapters are zero-copy and forward the corpus bytes untouched, so comparing
+those compares nothing — three identical streams agree by construction. Each
+engine's own encoder is where four implementations can differ, and they do:
+`hypermeow` and Baileys write different bytes for five of the fourteen corpus
+stanzas. That the derivation matches anyway is the property.
+
 ## Cost when nobody is listening
 
 `Event::RawNode` and `Event::DecryptedPayload` each sit behind a lease the

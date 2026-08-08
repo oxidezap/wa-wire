@@ -158,11 +158,19 @@ Independent implementations reading one input find bugs that no single
 implementation's own tests can, because a bug and its test are usually written
 by the same person on the same afternoon. Divergence is the signal.
 
-**Two engines today**, of the four the definition of done asks for. Two
-agreeing is weaker evidence than four: they can be wrong the same way. Every
-finding so far has come from real captured traffic meeting the derivation
-rather than from the two disagreeing, which is exactly what a third engine
-would change.
+**Four engines**, compared pairwise over one corpus — six comparisons, all
+agreeing.
+
+What is compared is each engine's own **re-encoding**, not what it forwards.
+Three of the four adapters are zero-copy and hand the corpus bytes back
+untouched, so comparing those compares three identical streams. Re-encoding is
+where four implementations differ, and they do: two of them write different
+bytes for five of the fourteen corpus stanzas, and derive the same events from
+them.
+
+Worth saying plainly: every finding so far has come from real captured traffic
+meeting the derivation, and none from two engines disagreeing. That was the
+argument for the third and fourth, and it has not paid off yet.
 
 ```rust
 let report = compare(&engine_a, &engine_b, Tables::shared(tokens::TABLE));

@@ -25,3 +25,8 @@ adapters/hypermeow/vendor/
 
 # TypeScript adapter builds and their local dependency links.
 adapters/*/dist/
+
+# Replays are regenerated from the corpus by each adapter's replay command, and
+# the conformance test reads them. Committed would be a fourth description of
+# what the engines produce, kept in step by hand.
+adapters/*/replay/
