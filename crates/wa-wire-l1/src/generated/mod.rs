@@ -1358,6 +1358,8 @@ pub struct IncomingMsgParser<'a> {
     pub verified_name: Option<alloc::boxed::Box<IncomingMsgParserVerifiedName<'a>>>,
     /// `verified_level`, via `maybeAttrEnum`.
     pub verified_level: Option<MSGVERIFIEDLEVEL>,
+    /// `verified_name_attr`, via `maybeAttrInt`.
+    pub verified_name_attr: Option<i64>,
     /// `biz`, via `maybeChild`.
     pub biz: Option<alloc::boxed::Box<IncomingMsgParserBiz<'a>>>,
     /// `pay`, via `maybeChild`.
@@ -1426,6 +1428,7 @@ impl<'a> IncomingMsgParser<'a> {
                 "verified_level",
                 MSGVERIFIEDLEVEL::from_wire,
             )?,
+            verified_name_attr: extract::maybe_attr_int(node, "verified_name")?,
             biz: match extract::maybe_child(node, "biz") {
                 Some(child) => Some(alloc::boxed::Box::new(IncomingMsgParserBiz::derive(
                     &child,
@@ -1528,6 +1531,7 @@ impl IncomingMsgParser<'_> {
                 _ => false,
             })
             && (self.verified_level == other.verified_level)
+            && (self.verified_name_attr == other.verified_name_attr)
             && (match (&self.biz, &other.biz) {
                 (Some(a), Some(b)) => a.semantic_eq(b),
                 (None, None) => true,
@@ -3061,7 +3065,7 @@ impl<'a> ParseNewsletterResponseNegative<'a> {
             t: extract::attr_int(node, "t")?,
             edit: extract::attr_string(node, "edit")?,
             franking_reporting_tag_element_value: extract::content_bytes(node)?,
-            application_error: extract::attr_int(node, "applicationError")?,
+            application_error: extract::attr_int(node, "application_error")?,
             backoff: extract::attr_int(node, "backoff")?,
             node: *node,
         })
@@ -3139,7 +3143,7 @@ impl<'a> ParsePostNewsletterStatusResponseNegative<'a> {
             error: extract::attr_string(node, "error")?,
             class: extract::attr_string(node, "class")?,
             t: extract::attr_int(node, "t")?,
-            application_error: extract::attr_int(node, "applicationError")?,
+            application_error: extract::attr_int(node, "application_error")?,
             backoff: extract::attr_int(node, "backoff")?,
             node: *node,
         })
@@ -3180,7 +3184,7 @@ impl<'a> ParsePostNewsletterStatusResponseSuccess<'a> {
     /// Derive from a node already known to match this shape.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
         Ok(Self {
-            server_id: extract::maybe_attr_int(node, "serverId")?,
+            server_id: extract::maybe_attr_int(node, "server_id")?,
             class: extract::attr_string(node, "class")?,
             t: extract::attr_int(node, "t")?,
             node: *node,
@@ -3211,6 +3215,9 @@ pub struct ParsePublishViewResponseSuccess<'a> {
     pub t: Option<i64>,
     /// `readreceipts`, via `maybeAttrEnum`.
     pub readreceipts: Option<ENUMALLNONE>,
+    /// `edit`, via `attrEnum`. The spec
+    /// records no variants for it, so it crosses as text.
+    pub edit: Value<'a>,
     /// The node this was derived from, for fields the shape does
     /// not model yet.
     pub node: NodeRef<'a>,
@@ -3223,6 +3230,7 @@ impl<'a> ParsePublishViewResponseSuccess<'a> {
             class: extract::attr_string(node, "class")?,
             t: extract::maybe_attr_int(node, "t")?,
             readreceipts: extract::maybe_attr_enum(node, "readreceipts", ENUMALLNONE::from_wire)?,
+            edit: extract::attr_string(node, "edit")?,
             node: *node,
         })
     }
@@ -3239,6 +3247,7 @@ impl ParsePublishViewResponseSuccess<'_> {
         (self.class.semantic_eq(other.class))
             && (self.t == other.t)
             && (self.readreceipts == other.readreceipts)
+            && (self.edit.semantic_eq(other.edit))
     }
 }
 /// Derived from whatspec's `ReadReceiptAckParser` shape.
@@ -3590,22 +3599,43 @@ pub const KNOWN_TAGS: [&str; 4] = ["ack", "call", "message", "receipt"];
 /// A derivation that quietly omitted a field would look complete and be
 /// wrong, and no conformance run could tell — every engine would agree on
 /// the same missing field.
-pub const UNMODELLED_FIELDS: [&str; 15] = [
-    "IncomingMsgParser.verified_name: maybeAttrInt conflicts with kept maybeChild",
+pub const UNMODELLED_FIELDS: [&str; 4] = [
     "ParseNewsletterResponseNegative.ackPaidAckPaidConversationOrAckPaidGroupConversationConversationMixinGroup: mixin",
-    "ParseNewsletterResponseNegative: reference assertion on `from` needs request context",
-    "ParseNewsletterResponseNegative: reference assertion on `id` needs request context",
     "ParseNewsletterResponseSuccess.newsletterQuestionResponseOrNewsletterMessageAckMixinGroup: mixin",
     "ParsePostNewsletterStatusResponseNegative.statusAckEditOrRevokeOrAdminRevokeMixinGroup: mixin",
-    "ParsePostNewsletterStatusResponseNegative: reference assertion on `from` needs request context",
-    "ParsePostNewsletterStatusResponseNegative: reference assertion on `id` needs request context",
     "ParsePostNewsletterStatusResponseSuccess.statusAckEditOrRevokeOrAdminRevokeMixinGroup: mixin",
-    "ParsePostNewsletterStatusResponseSuccess: reference assertion on `from` needs request context",
-    "ParsePostNewsletterStatusResponseSuccess: reference assertion on `id` needs request context",
-    "ParsePublishViewResponseSuccess.edit: attrEnum",
-    "ParsePublishViewResponseSuccess: reference assertion on `from` needs request context",
-    "ParsePublishViewResponseSuccess: reference assertion on `id` needs request context",
-    "ParsePublishViewResponseSuccess: reference assertion on `type` needs request context",
+];
+
+/// Fields the spec types more precisely than this derivation carries.
+///
+/// An `attrEnum` whose variants the spec never lists is the whole of
+/// this today: the values live on sibling shapes as literal guards, and
+/// reconstructing the set from those would be inference. The field
+/// crosses as text, which is what the spec supports.
+pub const UNTYPED_FIELDS: [&str; 1] =
+    ["ParsePublishViewResponseSuccess.edit: attrEnum without variants"];
+
+/// Checks the spec states that L1 cannot make, by construction.
+///
+/// A reference assertion says a response's field must equal one from
+/// the request it answers. [`derive()`] is a pure function of a single
+/// stanza (D-010), and the request is not in it, so these are outside
+/// what this layer can evaluate rather than something it has not got to
+/// yet. A host that tracks outstanding requests can check them; this
+/// names them so that host knows what to check.
+///
+/// Unlike [`UNMODELLED_FIELDS`], a shrinking list here would mean the
+/// spec changed, not that the generator improved.
+pub const REQUEST_SCOPED_ASSERTIONS: [&str; 9] = [
+    "ParseNewsletterResponseNegative: `from` must match the request's `to`",
+    "ParseNewsletterResponseNegative: `id` must match the request's `id`",
+    "ParsePostNewsletterStatusResponseNegative: `from` must match the request's `to`",
+    "ParsePostNewsletterStatusResponseNegative: `id` must match the request's `id`",
+    "ParsePostNewsletterStatusResponseSuccess: `from` must match the request's `to`",
+    "ParsePostNewsletterStatusResponseSuccess: `id` must match the request's `id`",
+    "ParsePublishViewResponseSuccess: `from` must match the request's `to`",
+    "ParsePublishViewResponseSuccess: `id` must match the request's `id`",
+    "ParsePublishViewResponseSuccess: `type` must match the request's `type`",
 ];
 
 #[cfg(test)]
@@ -4511,7 +4541,7 @@ mod generated_tests {
             .attr("t", "1")
             .attr("edit", "x")
             .bytes(b"x")
-            .attr("applicationError", "1")
+            .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
         let node = parse(&stanza);
@@ -4537,7 +4567,7 @@ mod generated_tests {
             .attr("t", "1")
             .attr("edit", "x")
             .bytes(b"x")
-            .attr("applicationError", "1")
+            .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
         let node = parse(&stanza);
@@ -4561,7 +4591,7 @@ mod generated_tests {
             .attr("t", "1")
             .attr("edit", "x")
             .bytes(b"x")
-            .attr("applicationError", "1")
+            .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
         let node = parse(&stanza);
@@ -4577,7 +4607,7 @@ mod generated_tests {
             .attr("t", "1")
             .attr("edit", "x")
             .bytes(b"x")
-            .attr("applicationError", "1")
+            .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
         let bare_node = parse(&bare);
@@ -4651,7 +4681,7 @@ mod generated_tests {
             .attr("error", "x")
             .attr("class", "x")
             .attr("t", "1")
-            .attr("applicationError", "1")
+            .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
         let node = parse(&stanza);
@@ -4678,7 +4708,7 @@ mod generated_tests {
             .attr("error", "x")
             .attr("class", "x")
             .attr("t", "1")
-            .attr("applicationError", "1")
+            .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
         let node = parse(&stanza);
@@ -4700,7 +4730,7 @@ mod generated_tests {
             .attr("error", "x")
             .attr("class", "x")
             .attr("t", "1")
-            .attr("applicationError", "1")
+            .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
         let node = parse(&stanza);
@@ -4714,7 +4744,7 @@ mod generated_tests {
             .attr("error", "x")
             .attr("class", "x")
             .attr("t", "1")
-            .attr("applicationError", "1")
+            .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
         let bare_node = parse(&bare);
@@ -4754,7 +4784,7 @@ mod generated_tests {
     #[test]
     fn parse_post_newsletter_status_response_success_derives_with_every_field_present() {
         let stanza = Fixture::node("ack")
-            .attr("serverId", "1")
+            .attr("server_id", "1")
             .attr("class", "x")
             .attr("t", "1")
             .build();
@@ -4774,7 +4804,7 @@ mod generated_tests {
     #[test]
     fn parse_post_newsletter_status_response_success_compares_semantically() {
         let stanza = Fixture::node("ack")
-            .attr("serverId", "1")
+            .attr("server_id", "1")
             .attr("class", "x")
             .attr("t", "1")
             .build();
@@ -4801,7 +4831,10 @@ mod generated_tests {
     /// `ParsePublishViewResponseSuccess` derives from a stanza carrying its required fields.
     #[test]
     fn parse_publish_view_response_success_derives_from_its_required_fields() {
-        let stanza = Fixture::node("ack").attr("class", "x").build();
+        let stanza = Fixture::node("ack")
+            .attr("class", "x")
+            .attr("edit", "x")
+            .build();
         let node = parse(&stanza);
         let derived = ParsePublishViewResponseSuccess::derive(&node);
         assert!(
@@ -4823,6 +4856,7 @@ mod generated_tests {
             .attr("class", "x")
             .attr("t", "1")
             .attr("readreceipts", "all")
+            .attr("edit", "x")
             .build();
         let node = parse(&stanza);
         let derived = ParsePublishViewResponseSuccess::derive(&node);
@@ -4843,6 +4877,7 @@ mod generated_tests {
             .attr("class", "x")
             .attr("t", "1")
             .attr("readreceipts", "all")
+            .attr("edit", "x")
             .build();
         let node = parse(&stanza);
         let derived = ParsePublishViewResponseSuccess::derive(&node).expect("derives");
@@ -4851,7 +4886,10 @@ mod generated_tests {
 
         // A stanza missing every optional field is a different
         // derivation of the same shape, unless the shape has none.
-        let bare = Fixture::node("ack").attr("class", "x").build();
+        let bare = Fixture::node("ack")
+            .attr("class", "x")
+            .attr("edit", "x")
+            .build();
         let bare_node = parse(&bare);
         if let Ok(bare_derived) = ParsePublishViewResponseSuccess::derive(&bare_node) {
             let full_is_bare = derived.semantic_eq(&bare_derived);

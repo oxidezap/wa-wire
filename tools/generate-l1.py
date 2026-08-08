@@ -59,7 +59,12 @@ RESERVED = {
     "continue", "crate", "else", "extern", "return", "break", "macro", "virtual",
 }
 
+# Three buckets, because they are three different facts about the derivation.
+# A shrinking `drops` is progress; `request_scoped` never shrinks and is not
+# debt; `untyped` is a field that crosses at less than its declared type.
 drops: list[str] = []
+untyped: list[str] = []
+request_scoped: list[str] = []
 
 # whatspec records every place the bundle reads a field, so the same name can
 # appear several times with different methods — `t` is read as a string, an int
@@ -110,9 +115,30 @@ def normalise(field: dict) -> dict:
     stanzas that are perfectly valid.
     """
     out = dict(field)
+    if enum_without_variants(out):
+        # Decided here rather than at emit time because the fixture builder
+        # walks the same spec separately: a decision made in one pass and not
+        # the other produces a struct requiring a field the fixture omits.
+        out["untypedEnum"] = out["method"]
+        out["method"] = "attrString" if out.get("required") else "maybeAttrString"
     if not out.get("required"):
         out["method"] = OPTIONAL_FORM.get(out["method"], out["method"])
     return out
+
+
+def enum_without_variants(field: dict) -> bool:
+    """Whether the spec calls a field an enum and lists nothing it can be.
+
+    Happens where the values live on sibling shapes as literal guards rather
+    than on the field. Reconstructing the set from those would be inference,
+    so the field is read as text instead, which is what the spec supports.
+    """
+    if (field.get("method") or "") not in ENUM_METHODS:
+        return False
+    keys = field.get("enumKeys")
+    if keys is None:
+        keys = [v.get("value") for v in (field.get("enumRef") or {}).get("variants", [])]
+    return not [k for k in keys or [] if isinstance(k, str)]
 
 
 def dedupe(fields: list[dict], owner: str) -> list[dict]:
@@ -129,9 +155,19 @@ def dedupe(fields: list[dict], owner: str) -> list[dict]:
             continue
         kept = chosen[name]
         if category(kept["method"]) != category(field["method"]):
-            drops.append(
-                f"{owner}.{name}: {field['method']} conflicts with kept {kept['method']}"
-            )
+            # The same name read two ways: `verified_name` arrives as a child
+            # element in one shape and as an attribute in another, and both are
+            # real. Dropping either would lose a field that is on the wire, and
+            # choosing between them by which came first is arbitrary, so both
+            # are emitted and the later one carries its category.
+            alias = f"{name}_{category(field['method'])}"
+            if alias not in chosen:
+                aliased = dict(field)
+                aliased["name"] = alias
+                aliased["wireName"] = field.get("wireName") or name
+                aliased["tag"] = field.get("tag") or name
+                chosen[alias] = aliased
+                order.append(alias)
             continue
         optional = not (kept.get("required") and field.get("required"))
         if SPECIFICITY.get(field["method"], 0) > SPECIFICITY.get(kept["method"], 0):
@@ -304,10 +340,22 @@ class Emitter:
     ) -> bool:
         method = field.get("method") or ""
         name = snake(field["name"])
-        key = rust_str(field["name"])
+        # The spec records the field's name in the bundle's own casing and the
+        # attribute's name on the wire separately, and they differ for fifty of
+        # them. Reading by the former finds nothing and fails no test, because
+        # a fixture built from the same source is wrong in the same way.
+        key = rust_str(field.get("wireName") or field["name"])
         doc = f"    /// `{field['name']}`, via `{method or 'mixin'}`."
 
         if method in SCALAR_METHODS:
+            if field.get("untypedEnum"):
+                untyped.append(
+                    f"{owner}.{field['name']}: {field['untypedEnum']} without variants"
+                )
+                doc = (
+                    f"    /// `{field['name']}`, via `{field['untypedEnum']}`. The spec\n"
+                    "    /// records no variants for it, so it crosses as text."
+                )
             ty, call = SCALAR_METHODS[method]
             if not field.get("required") and method in OPTIONAL_JID:
                 ty, call = f"Option<{ty}>", OPTIONAL_JID[method]
@@ -319,6 +367,8 @@ class Emitter:
         if method in ENUM_METHODS:
             enum_name = self.enum_for(owner, field)
             if enum_name is None:
+                # `normalise` rewrites these before they arrive, so reaching
+                # here means an enum with variants that still would not emit.
                 return False
             if method == "attrEnumOrNullIfUnknown":
                 ty = f"Option<{enum_name}>"
@@ -385,7 +435,10 @@ class Emitter:
 def fixture_value(field: dict, full: bool = False) -> str | None:
     """A plausible wire value for one required field."""
     method = field["method"]
-    name = rust_str(field["name"])
+    # The wire name, for the same reason the reader uses it: a fixture built
+    # from the other name would agree with a reader that also used it, and the
+    # pair would pass while neither matched a real stanza.
+    name = rust_str(field.get("wireName") or field["name"])
     if method in {"attrJidWithType", "attrDeviceJid", "attrUserJid"}:
         return f".jid_attr({name}, \"u\")"
     if method in {"attrInt", "attrTime"}:
@@ -487,6 +540,15 @@ def main() -> None:
             if kind == "attr" and "value" in assertion:
                 guards.setdefault(parser, []).append(
                     (assertion["name"], assertion["value"])
+                )
+            elif kind == "reference":
+                # Not a gap. A reference assertion says this response's `from`
+                # must equal the request's `to`, which needs the request that
+                # this stanza answers. `derive` is a pure function of one
+                # stanza (D-010), so this is outside what L1 can check at all.
+                request_scoped.append(
+                    f"{parser}: `{assertion.get('name')}` must match the request's "
+                    f"`{'.'.join(assertion.get('referencePath') or [])}`"
                 )
             else:
                 drops.append(
@@ -690,7 +752,38 @@ def main() -> None:
         "/// the same missing field.",
         "pub const UNMODELLED_FIELDS: [&str; " + str(len(drops)) + "] = [",
     ]
-    lines += [f"    {rust_str(d)}," for d in sorted(set(drops))[: len(drops)]]
+    lines += [f"    {rust_str(d)}," for d in sorted(set(drops))]
+    lines += ["];", ""]
+
+    lines += [
+        "/// Fields the spec types more precisely than this derivation carries.",
+        "///",
+        "/// An `attrEnum` whose variants the spec never lists is the whole of",
+        "/// this today: the values live on sibling shapes as literal guards, and",
+        "/// reconstructing the set from those would be inference. The field",
+        "/// crosses as text, which is what the spec supports.",
+        "pub const UNTYPED_FIELDS: [&str; " + str(len(set(untyped))) + "] = [",
+    ]
+    lines += [f"    {rust_str(u)}," for u in sorted(set(untyped))]
+    lines += ["];", ""]
+
+    lines += [
+        "/// Checks the spec states that L1 cannot make, by construction.",
+        "///",
+        "/// A reference assertion says a response's field must equal one from",
+        "/// the request it answers. [`derive()`] is a pure function of a single",
+        "/// stanza (D-010), and the request is not in it, so these are outside",
+        "/// what this layer can evaluate rather than something it has not got to",
+        "/// yet. A host that tracks outstanding requests can check them; this",
+        "/// names them so that host knows what to check.",
+        "///",
+        "/// Unlike [`UNMODELLED_FIELDS`], a shrinking list here would mean the",
+        "/// spec changed, not that the generator improved.",
+        "pub const REQUEST_SCOPED_ASSERTIONS: [&str; "
+        + str(len(set(request_scoped)))
+        + "] = [",
+    ]
+    lines += [f"    {rust_str(r)}," for r in sorted(set(request_scoped))]
     lines += ["];", ""]
 
     # Generated tests for generated code. Writing them by hand would mean 16
@@ -827,7 +920,9 @@ def main() -> None:
     subprocess.run(["rustfmt", "--edition", "2024", str(TARGET)], check=True)
 
     print(f"{TARGET.relative_to(ROOT)}: {len(variants)} shapes, "
-          f"{len(emitter.enums)} enums, {len(by_tag)} tags, {len(set(drops))} unmodelled")
+          f"{len(emitter.enums)} enums, {len(by_tag)} tags, "
+          f"{len(set(drops))} unmodelled, {len(set(untyped))} untyped, "
+          f"{len(set(request_scoped))} request-scoped")
     if drops:
         for drop in sorted(set(drops)):
             print(f"  unmodelled: {drop}", file=sys.stderr)

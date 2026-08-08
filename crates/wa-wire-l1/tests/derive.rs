@@ -7,6 +7,7 @@
 
 #![allow(clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
+use wa_wire_l1::generated::ParseNewsletterResponseNegative;
 use wa_wire_l1::testing::{Fixture, parse};
 use wa_wire_l1::{DeriveError, Event, KNOWN_TAGS, PROVENANCE, UNMODELLED_FIELDS, derive};
 
@@ -290,4 +291,43 @@ fn unmodelled_fields_are_named_rather_than_dropped_in_silence() {
             "an entry must name what was dropped and why: {entry:?}"
         );
     }
+}
+
+/// A field is read by the name the wire uses, not the name the bundle uses.
+///
+/// The spec records both and they differ for fifty fields. The generator read
+/// the wrong one, and no generated test could tell: a fixture built from the
+/// same spec by the same rule was wrong in exactly the same way, so the pair
+/// agreed with each other and with no real stanza.
+///
+/// Written by hand for that reason. The attribute spelled here is the one a
+/// server sends, taken from the spec's wire-facing side rather than from the
+/// generator that was reading the other one.
+#[test]
+fn an_attribute_is_read_by_its_name_on_the_wire() {
+    let with_wire_name = |key: &str| {
+        Fixture::node("ack")
+            .attr("error", "x")
+            .attr("class", "message")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .attr(key, "7")
+            .attr("backoff", "1")
+            .build()
+    };
+
+    let stanza = with_wire_name("application_error");
+    let node = parse(&stanza);
+    let shape = ParseNewsletterResponseNegative::derive(&node)
+        .expect("the wire spelling satisfies the shape");
+    assert_eq!(shape.application_error, 7);
+
+    // The bundle's spelling is not what the wire carries, so a stanza using it
+    // is missing the field. Reading by that name would have accepted this one.
+    let wrong = with_wire_name("applicationError");
+    assert!(
+        ParseNewsletterResponseNegative::derive(&parse(&wrong)).is_err(),
+        "camelCase is the bundle's name for this field, not the wire's"
+    );
 }
