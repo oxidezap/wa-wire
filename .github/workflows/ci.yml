@@ -65,10 +65,11 @@ jobs:
   # here would make the contract's CI depend on someone else's release cadence.
   # Each adapter carries its own test command; see its README.
   #
-  # What does run here is the cross-language check: the fixtures the zapo
-  # adapter writes are committed, and `cargo test -p wa-wire-conformance` reads
-  # them. That catches the two encoders drifting apart without needing either
-  # engine present.
+  # What does run here is the cross-language check: the fixtures the zapo and
+  # hypermeow adapters write are committed, and `cargo test -p wa-wire-conformance`
+  # reads them. That catches the three encoders drifting apart without needing
+  # any engine present — which matters most for the Go one, since it has no
+  # Rust to check itself against.
 
   generated:
     name: generated code is fresh

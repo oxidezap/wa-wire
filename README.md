@@ -93,6 +93,7 @@ own manifests.
 | --- | --- | --- |
 | [`whatsapp-rust`](adapters/whatsapp-rust) | `whatsapp-rust` (Rust) | tap, takeover, sending |
 | [`zapo`](adapters/zapo) | `zapo` (TypeScript) | tap, takeover, sending |
+| [`hypermeow`](adapters/hypermeow) | `hypermeow` (Go) | tap, takeover |
 
 Both emit L0-plain. What they cover differs, and the
 [capability matrix](DESIGN.md#rfc-002--capability-matrix) is where that is
@@ -106,12 +107,20 @@ half of a conversation and nothing the client replied.
 Adapters live outside the main workspace: each drags in a whole engine, and the
 contract and codec stay dependency-free on purpose.
 
-Both boundary formats — the envelope and the recording container that holds
-several of them — are written twice, once in Rust and once in TypeScript,
-because an adapter has to run inside a JavaScript engine. Two descriptions of
-one format that are only ever tested separately are two formats waiting to
-diverge, so [cross-language fixtures](crates/wa-wire-conformance/tests/cross_language.rs)
-are written by one and read by the other.
+The envelope is written **three times** — Rust, TypeScript, Go — because an
+adapter runs inside its engine and the engines are in three languages. The
+first two hand their work to Rust, natively or through WebAssembly; Go can do
+neither, since Rust in Go means cgo and cgo in the per-stanza hot path is the
+cost the boundary exists to avoid.
+
+That third writing is the case the design was made for. It proves the contract
+can be implemented by someone who cannot use any of this code, which is the
+difference between a specification and a library with three callers.
+
+Descriptions only ever tested separately are formats waiting to diverge, so
+cross-language fixtures are written by one and read by another —
+[TypeScript's](crates/wa-wire-conformance/tests/cross_language.rs) and
+[Go's](crates/wa-wire-conformance/tests/cross_language_go.rs).
 
 More arrive in the order set out in [`DESIGN.md` §8](DESIGN.md#8-implementation-plan).
 
@@ -230,6 +239,10 @@ enum apiece.
 
 MIT — see [LICENSE](LICENSE).
 
-The `hypermeow` adapter, when it lands, will be MPL-2.0: it patches
-`whatsmeow`, which is MPL-2.0, and that license applies per file. It will live
-in its own subdirectory with an explicit notice.
+The `hypermeow` adapter was expected to be MPL-2.0, on the grounds that it
+would carry patched `whatsmeow` files and that licence applies per file. It
+carries none: the hooks it needs were contributed to `hypermeow` itself, where
+they are MPL-2.0 as everything there is. What is here only *imports* the
+engine, which MPL-2.0 §3.3 allows under other terms, so the adapter is MIT like
+the rest. [`adapters/hypermeow/NOTICE.md`](adapters/hypermeow/NOTICE.md) says
+so explicitly, and says what would change it.

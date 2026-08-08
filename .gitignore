@@ -18,3 +18,7 @@ lcov.info
 
 # Python
 __pycache__/
+
+# The Go adapter's module cache artefacts. `go.sum` is committed; the rest is
+# the toolchain's.
+adapters/hypermeow/vendor/

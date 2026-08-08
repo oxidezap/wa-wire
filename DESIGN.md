@@ -9,7 +9,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 37
+> **Last revised:** rev 38
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1752,7 +1752,8 @@ No L2. No Layer 3 host.
 
 1. `wa-wire-contract` published, with the RFC-008 format specified and frozen.
 2. Four adapters emitting L0-plain: `whatsapp-rust`, `zapo`, `Baileys`,
-   `hypermeow`. **Two of four as of rev 19.**
+   `hypermeow`. **Three of four as of rev 38**, the Go one built against an
+   open upstream PR. `Baileys` remains.
 3. L1 derivation generated from `whatspec`, host-side, single implementation.
    **Done.** Inbound stanzas in rev 11, payloads in rev 27 — generated rather
    than written since rev 28 corrected where the numbers come from — and
@@ -1760,7 +1761,9 @@ No L2. No Layer 3 host.
    unreported: `UNMODELLED_FIELDS` and `UNTYPED_FIELDS` are empty, and the nine
    `REQUEST_SCOPED_ASSERTIONS` are a design limit rather than a backlog.
 4. Conformance suite (RFC-005) green: identical L0 in → identical L1 out across
-   all four engines. **Green for two of them as of rev 15.**
+   all four engines. **Green for two of them as of rev 15.** The Go adapter is
+   cross-checked on the boundary format but not yet replayed against a corpus,
+   which needs the engine present.
 5. Capability matrix machine-readable and enforced at setup. **Done in rev 20.**
    All five upgrade-gate criteria are measured as of rev 29: stanzas not lost,
    frames still parsing, the same L1, plaintext coverage held, and a
@@ -1972,10 +1975,40 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-118 | Each direction is compared as its own sequence | An engine dispatches what it received from the read path and what it sent from the send path, with no ordering between them. One merged sequence aligned by position would call a different interleaving a direction divergence and a frame divergence on every stanza after it. Within a direction the order is the engine's own and is stable | 36 |
 | D-119 | Whether a missing direction is a fault depends on who was watching | Two adapters that both observe the outbound half and disagree on how much there was have found something; one that cannot see it at all has not. Counting the second as missing stanzas blames an engine for its observer, which is the failure `l0.plaintext` coverage already avoids one layer in | 36 |
 | D-120 | A recording carrying a direction its manifest does not claim is a fault under every profile | Inconsistent with itself rather than with the other recording: nothing downstream can tell whether those records are real or an artefact of how the file was assembled | 36 |
+| D-121 | The envelope is written a third time, in Go, and cross-checked rather than shared | Go cannot host the Rust core — cgo in the per-stanza hot path is the cost the boundary exists to avoid — so the format is implemented by someone who cannot use any of this code. That is the case the design was made for, and the difference between a specification and a library with three callers. The Go encoder has no Rust to check itself against, so its fixtures are read by the Rust side | 38 |
+| D-122 | ~~D-022's MPL-2.0 subdirectory is not needed~~, and the reason is kept | The adapter carries no `whatsmeow` file: the hooks went upstream, where they are MPL-2.0 already, and what is here only imports the engine — which §3.3 allows under other terms. D-022 stays because copying or vendoring one file would make it true again | 38 |
 
 ---
 
 ## Changelog
+
+### rev 38 — 2026-08-08
+
+- **The third engine, and the first the core cannot reach.** `whatsapp-rust`
+  links the Rust natively and `zapo` runs it through WebAssembly; Go can do
+  neither, so the boundary format is written out a third time, in Go (D-121).
+  - That is not duplication for its own sake — it is the case the design was
+    made for. An adapter runs inside its engine, and this one is written by
+    someone who could not have used our code even if they wanted to.
+  - The Go encoder has no Rust to check itself against, so it emits fixtures
+    that `cargo test -p wa-wire-conformance` reads. The check found nothing on
+    the first run and catches an endianness inversion when one is introduced.
+- **The engine gives this adapter something the other two lack.** Both of them
+  are told which `<enc>` of a stanza decrypted, counting `<enc>` nodes, and
+  have to resolve that to a child index — ambiguous the moment a stanza carries
+  anything else, and unresolvable for a fan-out `<message>`, so both emit those
+  as L0-wire rather than risk attaching a plaintext to the wrong node.
+  `hypermeow` reports the child index directly and nothing is inferred. The
+  hook was written against that need, which is the advantage of contributing
+  the observation point rather than working around one.
+- **A defect the third implementation exposed in the shared design.** The
+  lookahead counts later stanzas, and the first cut only counted the ones it
+  held: a receive path carrying nothing but acks would have held a message for
+  ever. Worth checking in the other two.
+- **D-022 turned out not to be needed** (D-122). The adapter was set aside as
+  an MPL-2.0 subdirectory on the expectation of carrying patched `whatsmeow`
+  files; it carries none, since the hooks went upstream where they are MPL-2.0
+  already. `NOTICE.md` says so and says what would change it.
 
 ### rev 37 — 2026-08-08
 
