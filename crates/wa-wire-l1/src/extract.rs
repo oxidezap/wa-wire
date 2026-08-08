@@ -9,7 +9,7 @@
 //! of a packed run or a JID exists nowhere in the frame to borrow; comparing or
 //! rendering it is the consumer's call, and both are allocation-free.
 
-use wa_wire_codec::{Jid, NodeRef, Packed, Value};
+use wa_wire_codec::{Jid, NodeRef, Packed, User, Value};
 
 use crate::error::{DeriveError, Field};
 
@@ -54,7 +54,7 @@ pub fn maybe_attr_time(node: &NodeRef<'_>, key: &'static str) -> Result<Option<i
 /// A required JID-valued attribute.
 pub fn attr_jid<'a>(node: &NodeRef<'a>, key: &'static str) -> Result<Jid<'a>, DeriveError> {
     let value = attr_string(node, key)?;
-    value.as_jid().ok_or(DeriveError::NotAJid { key })
+    parse_jid(value, key)
 }
 
 /// A JID-valued attribute that may be absent.
@@ -63,8 +63,59 @@ pub fn maybe_attr_jid<'a>(
     key: &'static str,
 ) -> Result<Option<Jid<'a>>, DeriveError> {
     match node.attr(key) {
-        Some(value) => value.as_jid().ok_or(DeriveError::NotAJid { key }).map(Some),
+        Some(value) => parse_jid(value, key).map(Some),
         None => Ok(None),
+    }
+}
+
+/// A JID, however the encoder chose to write it.
+///
+/// The wire has a dedicated JID form, and an encoder may use it — or write the
+/// same JID as a token or as bytes, which is just as valid and is what a second
+/// implementation was observed doing for `s.whatsapp.net`. Reading only the
+/// dedicated form meant one engine derived an event where another derived
+/// nothing from the identical stanza: a conformance fault caused by the
+/// derivation, not by either engine.
+fn parse_jid<'a>(value: Value<'a>, key: &'static str) -> Result<Jid<'a>, DeriveError> {
+    if let Some(jid) = value.as_jid() {
+        return Ok(jid);
+    }
+    let text = value.as_str().ok_or(DeriveError::NotAJid { key })?;
+    // A bare server is only read as one when the wire wrote it as a token.
+    // Servers are dictionary entries, so a token is evidence; arbitrary bytes
+    // with no `@` are just a string, and reading those as JIDs would turn the
+    // field into "anything at all".
+    let bare_server_allowed = matches!(value, Value::Token(_));
+    jid_from_text(text, bare_server_allowed).ok_or(DeriveError::NotAJid { key })
+}
+
+/// Read `user@server`, `user:device@server`, or — when `bare_server_allowed` —
+/// a lone `server`.
+///
+/// Rejects anything without a server part rather than inventing one: a field
+/// the spec calls a JID holding something that is not one is a protocol change
+/// worth reporting, not worth papering over.
+fn jid_from_text(text: &str, bare_server_allowed: bool) -> Option<Jid<'_>> {
+    let (user, server) = match text.split_once('@') {
+        Some((user, server)) => (Some(user), server),
+        None if bare_server_allowed => (None, text),
+        None => return None,
+    };
+    if server.is_empty() || server.contains('@') {
+        return None;
+    }
+
+    let Some(user) = user else {
+        return Some(Jid::pair(User::None, server));
+    };
+    // `user:device` splits the device off; `user` alone is device zero.
+    match user.split_once(':') {
+        Some((user, device)) => {
+            let device = device.parse::<u16>().ok()?;
+            (!user.is_empty())
+                .then(|| Jid::with_device(User::Bytes(user.as_bytes()), server, device))
+        }
+        None => (!user.is_empty()).then(|| Jid::pair(User::Bytes(user.as_bytes()), server)),
     }
 }
 

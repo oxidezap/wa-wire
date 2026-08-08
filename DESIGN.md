@@ -1465,6 +1465,8 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-060 | Encoder divergences are listed by name, not counted | A count going up says nothing about whether the new difference is a valid encoding choice or one engine being wrong. A named list makes each one a reviewed decision | 16 |
 | D-061 | The example consumer's dependency graph is enforced by a test | "Swap the engine and the consumer does not change" erodes with one convenience dependency, and nothing would fail to say so. The test is what says so | 17 |
 | D-062 | A packed run is read as an integer where one is expected | The nibble alphabet exists to compress runs of digits, so any real encoder packs timestamps. Reading only strings meant every packed integer failed to derive | 17 |
+| D-063 | A JID is read whatever form the encoder chose | The wire has a dedicated JID form and an encoder may use it or write text; both are valid. Reading only the dedicated form made one engine derive where another derived nothing from identical traffic | 17 |
+| D-064 | A bare server is only read as a JID when the wire wrote it as a token | Servers are dictionary entries, so a token is evidence. Accepting any word without an `@` would turn a JID field into "any string at all" | 17 |
 
 ---
 
@@ -1503,6 +1505,39 @@ Portability is enforced too: the contract builds with no allocator and for
   alphabet also carries `-` and `.` — is still reported as not-an-int rather
   than guessed at. All four modelled tags now derive, and the consumer test
   asserts the full set.
+
+### rev 17.1 — pulling the thread
+
+The packed-integer bug was not alone. Auditing every extractor against the
+encodings real traffic uses found a second of the same kind, and cleared the
+rest.
+
+- **A JID written as text did not derive** (D-063). `attr_jid` accepted only the
+  wire's dedicated JID form, and a second engine was observed writing
+  `from="s.whatsapp.net"` as a dictionary token instead — both valid. The
+  consequence was worse than the integer bug: one engine derived an event where
+  the other derived nothing **from identical traffic**, which is a conformance
+  fault caused by the derivation rather than by either engine. Every `receipt`
+  or `message` from a bare server was invisible to L1.
+- **Accepting text does not mean accepting anything** (D-064). A lone word with
+  no `@` is read as a bare server only when the wire wrote it as a token, since
+  servers are dictionary entries. Bytes stay rejected, so a JID field holding
+  something that is not a JID is still reported.
+- **The rest of the extractors are clear**, checked rather than assumed:
+  - enums go through `Value::eq_str`, which handles all five encodings —
+    now asserted by a test rather than left as a property of the code;
+  - `Value::semantic_eq` covers the cross-encoding comparisons;
+  - `content_bytes` is only used for blobs (ciphertext, protobuf, identity),
+    which no encoder tokenises.
+- **`tests/encoding_shapes.rs`** is where this now lives: one value, several
+  valid encodings, one derived event. Seven cases, and the place to add the
+  next one.
+- **One finding belongs to whatspec, not here.** All five captured `<message>`
+  stanzas fail to derive, and the cause is that `<meta>` declares a required
+  `content` *attribute* the real stanzas do not carry. If real WhatsApp traffic
+  also omits it, the spec extraction is wrong — which is a whatspec question.
+  Noted rather than worked around: papering over a required field here would
+  make the derivation quietly disagree with WA Web.
 
 ### rev 16 — 2026-08-07
 

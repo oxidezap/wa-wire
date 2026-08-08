@@ -27,15 +27,25 @@ const NIBBLE_8: u8 = 255;
 
 /// Servers a fixture JID can name. Slot 0 is the `LIST_EMPTY` placeholder, as
 /// in every real table.
-static FIXTURE_SINGLE: [&str; 3] = ["", "s.whatsapp.net", "lid"];
+static FIXTURE_SINGLE: [&str; 4] = ["", "s.whatsapp.net", "lid", "read"];
 const SERVER_PN_TAG: u8 = 1;
+
+/// The byte a token is written as, if this tiny table carries it.
+fn token_byte(value: &str) -> Option<u8> {
+    FIXTURE_SINGLE
+        .iter()
+        .position(|token| *token == value)
+        .filter(|index| *index > 0)
+        .and_then(|index| u8::try_from(index).ok())
+}
 
 /// The table fixtures parse against.
 ///
 /// Deliberately tiny: the wire format forces a JID's server to be a token, and
-/// nothing else in a fixture is one. A fixture that accidentally leaned on a
-/// real dictionary fails loudly here rather than silently tracking whichever
-/// one happened to be bundled.
+/// a fixture that accidentally leaned on a real dictionary fails loudly here
+/// rather than silently tracking whichever one happened to be bundled. `read`
+/// earns its place by being an enum value, so a fixture can write one the way
+/// an encoder would and check the derivation reads it.
 pub const FIXTURE_TABLE: TokenTable<'static> = TokenTable::new(&FIXTURE_SINGLE, &[]);
 
 /// An assembled stanza, ready to parse.
@@ -88,6 +98,24 @@ impl FixtureBuilder {
     pub fn attr(mut self, key: &str, value: &str) -> Self {
         self.attrs
             .push((binary(key.as_bytes()), binary(value.as_bytes())));
+        self
+    }
+
+    /// Add an attribute written as a dictionary token.
+    ///
+    /// What an encoder does with a value the dictionary already carries, and
+    /// therefore a form the derivation has to read as readily as raw bytes.
+    ///
+    /// Unknown tokens are written as bytes instead, so a fixture asking for one
+    /// gets a stanza that is still valid — just not the form it wanted.
+    #[must_use]
+    pub fn token_attr(mut self, key: &str, value: &str) -> Self {
+        match token_byte(value) {
+            Some(byte) => self.attrs.push((binary(key.as_bytes()), alloc::vec![byte])),
+            None => self
+                .attrs
+                .push((binary(key.as_bytes()), binary(value.as_bytes()))),
+        }
         self
     }
 
@@ -357,7 +385,7 @@ mod tests {
     }
 
     #[test]
-    fn the_fixture_table_holds_only_servers() {
+    fn the_fixture_table_holds_what_a_fixture_can_tokenise() {
         assert_eq!(FIXTURE_TABLE.dictionary_count(), 0);
         assert_eq!(
             FIXTURE_TABLE.single_byte(0),
@@ -369,6 +397,11 @@ mod tests {
             Some("s.whatsapp.net")
         );
         assert_eq!(FIXTURE_TABLE.single_byte(2), Some("lid"));
-        assert_eq!(FIXTURE_TABLE.single_byte(3), None);
+        assert_eq!(
+            FIXTURE_TABLE.single_byte(3),
+            Some("read"),
+            "an enum value, so a fixture can write one as a token"
+        );
+        assert_eq!(FIXTURE_TABLE.single_byte(4), None);
     }
 }

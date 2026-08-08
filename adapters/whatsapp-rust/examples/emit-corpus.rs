@@ -192,6 +192,19 @@ fn corpus() -> Vec<(&'static str, Node)> {
                 .build(),
         ),
         (
+            // A receipt from the bare server. One encoder writes that as a JID
+            // with no user, another as a dictionary token — the difference
+            // found in captured traffic, and for a long time enough to make the
+            // derivation read one engine and not the other.
+            "14-receipt-from-bare-server",
+            NodeBuilder::new("receipt")
+                .attr("id", "RCPT-SRV-1")
+                .attr("from", "s.whatsapp.net")
+                .attr("type", "read")
+                .attr("t", "1700000003")
+                .build(),
+        ),
+        (
             // Multi-byte characters, where a length in bytes and a length in
             // characters are different numbers.
             "13-receipt-unicode",
