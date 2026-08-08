@@ -37,7 +37,9 @@
 
 use std::sync::{Arc, Mutex};
 
-use wa_wire_adapter::{AdapterInfo, Capability, CapabilitySet, RawStanza, StanzaSink};
+use wa_wire_adapter::{
+    AdapterInfo, Capability, CapabilitySet, RawStanza, StanzaSink, UnmetCapabilities,
+};
 use whatsapp_rust::client::interceptor::{Interception, InterceptorHandle, StanzaInterceptor};
 use whatsapp_rust::{Client, OwnedNodeRef};
 
@@ -165,6 +167,32 @@ where
         sink: Arc::new(Mutex::new(sink)),
         policy,
     }))
+}
+
+/// Like [`attach`], but refuses unless takeover mode has every capability in
+/// `needed`.
+///
+/// Takeover's capability set is genuinely different from the tap's — it cannot
+/// see the auth phase — so "the adapter supports it" is not one question here.
+/// Stating what a consumer relies on is how that difference stops being a
+/// footnote someone has to have read.
+///
+/// # Errors
+///
+/// [`UnmetCapabilities`] naming everything takeover mode lacks, before anything
+/// is registered.
+pub fn attach_requiring<S, P>(
+    client: &Arc<Client>,
+    sink: S,
+    policy: P,
+    needed: CapabilitySet,
+) -> Result<InterceptorHandle, UnmetCapabilities>
+where
+    S: StanzaSink + Send + 'static,
+    P: ClaimPolicy,
+{
+    TAKEOVER_INFO.require(needed)?;
+    Ok(attach(client, sink, policy))
 }
 
 /// Like [`attach`], but keeps a handle on the sink.

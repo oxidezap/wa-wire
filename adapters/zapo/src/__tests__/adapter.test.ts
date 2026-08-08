@@ -4,7 +4,7 @@ import { describe, it } from 'node:test'
 import type { BinaryNode } from 'zapo-js'
 import { decodeBinaryNode } from 'zapo-js/transport'
 
-import { Capability, INFO, has, missing } from '../capability.js'
+import { Capability, INFO, UnmetCapabilitiesError, has, missing } from '../capability.js'
 import { Direction, FrameOrigin, PlaintextStatus } from '../envelope.js'
 import { Mode, forward, supports, toEnvelope, toStanza, waWire } from '../adapter.js'
 
@@ -343,5 +343,59 @@ describe('what this adapter claims', () => {
         // Tap mode emits no plaintexts at all, so no status ever crosses.
         assert.equal(toStanza(message()).plaintexts, undefined)
         assert.equal(PlaintextStatus.Ok, 0)
+    })
+})
+
+describe('the setup-time gate', () => {
+    it('installs when the requirement is met', () => {
+        const stanzas: unknown[] = []
+        const { filter } = installFull({
+            sink: (s) => stanzas.push(s),
+            requires: [Capability.L0InboundTap, Capability.L0Plaintext],
+        })
+
+        filter(receipt())
+        assert.equal(stanzas.length, 1, 'the adapter installed and forwards')
+    })
+
+    it('refuses to install when it cannot do what was asked', () => {
+        // The whole point: a consumer that needs outbound traffic finds out
+        // here, not by noticing that none ever arrived.
+        assert.throws(
+            () =>
+                installFull({
+                    sink: () => {},
+                    requires: [Capability.L0Outbound],
+                }),
+            UnmetCapabilitiesError,
+        )
+    })
+
+    it('names everything missing at once', () => {
+        // A caller fixes its setup in one pass rather than one round trip per
+        // capability.
+        try {
+            installFull({
+                sink: () => {},
+                requires: [
+                    Capability.L0InboundTap,
+                    Capability.L0Outbound,
+                    Capability.L0Request,
+                ],
+            })
+            assert.fail('should have refused')
+        } catch (error) {
+            assert.ok(error instanceof UnmetCapabilitiesError)
+            assert.deepEqual(error.missing, [Capability.L0Outbound, Capability.L0Request])
+            assert.match(error.message, /l0\.outbound/)
+        }
+    })
+
+    it('requires nothing by default', () => {
+        const stanzas: unknown[] = []
+        const { filter } = installFull({ sink: (s) => stanzas.push(s) })
+
+        filter(receipt())
+        assert.equal(stanzas.length, 1)
     })
 })

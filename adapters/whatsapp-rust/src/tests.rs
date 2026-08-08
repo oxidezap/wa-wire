@@ -331,3 +331,83 @@ fn the_handler_declares_interest_in_raw_node_only() {
     assert!(!interest.wants(EventKind::Receipt));
     assert!(!interest.wants(EventKind::Connected));
 }
+
+// --- the setup-time gate ----------------------------------------------------
+
+#[test]
+fn requiring_what_the_adapter_has_is_satisfied() {
+    assert_eq!(
+        INFO.require(
+            CapabilitySet::NONE
+                .with(Capability::L0InboundTap)
+                .with(Capability::L0Plaintext)
+                .with(Capability::ZeroCopyFrame)
+        ),
+        Ok(())
+    );
+}
+
+#[test]
+fn requiring_what_it_lacks_names_everything_missing_at_once() {
+    // All of them, not the first: a caller fixes its setup in one pass rather
+    // than one round trip per missing capability.
+    let unmet = INFO
+        .require(
+            CapabilitySet::NONE
+                .with(Capability::L0InboundTap)
+                .with(Capability::L0Outbound)
+                .with(Capability::L0Request),
+        )
+        .expect_err("this adapter does neither");
+
+    assert_eq!(
+        unmet.missing.iter().collect::<Vec<_>>(),
+        [Capability::L0Outbound, Capability::L0Request],
+        "the ones it has are not reported as missing"
+    );
+}
+
+#[test]
+fn takeover_and_tap_answer_the_same_requirement_differently() {
+    // The difference the two capability sets exist to express: takeover cannot
+    // see the auth phase. A consumer that needs it must be told at setup, not
+    // by noticing that `success` never arrived.
+    let needs_auth = CapabilitySet::NONE.with(Capability::L0InboundAuthPhase);
+
+    assert_eq!(INFO.require(needs_auth), Ok(()));
+    assert!(
+        takeover::TAKEOVER_INFO.require(needs_auth).is_err(),
+        "takeover is not offered connection-critical stanzas"
+    );
+}
+
+#[test]
+fn a_declared_requirement_is_carried_to_the_install() {
+    // The builder is what a consumer actually calls, so the requirement has to
+    // survive being put on it. Installing is covered by the host's own tests;
+    // this checks the value is not dropped on the way.
+    let plugin = WaWirePlugin::new(NullSink).requiring(
+        CapabilitySet::NONE
+            .with(Capability::L0Plaintext)
+            .with(Capability::ZeroCopyFrame),
+    );
+
+    assert_eq!(
+        plugin.required,
+        CapabilitySet::NONE
+            .with(Capability::L0Plaintext)
+            .with(Capability::ZeroCopyFrame)
+    );
+    assert_eq!(
+        INFO.require(plugin.required),
+        Ok(()),
+        "and this adapter satisfies it, so the install proceeds"
+    );
+}
+
+#[test]
+fn requiring_nothing_is_the_default_and_always_holds() {
+    let plugin = WaWirePlugin::new(NullSink);
+    assert_eq!(plugin.required, CapabilitySet::NONE);
+    assert_eq!(INFO.require(CapabilitySet::NONE), Ok(()));
+}

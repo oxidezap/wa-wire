@@ -21,8 +21,10 @@
 
 export {
     Capability,
+    UnmetCapabilitiesError,
     has,
     missing,
+    require,
     type AdapterInfo,
 } from './capability.js'
 export {

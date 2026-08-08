@@ -15,7 +15,7 @@ import { defineWaClientPlugin } from 'zapo-js'
 import type { BinaryNode, WaClientPluginContext } from 'zapo-js'
 import { encodeBinaryNode } from 'zapo-js/transport'
 
-import { INFO } from './capability.js'
+import { INFO, require as requireCapabilities, type Capability } from './capability.js'
 import {
     Direction,
     FrameOrigin,
@@ -56,6 +56,14 @@ export interface Options {
     /** Defaults to {@link Mode.Tap}. */
     readonly mode?: Mode
     /**
+     * Capabilities the consumer relies on. Installing throws
+     * {@link UnmetCapabilitiesError} when this adapter lacks any of them.
+     *
+     * Cheap to state and worth stating even when it currently holds: the point
+     * is that it keeps holding when the engine moves underneath.
+     */
+    readonly requires?: readonly Capability[]
+    /**
      * Called when a stanza cannot be forwarded.
      *
      * Throwing from the filter would let one bad stanza take down delivery for
@@ -82,6 +90,9 @@ export function waWire(options: Options) {
     return defineWaClientPlugin({
         id: 'wa-wire',
         setup(context: WaClientPluginContext) {
+            // Before anything is registered: a consumer that asked for what
+            // this adapter cannot do should not get a half-working install.
+            requireCapabilities(options.requires ?? [])
             // The joiner holds a `<message>` until its plaintexts arrive, so a
             // consumer sees one envelope per stanza rather than a frame and
             // then a stream of payloads to correlate itself.

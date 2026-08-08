@@ -427,4 +427,3 @@ fn swapping_the_engine_is_not_swapping_the_bytes() {
         "every envelope should differ in what it declares"
     );
 }
-

@@ -7,7 +7,7 @@
 
 use core::fmt;
 
-use wa_wire_contract::{Capability, CapabilitySet, ContractVersion, Provenance};
+use wa_wire_contract::{Capability, CapabilitySet, ContractVersion, Provenance, UnmetCapabilities};
 
 use crate::stanza::RawStanza;
 
@@ -61,6 +61,37 @@ impl<'a> AdapterInfo<'a> {
     #[must_use]
     pub const fn has(&self, capability: Capability) -> bool {
         self.capabilities.contains(capability)
+    }
+
+    /// Check this adapter against what a consumer needs, before anything runs.
+    ///
+    /// The gate the whole capability matrix exists for. Without it a consumer
+    /// discovers that its engine never emits plaintext, or re-encodes the
+    /// frames it was going to replay, as *missing traffic* — at which point the
+    /// evidence of what went wrong is the thing that is absent. Naming the
+    /// requirement up front turns that into a refusal to start.
+    ///
+    /// ```
+    /// use wa_wire_adapter::{AdapterInfo, Capability, CapabilitySet};
+    ///
+    /// # fn example(adapter: AdapterInfo<'_>) -> Result<(), Box<dyn core::error::Error>> {
+    /// // "I replay traffic, so I need the original bytes and the plaintexts."
+    /// adapter.require(
+    ///     CapabilitySet::NONE
+    ///         .with(Capability::ZeroCopyFrame)
+    ///         .with(Capability::L0Plaintext),
+    /// )?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`UnmetCapabilities`] naming every requirement this adapter lacks — all
+    /// of them, so a caller fixes its setup once rather than one round trip per
+    /// missing capability.
+    pub fn require(&self, needed: CapabilitySet) -> Result<(), UnmetCapabilities> {
+        self.capabilities.check_supports(needed)
     }
 
     /// Check a stanza against what this adapter claims.

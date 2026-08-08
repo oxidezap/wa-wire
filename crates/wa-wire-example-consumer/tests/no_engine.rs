@@ -80,3 +80,18 @@ fn it_depends_on_the_boundary_and_nothing_else() {
          claim that the boundary is insufficient"
     );
 }
+
+#[test]
+fn the_consumer_states_what_it_needs_of_an_engine() {
+    use wa_wire_contract::Capability;
+    use wa_wire_example_consumer::REQUIRED;
+
+    // Narrow on purpose: this consumer reads the frame and the derivation, so
+    // the inbound tap is the whole requirement. Asking for more would exclude
+    // engines it works against, and a requirement that is not one is a refusal
+    // nobody can evaluate.
+    assert_eq!(
+        REQUIRED.iter().collect::<Vec<_>>(),
+        [Capability::L0InboundTap]
+    );
+}

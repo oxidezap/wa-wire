@@ -100,6 +100,7 @@ pub const INFO: AdapterInfo<'static> =
 /// stalls delivery.
 pub struct WaWirePlugin<S> {
     sink: Arc<Mutex<S>>,
+    required: CapabilitySet,
 }
 
 impl<S> WaWirePlugin<S>
@@ -110,7 +111,34 @@ where
     pub fn new(sink: S) -> Self {
         Self {
             sink: Arc::new(Mutex::new(sink)),
+            required: CapabilitySet::NONE,
         }
+    }
+
+    /// Refuse to install unless this adapter has every capability in `needed`.
+    ///
+    /// The setup-time gate. Without it a consumer discovers that its engine
+    /// never emits plaintext, or re-encodes frames it meant to replay, as
+    /// *missing traffic* — where the evidence of the problem is the thing that
+    /// is absent. Naming the requirement turns that into a refused install.
+    ///
+    /// Cheap to state and worth stating even when it currently holds: the point
+    /// is that it keeps holding when the engine moves underneath.
+    ///
+    /// ```no_run
+    /// use wa_wire_adapter::{Capability, CapabilitySet, CountingSink};
+    /// use wa_wire_adapter_whatsapp_rust::WaWirePlugin;
+    ///
+    /// let plugin = WaWirePlugin::new(CountingSink::new()).requiring(
+    ///     CapabilitySet::NONE
+    ///         .with(Capability::ZeroCopyFrame)
+    ///         .with(Capability::L0Plaintext),
+    /// );
+    /// ```
+    #[must_use]
+    pub fn requiring(mut self, needed: CapabilitySet) -> Self {
+        self.required = needed;
+        self
     }
 
     /// The shared sink, for a caller that needs to read what it accumulated.
@@ -141,7 +169,11 @@ where
 
     fn install(&self, context: PluginContext) -> PluginFuture<'_, anyhow::Result<Arc<Self::Api>>> {
         let sink = Arc::clone(&self.sink);
+        let required = self.required;
         Box::pin(async move {
+            // Before anything is registered: a consumer that asked for what this
+            // adapter cannot do should not get a half-working install.
+            INFO.require(required)?;
             let events = context
                 .core_events()
                 .ok_or_else(|| anyhow::anyhow!("host did not grant events.core.observe"))?;

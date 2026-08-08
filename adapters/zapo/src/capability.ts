@@ -77,3 +77,29 @@ export function has(capability: Capability): boolean {
 export function missing(required: readonly Capability[]): Capability[] {
     return required.filter((capability) => !has(capability))
 }
+
+/** Raised when a consumer required capabilities this adapter does not have. */
+export class UnmetCapabilitiesError extends Error {
+    constructor(public readonly missing: readonly Capability[]) {
+        super(`adapter lacks required capabilities: ${missing.join(', ')}`)
+        this.name = 'UnmetCapabilitiesError'
+    }
+}
+
+/**
+ * Throw unless this adapter has every capability in `required`.
+ *
+ * The setup-time gate. Without it a consumer discovers that its engine never
+ * emits plaintext, or re-encodes frames it meant to replay, as *missing
+ * traffic* — where the evidence of the problem is the thing that is absent.
+ * Naming the requirement turns that into a refused install.
+ *
+ * Reports everything missing at once, so a caller fixes its setup in one pass
+ * rather than one round trip per capability.
+ */
+export function require(required: readonly Capability[]): void {
+    const absent = missing(required)
+    if (absent.length > 0) {
+        throw new UnmetCapabilitiesError(absent)
+    }
+}

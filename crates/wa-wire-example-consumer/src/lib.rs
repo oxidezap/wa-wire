@@ -44,8 +44,21 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use wa_wire_codec::{Parser, TokenTable};
-use wa_wire_contract::{Direction, EnvelopeRef};
+use wa_wire_contract::{Capability, CapabilitySet, Direction, EnvelopeRef};
 use wa_wire_l1::{Event, derive};
+
+/// What this consumer needs of whatever engine it is pointed at.
+///
+/// Stated so an adapter that cannot do it refuses to install, rather than the
+/// consumer running against traffic that quietly lacks what it reads. A
+/// consumer that needs nothing in particular declares nothing; this one reads
+/// the frame and the derivation, so it needs the inbound tap and nothing more.
+///
+/// Deliberately narrow. Requiring `l0.plaintext` here would exclude an engine
+/// this consumer works perfectly well against, and a requirement that is not
+/// really a requirement is worse than none — it is a refusal nobody can
+/// evaluate.
+pub const REQUIRED: CapabilitySet = CapabilitySet::NONE.with(Capability::L0InboundTap);
 
 /// Why a stanza produced no event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

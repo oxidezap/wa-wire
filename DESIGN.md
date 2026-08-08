@@ -1321,7 +1321,7 @@ No L2. No Layer 3 host.
 3. L1 derivation generated from `whatspec`, host-side, single implementation.
 4. Conformance suite (RFC-005) green: identical L0 in → identical L1 out across
    all four engines. **Green for two of them as of rev 15.**
-5. Capability matrix machine-readable and enforced at setup.
+5. Capability matrix machine-readable and enforced at setup. **Done in rev 20.**
 6. Takeover working on at least `zapo` (native) and `whatsapp-rust` (patched).
 
 **Explicitly out of v1:** L2 commands, Layer 3 host, session handoff, fencing,
@@ -1468,6 +1468,8 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-063 | A JID is read whatever form the encoder chose | The wire has a dedicated JID form and an encoder may use it or write text; both are valid. Reading only the dedicated form made one engine derive where another derived nothing from identical traffic | 17 |
 | D-064 | A bare server is only read as a JID when the wire wrote it as a token | Servers are dictionary entries, so a token is evidence. Accepting any word without an `@` would turn a JID field into "any string at all" | 17 |
 | D-065 | A spec defect is fixed in the spec, never worked around here | The derivation is generated from whatspec so that it says what WA Web says. Softening a required field locally would make it quietly disagree, which is the failure this project exists to detect | 17 |
+| D-066 | A requirement is refused at install, not reported per stanza | An unmet capability shows up as *missing traffic*, where the evidence of the problem is the thing that is absent. Refusing to start names it while there is still something to name | 20 |
+| D-067 | An unmet requirement names every missing capability, not the first | A caller fixes its setup in one pass rather than one round trip per capability | 20 |
 
 ---
 
