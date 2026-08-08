@@ -62,6 +62,7 @@ export const INFO: AdapterInfo = {
     contractVersion: 1,
     capabilities: [
         Capability.L0InboundTap,
+        Capability.L0Plaintext,
         Capability.Takeover,
         Capability.DrainHook,
     ],

@@ -2,8 +2,8 @@
 
 > **Status:** **IMPLEMENTING** — all nine RFCs accepted. Steps 1–6, 9 and 10 of
 > §8 are done; steps 7–8 (Baileys, hypermeow) remain. Two engines are measured
-> agreeing on derived events (rev 15); `whatsapp-rust` emits L0-plain, one
-> adapter of the four the definition of done asks for.
+> agreeing on derived events (rev 15), and both now emit L0-plain — two of the
+> four the definition of done asks for.
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
@@ -1317,7 +1317,7 @@ No L2. No Layer 3 host.
 
 1. `wa-wire-contract` published, with the RFC-008 format specified and frozen.
 2. Four adapters emitting L0-plain: `whatsapp-rust`, `zapo`, `Baileys`,
-   `hypermeow`.
+   `hypermeow`. **Two of four as of rev 19.**
 3. L1 derivation generated from `whatspec`, host-side, single implementation.
 4. Conformance suite (RFC-005) green: identical L0 in → identical L1 out across
    all four engines. **Green for two of them as of rev 15.**

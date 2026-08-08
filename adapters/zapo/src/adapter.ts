@@ -22,6 +22,7 @@ import {
     encodeEnvelope,
     type Stanza,
 } from './envelope.js'
+import { PlaintextJoiner } from './joiner.js'
 
 /** Where the adapter delivers stanzas. */
 export type StanzaSink = (stanza: Stanza) => void
@@ -81,13 +82,50 @@ export function waWire(options: Options) {
     return defineWaClientPlugin({
         id: 'wa-wire',
         setup(context: WaClientPluginContext) {
+            // The joiner holds a `<message>` until its plaintexts arrive, so a
+            // consumer sees one envelope per stanza rather than a frame and
+            // then a stream of payloads to correlate itself.
+            const joiner = new PlaintextJoiner()
+            const sink = (stanza: Stanza): void => {
+                try {
+                    options.sink(stanza)
+                } catch (error) {
+                    options.onError?.(error, { tag: 'message', attrs: {} })
+                }
+            }
+
             const unregister = context.registerIncomingStanzaFilter((node) => {
-                forward(node, options)
+                joiner.acceptNode(node, encodeBinaryNode(node), sink)
                 // Under takeover the engine stops interpreting the stanza but
                 // still acks it, so the server does not redeliver.
                 return mode === Mode.Takeover
             })
-            context.registerDispose(unregister)
+            const onPayload = (event: {
+                readonly stanzaId?: string
+                readonly encIndex: number
+                readonly plaintext: Uint8Array
+            }): void => {
+                if (event.stanzaId === undefined) {
+                    return
+                }
+                joiner.acceptPlaintext(
+                    {
+                        messageId: event.stanzaId,
+                        encIndex: event.encIndex,
+                        plaintext: event.plaintext,
+                    },
+                    sink
+                )
+            }
+            context.on('debug_decrypted_payload', onPayload)
+
+            context.registerDispose(() => {
+                unregister()
+                context.off('debug_decrypted_payload', onPayload)
+                // Whatever is still held is the last anyone will hear about
+                // those stanzas.
+                joiner.flush(sink)
+            })
         },
     })
 }

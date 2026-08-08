@@ -50,12 +50,13 @@ describe('turning a node into a stanza', () => {
         }
     })
 
-    it('carries no plaintext table', () => {
-        // The filter runs before decryption, so a <message> crosses with its
-        // ciphertext and nothing else. Saying so is the honest option.
+    it('carries no plaintext table on its own', () => {
+        // `toStanza` is the frame-only shape, which is what a stanza with no
+        // `<enc>` crosses as. Payloads arrive later and are joined by
+        // `PlaintextJoiner`, which is where the table comes from.
         const stanza = toStanza(message())
         assert.equal(stanza.plaintexts, undefined)
-        assert.ok(!has(Capability.L0Plaintext))
+        assert.ok(has(Capability.L0Plaintext), 'but the adapter does emit them')
     })
 
     it('encodes straight to envelope bytes', () => {
@@ -138,6 +139,8 @@ describe('the plugin', () => {
             registerDispose(fn: () => void) {
                 disposer = fn
             },
+            on() {},
+            off() {},
         }
 
         const plugin = waWire({ sink: () => {} })
@@ -183,26 +186,118 @@ describe('the plugin', () => {
             mode: Mode.Takeover,
         })
 
-        for (const node of [receipt(), message(), receipt()]) {
+        for (const node of [receipt(), receipt(), receipt()]) {
             filter(node)
         }
-        assert.deepEqual(seen, ['receipt', 'message', 'receipt'])
+        assert.deepEqual(seen, ['receipt', 'receipt', 'receipt'])
+    })
+
+    it('joins a payload onto the message it belongs to', () => {
+        const stanzas: Array<{ readonly plaintexts?: unknown }> = []
+        const { filter, onPayload } = installFull({ sink: (s) => stanzas.push(s) })
+
+        filter(message())
+        onPayload({
+            stanzaId: message().attrs.id,
+            encIndex: 0,
+            plaintext: new Uint8Array([7, 7]),
+        })
+
+        assert.equal(stanzas.length, 1, 'the join released it')
+        assert.deepEqual(stanzas[0]?.plaintexts, [
+            { path: [0], status: PlaintextStatus.Ok, payload: new Uint8Array([7, 7]) },
+        ])
+    })
+
+    it('ignores a payload with no stanza to attach it to', () => {
+        // Nothing to match on, so there is no stanza it could belong to.
+        const stanzas: unknown[] = []
+        const { filter, onPayload } = installFull({ sink: (s) => stanzas.push(s) })
+
+        filter(message())
+        onPayload({ encIndex: 0, plaintext: new Uint8Array([1]) })
+
+        assert.equal(stanzas.length, 0, 'the message is still waiting')
+    })
+
+    it('emits what is still held when the plugin is disposed', () => {
+        const stanzas: Array<{ readonly plaintexts?: readonly { status: number }[] }> = []
+        const { filter, dispose } = installFull({ sink: (s) => stanzas.push(s) })
+
+        filter(message())
+        assert.equal(stanzas.length, 0)
+
+        dispose()
+
+        assert.equal(stanzas.length, 1, 'held stanzas are not lost on shutdown')
+        assert.deepEqual(
+            stanzas[0]?.plaintexts?.map((p) => p.status),
+            [PlaintextStatus.Unobserved],
+        )
+    })
+
+    it('reports a sink failure on the joined path too', () => {
+        const errors: unknown[] = []
+        const { filter, onPayload } = installFull({
+            sink: () => {
+                throw new Error('consumer blew up')
+            },
+            onError: (error) => errors.push(error),
+        })
+
+        filter(message())
+        onPayload({ stanzaId: message().attrs.id, encIndex: 0, plaintext: new Uint8Array([1]) })
+
+        assert.equal(errors.length, 1, 'the failure is reported, not thrown at the engine')
+    })
+
+    it('holds a message until its plaintexts arrive', () => {
+        // The one shape that does not cross immediately: a `<message>` waits so
+        // its payloads can be joined onto it, which is what makes the adapter
+        // emit L0-plain rather than L0-wire. See `PlaintextJoiner`.
+        const seen: string[] = []
+        const filter = install({
+            sink: (s) => seen.push(decodeBinaryNode(s.frame).tag),
+        })
+
+        filter(message())
+        assert.deepEqual(seen, [], 'held, not dropped')
+
+        filter(receipt())
+        assert.deepEqual(seen, ['receipt'], 'and does not hold up what follows it')
     })
 })
 
 function install(options: Parameters<typeof waWire>[0]) {
+    return installFull(options).filter
+}
+
+/** The whole seam: the filter, the payload listener, and the disposer. */
+function installFull(options: Parameters<typeof waWire>[0]) {
     let filter: ((node: BinaryNode) => unknown) | undefined
+    let onPayload: ((event: unknown) => void) | undefined
+    let dispose: (() => void) | undefined
     const context = {
         registerIncomingStanzaFilter(fn: (node: BinaryNode) => unknown) {
             filter = fn
             return () => {}
         },
-        registerDispose() {},
+        registerDispose(fn: () => void) {
+            dispose = fn
+        },
+        on(event: string, handler: (event: unknown) => void) {
+            if (event === 'debug_decrypted_payload') {
+                onPayload = handler
+            }
+        },
+        off() {},
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     waWire(options).setup(context as any)
     assert.ok(filter, 'the plugin registered a filter')
-    return filter
+    assert.ok(onPayload, 'and subscribed to decrypted payloads')
+    assert.ok(dispose, 'and registered a disposer')
+    return { filter, onPayload, dispose }
 }
 
 describe('what this adapter claims', () => {
@@ -213,6 +308,10 @@ describe('what this adapter claims', () => {
         assert.ok(has(Capability.L0InboundTap))
         assert.ok(has(Capability.Takeover), 'the filter can drop a stanza')
         assert.ok(has(Capability.DrainHook), 'registerDispose runs after drain')
+        assert.ok(
+            has(Capability.L0Plaintext),
+            'debug_decrypted_payload reports each one after Signal',
+        )
     })
 
     it('does not claim what zapo does not offer here', () => {
@@ -224,10 +323,6 @@ describe('what this adapter claims', () => {
             !has(Capability.ZeroCopyFrame),
             'the filter sees a decoded node, not the buffer',
         )
-        assert.ok(
-            !has(Capability.L0Plaintext),
-            'the filter runs before decryption',
-        )
         assert.ok(!has(Capability.L0Outbound))
         assert.ok(!has(Capability.L0Request))
     })
@@ -238,9 +333,9 @@ describe('what this adapter claims', () => {
         assert.ok(supports([]))
 
         assert.deepEqual(missing([Capability.L0InboundTap]), [])
-        assert.deepEqual(missing([Capability.ZeroCopyFrame, Capability.L0Plaintext]), [
+        assert.deepEqual(missing([Capability.ZeroCopyFrame, Capability.L0Outbound]), [
             Capability.ZeroCopyFrame,
-            Capability.L0Plaintext,
+            Capability.L0Outbound,
         ])
     })
 
