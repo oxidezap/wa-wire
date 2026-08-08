@@ -8,18 +8,43 @@
 use wa_wire_adapter::AdapterInfo;
 use wa_wire_contract::EnvelopeRef;
 
+use crate::comparability::Comparability;
+
 /// Envelopes captured from one engine, in arrival order.
 #[derive(Debug, Clone, Copy)]
 pub struct Recording<'a> {
     adapter: AdapterInfo<'a>,
     envelopes: &'a [&'a [u8]],
+    comparability: Option<Comparability<'a>>,
 }
 
 impl<'a> Recording<'a> {
     /// Wrap captured envelopes.
+    ///
+    /// Carries no comparability declaration: a caller that assembled both sides
+    /// in memory is vouching that they are of the same traffic. Compare that
+    /// against a recording read from a container and the pair is refused, since
+    /// half a checked claim leaves the pair unchecked.
     #[must_use]
     pub const fn new(adapter: AdapterInfo<'a>, envelopes: &'a [&'a [u8]]) -> Self {
-        Self { adapter, envelopes }
+        Self {
+            adapter,
+            envelopes,
+            comparability: None,
+        }
+    }
+
+    /// Declare what this recording is comparable to.
+    #[must_use]
+    pub const fn with_comparability(mut self, comparability: Comparability<'a>) -> Self {
+        self.comparability = Some(comparability);
+        self
+    }
+
+    /// What this recording declares about its own comparability.
+    #[must_use]
+    pub const fn comparability(&self) -> Option<Comparability<'a>> {
+        self.comparability
     }
 
     /// Which adapter produced this.

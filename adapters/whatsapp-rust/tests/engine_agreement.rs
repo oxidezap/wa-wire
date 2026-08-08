@@ -39,7 +39,10 @@ use std::sync::Arc;
 
 use wa_wire_adapter::{AdapterInfo, RawStanza, StanzaSink};
 use wa_wire_adapter_whatsapp_rust::INFO;
-use wa_wire_conformance::{Layer, Recording, compare};
+use wa_wire_conformance::{
+    Comparability, ComparisonProfile, Layer, Recording, Tables, Verdict, compare,
+};
+use wa_wire_recording::{ArtifactClass, Integrity, RecordingRef};
 use whatsapp_rust::OwnedNodeRef;
 
 /// `zapo`'s declaration, as its own source states it.
@@ -134,32 +137,50 @@ fn whatsapp_rust_envelopes() -> Vec<Vec<u8>> {
 }
 
 /// The envelopes `zapo` wrote, from its committed recording.
-fn zapo_envelopes() -> Vec<Vec<u8>> {
+///
+/// Read through the RFC-010 reader rather than by hand: the container used to
+/// be four bytes of magic and a count, parsed with slice indexing inside this
+/// test. A recording that travels between machines carries claims about which
+/// engine, which spec and which traffic produced it, and a reader that panics
+/// on anything unexpected cannot check them.
+fn zapo_recording() -> Vec<u8> {
     let path = workspace("adapters/zapo/recordings/zapo.recording");
-    let bytes = std::fs::read(&path).unwrap_or_else(|error| {
+    std::fs::read(&path).unwrap_or_else(|error| {
         panic!(
             "{}: {error}\nrun `npx tsx scripts/emit-recording.ts`",
             path.display()
         )
-    });
+    })
+}
 
-    assert_eq!(&bytes[..4], b"WAWR", "recording magic");
-    let count = u32::from_be_bytes(bytes[4..8].try_into().expect("4 bytes")) as usize;
+/// The envelopes `zapo` wrote, owned so callers keep their existing shape.
+fn zapo_envelopes() -> Vec<Vec<u8>> {
+    let bytes = zapo_recording();
+    let recording = RecordingRef::decode(&bytes).expect("the committed recording reads");
+    assert_eq!(
+        recording.integrity(),
+        Integrity::Complete,
+        "a committed recording must not be truncated or damaged"
+    );
+    assert_eq!(
+        recording.unknown_critical_tags(),
+        0,
+        "a critical tag this build cannot read makes the pair incomparable"
+    );
+    recording.envelopes().map(<[u8]>::to_vec).collect()
+}
 
-    let mut envelopes = Vec::with_capacity(count);
-    let mut offset = 8;
-    for index in 0..count {
-        let len = u32::from_be_bytes(
-            bytes[offset..offset + 4]
-                .try_into()
-                .unwrap_or_else(|_| panic!("truncated length for envelope {index}")),
-        ) as usize;
-        offset += 4;
-        envelopes.push(bytes[offset..offset + len].to_vec());
-        offset += len;
+/// The checksum of the corpus, in the order both readers walk it.
+///
+/// Both sides compute it independently and the comparison refuses the pair
+/// unless they match, so two recordings of *different* corpora are reported as
+/// incomparable rather than as an engine regression.
+fn corpus_digest() -> [u8; 4] {
+    let mut joined = Vec::new();
+    for (_, frame) in corpus() {
+        joined.extend_from_slice(&frame);
     }
-    assert_eq!(offset, bytes.len(), "trailing bytes in the recording");
-    envelopes
+    wa_wire_recording::crc32(&joined).to_le_bytes()
 }
 
 fn table() -> wa_wire_codec::TokenTable<'static> {
@@ -179,10 +200,17 @@ fn the_two_engines_derive_the_same_events_from_the_same_traffic() {
 
     let ours_refs: Vec<&[u8]> = ours.iter().map(Vec::as_slice).collect();
     let theirs_refs: Vec<&[u8]> = theirs.iter().map(Vec::as_slice).collect();
+    let digest = corpus_digest();
+    let declared = Comparability::declared(&digest, ArtifactClass::Replayed);
     let report = compare(
-        &Recording::new(INFO, &ours_refs),
-        &Recording::new(ZAPO_INFO, &theirs_refs),
-        table(),
+        &Recording::new(INFO, &ours_refs).with_comparability(declared),
+        &Recording::new(ZAPO_INFO, &theirs_refs).with_comparability(declared),
+        Tables::shared(table()),
+    );
+    assert_eq!(
+        report.incomparable(),
+        None,
+        "both sides must declare the same corpus before any verdict means anything"
     );
 
     let faults: Vec<_> = report.faults().collect();
@@ -297,10 +325,17 @@ fn every_divergence_is_at_l0_and_none_is_a_fault() {
     let ours_refs: Vec<&[u8]> = ours.iter().map(Vec::as_slice).collect();
     let theirs_refs: Vec<&[u8]> = theirs.iter().map(Vec::as_slice).collect();
 
+    let digest = corpus_digest();
+    let declared = Comparability::declared(&digest, ArtifactClass::Replayed);
     let report = compare(
-        &Recording::new(INFO, &ours_refs),
-        &Recording::new(ZAPO_INFO, &theirs_refs),
-        table(),
+        &Recording::new(INFO, &ours_refs).with_comparability(declared),
+        &Recording::new(ZAPO_INFO, &theirs_refs).with_comparability(declared),
+        Tables::shared(table()),
+    );
+    assert_eq!(
+        report.incomparable(),
+        None,
+        "both sides must declare the same corpus before any verdict means anything"
     );
 
     let at_l1: Vec<_> = report
@@ -320,10 +355,44 @@ fn every_divergence_is_at_l0_and_none_is_a_fault() {
         .iter()
         .filter(|(known, _)| names.iter().any(|name| name == known))
         .count();
+    let frame_diffs = report
+        .divergences()
+        .filter(|divergence| matches!(divergence, wa_wire_conformance::Divergence::Frame { .. }))
+        .count();
+    assert_eq!(
+        frame_diffs, expected,
+        "every byte difference is one of the known encoder choices"
+    );
+
+    // One per stanza, and not a fault: this adapter hands over the buffer its
+    // engine decoded, and `zapo` cannot reach its own, so it re-encodes and
+    // says so. Recorded rather than suppressed, because between two *builds*
+    // of one adapter the same finding means it stopped reaching its buffer.
+    let origin_diffs = report
+        .divergences()
+        .filter(|divergence| {
+            matches!(
+                divergence,
+                wa_wire_conformance::Divergence::FrameOrigin { .. }
+            )
+        })
+        .count();
+    assert_eq!(origin_diffs, ours.len());
     assert_eq!(
         report.divergences().count(),
-        expected,
-        "every difference is one of the known encoder choices"
+        frame_diffs + origin_diffs,
+        "and nothing else differs"
+    );
+
+    // The profiles are not interchangeable, and this is the corpus that shows
+    // it: the same report that passes as interop fails as regression, because
+    // "a different engine" and "the same engine, changed" are different
+    // questions about the same evidence.
+    assert_eq!(report.evaluate(ComparisonProfile::Interop), Verdict::Pass);
+    assert_eq!(
+        report.evaluate(ComparisonProfile::Regression),
+        Verdict::Fail,
+        "these are two engines, not two builds of one"
     );
 }
 

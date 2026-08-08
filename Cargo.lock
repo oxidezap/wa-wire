@@ -10,6 +10,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "wa-wire-alloc-check"
+version = "0.1.0"
+dependencies = [
+ "wa-wire-codec",
+ "wa-wire-contract",
+ "wa-wire-l1",
+ "wa-wire-proto",
+ "wa-wire-recording",
+]
+
+[[package]]
 name = "wa-wire-codec"
 version = "0.1.0"
 dependencies = [
@@ -24,6 +35,8 @@ dependencies = [
  "wa-wire-codec",
  "wa-wire-contract",
  "wa-wire-l1",
+ "wa-wire-proto",
+ "wa-wire-recording",
 ]
 
 [[package]]
@@ -34,6 +47,7 @@ version = "0.1.0"
 name = "wa-wire-example-consumer"
 version = "0.1.0"
 dependencies = [
+ "wa-wire-adapter",
  "wa-wire-codec",
  "wa-wire-contract",
  "wa-wire-l1",
@@ -45,4 +59,16 @@ version = "0.1.0"
 dependencies = [
  "wa-wire-codec",
  "wa-wire-l1",
+ "wa-wire-proto",
+]
+
+[[package]]
+name = "wa-wire-proto"
+version = "0.1.0"
+
+[[package]]
+name = "wa-wire-recording"
+version = "0.1.0"
+dependencies = [
+ "wa-wire-contract",
 ]

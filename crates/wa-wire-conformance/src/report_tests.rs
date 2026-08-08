@@ -9,10 +9,14 @@ use super::*;
 extern crate alloc;
 use alloc::vec::Vec;
 
-use wa_wire_adapter::{AdapterInfo, Capability, CapabilitySet, Provenance, RawStanza};
+use wa_wire_adapter::{AdapterInfo, Capability, CapabilitySet, Plaintext, Provenance, RawStanza};
+use wa_wire_contract::{Direction, NodePath, PlaintextStatus};
 use wa_wire_l1::testing::{FIXTURE_TABLE, Fixture, FixtureBuilder};
 
+use crate::comparability::Comparability;
 use crate::divergence::Layer;
+use crate::profile::{ComparisonProfile, Incomparable, Verdict};
+use crate::report::Tables;
 
 fn info(id: &'static str) -> AdapterInfo<'static> {
     AdapterInfo::new(
@@ -53,7 +57,7 @@ fn identical_recordings_agree_and_are_identical() {
     let report = compare(
         &recording("engine-a", &left),
         &recording("engine-b", &right),
-        FIXTURE_TABLE,
+        Tables::shared(FIXTURE_TABLE),
     );
 
     assert!(report.agrees());
@@ -65,7 +69,11 @@ fn identical_recordings_agree_and_are_identical() {
 
 #[test]
 fn empty_recordings_agree() {
-    let report = compare(&recording("a", &[]), &recording("b", &[]), FIXTURE_TABLE);
+    let report = compare(
+        &recording("a", &[]),
+        &recording("b", &[]),
+        Tables::shared(FIXTURE_TABLE),
+    );
     assert!(report.agrees());
     assert!(report.is_identical());
     assert_eq!(report.compared(), 0);
@@ -99,7 +107,7 @@ fn different_encodings_of_one_stanza_are_not_a_fault() {
     let report = compare(
         &recording("engine-a", &left),
         &recording("engine-b", &right),
-        FIXTURE_TABLE,
+        Tables::shared(FIXTURE_TABLE),
     );
 
     assert!(report.agrees(), "the events mean the same thing");
@@ -110,7 +118,7 @@ fn different_encodings_of_one_stanza_are_not_a_fault() {
         .filter(|d| d.layer() == Layer::L0)
         .collect();
     assert_eq!(frame_diffs.len(), 1);
-    assert!(!frame_diffs[0].is_fault());
+    assert!(!ComparisonProfile::Interop.is_failure(frame_diffs[0]));
     assert_eq!(frame_diffs[0].index(), Some(0));
 }
 
@@ -130,7 +138,7 @@ fn a_different_derived_event_is_a_fault() {
     let report = compare(
         &recording("engine-a", &left),
         &recording("engine-b", &right),
-        FIXTURE_TABLE,
+        Tables::shared(FIXTURE_TABLE),
     );
 
     assert!(!report.agrees(), "one of the two is wrong");
@@ -150,7 +158,7 @@ fn deriving_where_the_other_failed_is_a_fault() {
     let report = compare(
         &recording("engine-a", &left),
         &recording("engine-b", &right),
-        FIXTURE_TABLE,
+        Tables::shared(FIXTURE_TABLE),
     );
 
     assert!(!report.agrees());
@@ -176,7 +184,7 @@ fn failing_the_same_way_is_agreement_not_a_finding() {
     let report = compare(
         &recording("engine-a", &left),
         &recording("engine-b", &right),
-        FIXTURE_TABLE,
+        Tables::shared(FIXTURE_TABLE),
     );
 
     assert!(report.agrees());
@@ -195,14 +203,384 @@ fn different_lengths_are_reported_once_and_stop_the_comparison() {
     let report = compare(
         &recording("engine-a", &left),
         &recording("engine-b", &right),
-        FIXTURE_TABLE,
+        Tables::shared(FIXTURE_TABLE),
     );
 
     let divergences: Vec<_> = report.divergences().collect();
     assert_eq!(divergences.len(), 1);
     assert_eq!(*divergences[0], Divergence::Length { left: 3, right: 1 });
     assert_eq!(report.compared(), 0, "nothing was compared past it");
-    assert!(report.agrees(), "a length difference is not itself a fault");
+    assert!(
+        !report.agrees(),
+        "one engine lost a stanza; the gate must not pass"
+    );
+}
+
+// --- comparability ---------------------------------------------------------
+
+#[test]
+fn two_recordings_of_different_traffic_report_incomparable_not_disagreement() {
+    // The failure the container exists to prevent. These two recordings differ
+    // on every stanza, and every one of those differences would read exactly
+    // like an engine fault. What is actually true is that nobody established
+    // they were of the same traffic.
+    use wa_wire_recording::ArtifactClass;
+
+    let a = envelope(receipt("A"));
+    let b = envelope(receipt("B"));
+    let (left, right): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
+
+    let older = recording("engine-a", &left)
+        .with_comparability(Comparability::declared(b"monday", ArtifactClass::Replayed));
+    let newer = recording("engine-b", &right)
+        .with_comparability(Comparability::declared(b"tuesday", ArtifactClass::Replayed));
+
+    let report = compare(&older, &newer, Tables::shared(FIXTURE_TABLE));
+
+    assert_eq!(
+        report.evaluate(ComparisonProfile::Regression),
+        Verdict::Incomparable(Incomparable::DifferentInput)
+    );
+    assert_eq!(
+        report.incomparable(),
+        Some(Incomparable::DifferentInput),
+        "and it says which of the reasons applied"
+    );
+    assert!(
+        report.divergences().count() > 0,
+        "the findings are still collected, so a human can see why"
+    );
+    assert!(
+        !report.agrees(),
+        "incomparable is not agreement under any profile"
+    );
+}
+
+#[test]
+fn declaring_the_same_input_lets_the_comparison_proceed() {
+    use wa_wire_recording::ArtifactClass;
+
+    let a = envelope(receipt("A"));
+    let b = envelope(receipt("A"));
+    let (left, right): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
+
+    let baseline = recording("engine-a", &left)
+        .with_comparability(Comparability::declared(b"monday", ArtifactClass::Replayed));
+    let candidate = recording("engine-b", &right)
+        .with_comparability(Comparability::declared(b"monday", ArtifactClass::Replayed));
+
+    let report = compare(&baseline, &candidate, Tables::shared(FIXTURE_TABLE));
+    assert_eq!(
+        report.evaluate(ComparisonProfile::Regression),
+        Verdict::Pass
+    );
+    assert_eq!(report.evaluate(ComparisonProfile::Interop), Verdict::Pass);
+}
+
+#[test]
+fn an_in_memory_recording_and_a_declared_one_are_not_mixed() {
+    use wa_wire_recording::ArtifactClass;
+
+    let a = envelope(receipt("A"));
+    let (left, right): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&a]);
+
+    let vouched = recording("engine-a", &left);
+    let declared = recording("engine-b", &right)
+        .with_comparability(Comparability::declared(b"monday", ArtifactClass::Replayed));
+    assert_eq!(vouched.comparability(), None);
+
+    let report = compare(&vouched, &declared, Tables::shared(FIXTURE_TABLE));
+    assert_eq!(
+        report.evaluate(ComparisonProfile::Interop),
+        Verdict::Incomparable(Incomparable::UndeclaredInput),
+        "half a checked claim leaves the pair unchecked"
+    );
+}
+
+// --- the envelope around the frame ----------------------------------------
+
+fn plain_envelope(builder: FixtureBuilder, plaintexts: &[Plaintext<'_>]) -> Vec<u8> {
+    let fixture = builder.build();
+    RawStanza::inbound(fixture.bytes())
+        .with_plaintexts(plaintexts)
+        .encode_to_vec()
+        .expect("encodes")
+}
+
+fn at(components: &[u16]) -> Vec<u8> {
+    components.iter().flat_map(|c| c.to_le_bytes()).collect()
+}
+
+#[test]
+fn the_same_frame_decrypted_two_ways_is_a_fault() {
+    // The whole point of L0-plain. A frame-only comparison sees nothing here:
+    // the bytes on the wire are identical and only the plaintexts differ.
+    let p = at(&[0]);
+    let path = NodePath::from_le_bytes(&p);
+    let a = plain_envelope(receipt("A"), &[Plaintext::ok(path, b"hello")]);
+    let b = plain_envelope(receipt("A"), &[Plaintext::ok(path, b"world")]);
+    let (left, right): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
+
+    let report = compare(
+        &recording("engine-a", &left),
+        &recording("engine-b", &right),
+        Tables::shared(FIXTURE_TABLE),
+    );
+
+    assert!(!report.agrees(), "one of them decrypted wrongly");
+    let fault = report.faults().next().expect("a fault");
+    assert!(
+        matches!(fault, Divergence::Plaintext { index: 0, .. }),
+        "{fault:?}"
+    );
+}
+
+#[test]
+fn observing_less_plaintext_is_reported_without_failing_the_run() {
+    // An adapter that cannot resolve a payload to its node says so rather than
+    // guessing, and that is a limit on the adapter, not a fault in an engine.
+    let p = at(&[0]);
+    let path = NodePath::from_le_bytes(&p);
+    let a = plain_envelope(receipt("A"), &[Plaintext::ok(path, b"hello")]);
+    let b = plain_envelope(receipt("A"), &[Plaintext::unobserved(path)]);
+    let (left, right): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
+
+    let report = compare(
+        &recording("engine-a", &left),
+        &recording("engine-b", &right),
+        Tables::shared(FIXTURE_TABLE),
+    );
+
+    assert!(report.agrees(), "coverage is not correctness");
+    assert!(!report.is_identical());
+    assert_eq!(
+        *report.divergences().next().expect("a divergence"),
+        Divergence::PlaintextCoverage {
+            index: 0,
+            only_left: 1,
+            only_right: 0,
+        }
+    );
+}
+
+#[test]
+fn plaintext_at_a_different_node_is_not_treated_as_the_same_payload() {
+    // Same bytes, different node. Matching by ordinal would call this agreement.
+    let (p0, p1) = (at(&[0]), at(&[1]));
+    let a = plain_envelope(
+        receipt("A"),
+        &[Plaintext::ok(NodePath::from_le_bytes(&p0), b"same")],
+    );
+    let b = plain_envelope(
+        receipt("A"),
+        &[Plaintext::ok(NodePath::from_le_bytes(&p1), b"same")],
+    );
+    let (left, right): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
+
+    let report = compare(
+        &recording("engine-a", &left),
+        &recording("engine-b", &right),
+        Tables::shared(FIXTURE_TABLE),
+    );
+
+    assert_eq!(
+        *report.divergences().next().expect("a divergence"),
+        Divergence::PlaintextCoverage {
+            index: 0,
+            only_left: 1,
+            only_right: 1,
+        }
+    );
+}
+
+#[test]
+fn matching_plaintext_leaves_the_recordings_identical() {
+    let p = at(&[0]);
+    let path = NodePath::from_le_bytes(&p);
+    let a = plain_envelope(receipt("A"), &[Plaintext::ok(path, b"hello")]);
+    let b = plain_envelope(receipt("A"), &[Plaintext::ok(path, b"hello")]);
+    let (left, right): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
+
+    let report = compare(
+        &recording("engine-a", &left),
+        &recording("engine-b", &right),
+        Tables::shared(FIXTURE_TABLE),
+    );
+
+    assert!(report.is_identical());
+}
+
+#[test]
+fn disagreeing_about_direction_is_a_fault() {
+    // Direction is a property of the stanza. A consumer reading one of these
+    // recordings would be wrong about what the other saw.
+    let fixture = receipt("A").build();
+    let a = RawStanza::inbound(fixture.bytes())
+        .encode_to_vec()
+        .expect("encodes");
+    let b = RawStanza::outbound(fixture.bytes())
+        .encode_to_vec()
+        .expect("encodes");
+    let (left, right): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
+
+    let report = compare(
+        &recording("engine-a", &left),
+        &recording("engine-b", &right),
+        Tables::shared(FIXTURE_TABLE),
+    );
+
+    assert!(!report.agrees());
+    assert_eq!(
+        *report.faults().next().expect("a fault"),
+        Divergence::Direction {
+            index: 0,
+            left: Direction::Inbound,
+            right: Direction::Outbound,
+        }
+    );
+}
+
+#[test]
+fn a_re_encoded_frame_is_recorded_but_does_not_fail_two_engines() {
+    // Recorded rather than judged: between two engines this is how they differ
+    // by design, and between two builds of one adapter it is the newer one
+    // having stopped reaching its engine's own buffer. Suppressing it at the
+    // source would have left the second case undetectable.
+    let fixture = receipt("A").build();
+    let a = RawStanza::inbound(fixture.bytes())
+        .encode_to_vec()
+        .expect("encodes");
+    let b = RawStanza::inbound(fixture.bytes())
+        .re_encoded()
+        .encode_to_vec()
+        .expect("encodes");
+    let (left, right): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
+
+    let report = compare(
+        &recording("engine-a", &left),
+        &recording("engine-b", &right),
+        Tables::shared(FIXTURE_TABLE),
+    );
+
+    assert!(report.agrees(), "two adapters may legitimately differ here");
+    assert_eq!(
+        *report.divergences().next().expect("recorded"),
+        Divergence::FrameOrigin {
+            index: 0,
+            degraded: true,
+        }
+    );
+    assert_eq!(
+        report.evaluate(ComparisonProfile::Regression),
+        Verdict::Fail,
+        "the same adapter reaching less far than it did is a regression"
+    );
+}
+
+#[test]
+fn two_engines_failing_to_decrypt_for_different_reasons_is_recorded() {
+    // Neither carries a payload, so nothing about the traffic differs. What
+    // differs is how much each could say about the failure — nothing between
+    // engines, diagnostic ground between builds.
+    let p = at(&[0]);
+    let path = NodePath::from_le_bytes(&p);
+    let a = plain_envelope(receipt("A"), &[Plaintext::failed(path)]);
+    let b = plain_envelope(receipt("A"), &[Plaintext::unobserved(path)]);
+    let (left, right): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
+
+    let report = compare(
+        &recording("engine-a", &left),
+        &recording("engine-b", &right),
+        Tables::shared(FIXTURE_TABLE),
+    );
+
+    assert!(report.agrees(), "between engines this says nothing");
+    assert_eq!(
+        *report.divergences().next().expect("recorded"),
+        Divergence::PlaintextStatus {
+            index: 0,
+            path,
+            left: PlaintextStatus::DecryptFailed,
+            right: PlaintextStatus::Unobserved,
+        }
+    );
+    assert_eq!(
+        report.evaluate(ComparisonProfile::Regression),
+        Verdict::Fail,
+        "between builds, an adapter that stopped knowing why has regressed"
+    );
+    assert_eq!(report.failures(ComparisonProfile::Regression).count(), 1);
+    assert_eq!(report.failures(ComparisonProfile::Interop).count(), 0);
+}
+
+#[test]
+fn a_candidate_that_observes_more_passes_and_is_named_as_an_improvement() {
+    // A gate that cannot say what improved can only ever deliver bad news.
+    let p = at(&[0]);
+    let path = NodePath::from_le_bytes(&p);
+    let baseline_bytes = plain_envelope(receipt("A"), &[Plaintext::unobserved(path)]);
+    let candidate_bytes = plain_envelope(receipt("A"), &[Plaintext::ok(path, b"decrypted")]);
+    let (left, right): ([&[u8]; 1], [&[u8]; 1]) = ([&baseline_bytes], [&candidate_bytes]);
+
+    let report = compare(
+        &recording("baseline", &left),
+        &recording("candidate", &right),
+        Tables::shared(FIXTURE_TABLE),
+    );
+
+    assert_eq!(
+        report.evaluate(ComparisonProfile::Regression),
+        Verdict::Pass
+    );
+    let improvements: Vec<_> = report.improvements(ComparisonProfile::Regression).collect();
+    assert_eq!(improvements.len(), 1);
+    assert!(matches!(
+        improvements[0],
+        Divergence::PlaintextCoverage {
+            only_left: 0,
+            only_right: 1,
+            ..
+        }
+    ));
+    assert_eq!(
+        report.improvements(ComparisonProfile::Interop).count(),
+        0,
+        "between engines neither side is the reference"
+    );
+}
+
+#[test]
+fn each_side_is_parsed_with_its_own_dictionary() {
+    // The dictionary travels with the WhatsApp client version, and an upgrade
+    // gate compares exactly the builds where it may have moved. A single table
+    // for both sides would attribute a dictionary change to an engine.
+    let a = envelope(receipt("A"));
+    let (left, right): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&a]);
+
+    let tables = Tables {
+        left: FIXTURE_TABLE,
+        right: FIXTURE_TABLE,
+    };
+    let report = compare(
+        &recording("engine-a", &left),
+        &recording("engine-b", &right),
+        tables,
+    );
+    assert!(report.is_identical());
+
+    // And the shorthand builds the same thing.
+    let shared = Tables::shared(FIXTURE_TABLE);
+    assert_eq!(
+        compare(
+            &recording("engine-a", &left),
+            &recording("engine-b", &right),
+            shared,
+        )
+        .divergences()
+        .count(),
+        0
+    );
+    assert!(!alloc::format!("{shared:?}").is_empty());
 }
 
 #[test]
@@ -213,7 +591,7 @@ fn a_malformed_envelope_names_which_recording_it_came_from() {
     let report = compare(
         &recording("engine-a", &left),
         &recording("broken-engine", &right),
-        FIXTURE_TABLE,
+        Tables::shared(FIXTURE_TABLE),
     );
 
     assert!(!report.agrees());
@@ -240,7 +618,7 @@ fn an_unparsable_frame_names_its_recording() {
     let report = compare(
         &recording("engine-a", &left),
         &recording("engine-b", &right),
-        FIXTURE_TABLE,
+        Tables::shared(FIXTURE_TABLE),
     );
 
     assert!(!report.agrees());
@@ -272,7 +650,7 @@ fn different_spec_builds_are_flagged_before_anything_else() {
         &right,
     );
 
-    let report = compare(&older, &newer, FIXTURE_TABLE);
+    let report = compare(&older, &newer, Tables::shared(FIXTURE_TABLE));
     let first = report.divergences().next().expect("reported");
     assert_eq!(
         *first,
@@ -296,7 +674,7 @@ fn matching_spec_builds_are_not_flagged() {
     let report = compare(
         &Recording::new(info("engine-a").with_provenance(spec), &left),
         &Recording::new(info("engine-b").with_provenance(spec), &right),
-        FIXTURE_TABLE,
+        Tables::shared(FIXTURE_TABLE),
     );
     assert!(report.is_identical());
 }
@@ -349,7 +727,7 @@ fn faults_are_a_subset_of_divergences() {
     let report = compare(
         &recording("a", &left),
         &recording("b", &right),
-        FIXTURE_TABLE,
+        Tables::shared(FIXTURE_TABLE),
     );
 
     let all = report.divergences().count();

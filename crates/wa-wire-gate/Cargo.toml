@@ -1,0 +1,28 @@
+[package]
+name = "wa-wire-gate"
+version = "0.1.0"
+description = "Compare two recordings and say whether the candidate may ship"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+# A tool, not a library. It is also the first `std` crate here, which is why it
+# is a separate one: the contract, codec, derivation, container and comparator
+# stay `no_std` and dependency-free.
+publish = false
+
+[dependencies]
+wa-wire-adapter = { path = "../wa-wire-adapter", version = "0.1.0" }
+wa-wire-codec = { path = "../wa-wire-codec", version = "0.1.0", features = [
+    "bundled-tokens",
+] }
+wa-wire-conformance = { path = "../wa-wire-conformance", version = "0.1.0" }
+wa-wire-contract = { path = "../wa-wire-contract", version = "0.1.0" }
+wa-wire-recording = { path = "../wa-wire-recording", version = "0.1.0" }
+
+[dev-dependencies]
+wa-wire-l1 = { path = "../wa-wire-l1", version = "0.1.0", features = ["testing"] }
+
+[lints]
+workspace = true

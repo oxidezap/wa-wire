@@ -1,0 +1,32 @@
+[package]
+name = "wa-wire-alloc-check"
+version = "0.1.0"
+description = "Counts allocations, so the crates that claim not to allocate have to prove it"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+# Nothing depends on a measurement.
+publish = false
+
+[dev-dependencies]
+wa-wire-codec = { path = "../wa-wire-codec", version = "0.1.0", features = [
+    "bundled-tokens",
+] }
+wa-wire-contract = { path = "../wa-wire-contract", version = "0.1.0" }
+wa-wire-l1 = { path = "../wa-wire-l1", version = "0.1.0", features = ["testing"] }
+wa-wire-proto = { path = "../wa-wire-proto", version = "0.1.0" }
+wa-wire-recording = { path = "../wa-wire-recording", version = "0.1.0" }
+
+# Deliberately not `workspace = true`. Every other crate here forbids `unsafe`,
+# and a global allocator cannot be written without it. Scoping the exception to
+# the one crate whose entire purpose is the measurement is what keeps the
+# guarantee intact everywhere it matters.
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "allow"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }

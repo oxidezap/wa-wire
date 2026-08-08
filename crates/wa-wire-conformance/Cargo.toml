@@ -9,16 +9,19 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-wa-wire-adapter = { path = "../wa-wire-adapter" }
-wa-wire-codec = { path = "../wa-wire-codec" }
-wa-wire-contract = { path = "../wa-wire-contract" }
-wa-wire-l1 = { path = "../wa-wire-l1" }
+wa-wire-adapter = { path = "../wa-wire-adapter", version = "0.1.0" }
+wa-wire-codec = { path = "../wa-wire-codec", version = "0.1.0" }
+wa-wire-contract = { path = "../wa-wire-contract", version = "0.1.0" }
+wa-wire-l1 = { path = "../wa-wire-l1", version = "0.1.0" }
+wa-wire-recording = { path = "../wa-wire-recording", version = "0.1.0", default-features = false }
 
 [dev-dependencies]
-wa-wire-l1 = { path = "../wa-wire-l1", features = ["testing"] }
+wa-wire-proto = { path = "../wa-wire-proto", version = "0.1.0" }
+wa-wire-recording = { path = "../wa-wire-recording", version = "0.1.0" }
+wa-wire-l1 = { path = "../wa-wire-l1", version = "0.1.0", features = ["testing"] }
 # The cross-language fixtures are re-encoded by zapo with the real
 # dictionaries, so reading them needs the bundled table.
-wa-wire-codec = { path = "../wa-wire-codec", features = ["bundled-tokens"] }
+wa-wire-codec = { path = "../wa-wire-codec", version = "0.1.0", features = ["bundled-tokens"] }
 
 [lints]
 workspace = true

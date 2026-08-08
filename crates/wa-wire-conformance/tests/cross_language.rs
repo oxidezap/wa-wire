@@ -15,6 +15,7 @@ use std::path::PathBuf;
 
 use wa_wire_codec::{Parser, TokenTable};
 use wa_wire_contract::{Direction, EnvelopeRef, FrameOrigin, PlaintextStatus};
+use wa_wire_recording::{ArtifactClass, CONTAINER_VERSION, Integrity, RecordingRef, Tag};
 
 /// The `zapo` adapter re-encodes with the real dictionaries, so reading its
 /// output needs the real table.
@@ -172,4 +173,133 @@ fn every_fixture_decodes_and_none_has_trailing_bytes() {
         let bytes = fixture(name);
         EnvelopeRef::decode(&bytes).unwrap_or_else(|error| panic!("{name}: {error}"));
     }
+}
+
+// --- the container ---------------------------------------------------------
+
+fn container(name: &str) -> Vec<u8> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../adapters/zapo/fixtures")
+        .join(format!("{name}.wawr"));
+    std::fs::read(&path).unwrap_or_else(|error| {
+        panic!(
+            "{}: {error}\nrun adapters/zapo/scripts/emit-fixtures.ts",
+            path.display()
+        )
+    })
+}
+
+#[test]
+fn a_recording_written_in_typescript_reads_here() {
+    // The container is written twice for the same reason the envelope is: two
+    // descriptions of one format that are only ever tested separately are two
+    // formats waiting to diverge.
+    let bytes = container("recording");
+    let recording = RecordingRef::decode(&bytes).expect("the Rust reader reads it");
+
+    assert_eq!(recording.container_version(), CONTAINER_VERSION);
+    assert_eq!(
+        recording.integrity(),
+        Integrity::Complete,
+        "the count and the checksum both agree across languages"
+    );
+
+    let adapter = recording.adapter().expect("adapter");
+    assert_eq!(adapter.id, "zapo");
+    assert_eq!(adapter.version, "0.1.0");
+    assert_eq!(adapter.engine_version, "1.7");
+    assert_eq!(adapter.contract_version, 1);
+    assert!(adapter.capabilities.contains("l0.plaintext"));
+    assert_eq!(adapter.capabilities.len(), 3);
+
+    let provenance = recording.provenance().expect("provenance");
+    assert_eq!(provenance.whatsapp_version, "2.3000.1044659339");
+    assert_eq!(provenance.manifest_hash, "sha256:fixture");
+
+    assert_eq!(recording.dictionary(), Some("whatspec@2.3000.1044659339"));
+    assert_eq!(recording.artifact_class(), Some(ArtifactClass::Synthetic));
+    assert_eq!(
+        recording.input_digest(),
+        Some(&b"cross-language-fixture"[..])
+    );
+    assert_eq!(recording.created_at(), Some(1_754_000_000_000));
+    assert!(
+        recording
+            .note()
+            .is_some_and(|note| note.contains("emit-fixtures"))
+    );
+}
+
+#[test]
+fn the_envelopes_inside_it_are_the_ones_written_separately() {
+    // Ties the two formats together: the container's payloads must be exactly
+    // the envelope fixtures, byte for byte.
+    let bytes = container("recording");
+    let recording = RecordingRef::decode(&bytes).expect("reads");
+
+    let envelopes: Vec<_> = recording.envelopes().collect();
+    assert_eq!(
+        envelopes.len(),
+        2,
+        "the mark and the unknown kind are not stanzas"
+    );
+    assert_eq!(envelopes[0], fixture("receipt").as_slice());
+    assert_eq!(envelopes[1], fixture("message-with-enc").as_slice());
+
+    for envelope in envelopes {
+        EnvelopeRef::decode(envelope).expect("and each is a valid envelope");
+    }
+}
+
+#[test]
+fn a_mark_and_an_unknown_kind_survive_the_crossing() {
+    let bytes = container("recording");
+    let recording = RecordingRef::decode(&bytes).expect("reads");
+
+    let mark = recording
+        .records()
+        .find_map(|record| record.as_mark())
+        .expect("the mark crossed");
+    assert_eq!(mark.delta_us, 1_500);
+    assert_eq!(mark.label, "stream:error");
+
+    assert_eq!(
+        recording.skipped_records(),
+        1,
+        "a kind this build does not know is counted, not lost"
+    );
+    assert_eq!(recording.records().count(), 4);
+}
+
+#[test]
+fn an_unknown_ancillary_tag_written_there_is_preserved_here() {
+    let bytes = container("recording");
+    let recording = RecordingRef::decode(&bytes).expect("reads");
+
+    assert_eq!(recording.unknown_critical_tags(), 0);
+    assert_eq!(
+        recording.value(Tag(0x0042)),
+        Some(&b"ancillary"[..]),
+        "preserved rather than dropped, per RFC-009"
+    );
+}
+
+#[test]
+fn a_recording_frozen_mid_write_there_is_still_readable_here() {
+    // The artifact a crash recorder exists to produce, written by the other
+    // implementation. If either side treated a missing trailer as a parse
+    // error, this is where it would show.
+    let bytes = container("recording-truncated");
+    let recording = RecordingRef::decode(&bytes).expect("readable without a trailer");
+
+    assert!(matches!(
+        recording.integrity(),
+        Integrity::Truncated { found: 4, .. }
+    ));
+    assert_eq!(
+        recording.envelopes().count(),
+        2,
+        "every complete record before the cut is usable"
+    );
+    assert_eq!(recording.adapter().map(|a| a.id), Some("zapo"));
 }

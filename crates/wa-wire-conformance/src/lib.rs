@@ -23,12 +23,12 @@
 //! and L1 is where correctness lives.
 //!
 //! ```
-//! use wa_wire_conformance::{Recording, compare};
+//! use wa_wire_conformance::{ComparisonProfile, Recording, Tables, Verdict, compare};
 //! use wa_wire_codec::TokenTable;
 //!
 //! # fn example(engine_a: Recording<'_>, engine_b: Recording<'_>, table: TokenTable<'_>) {
-//! let report = compare(&engine_a, &engine_b, table);
-//! if report.agrees() {
+//! let report = compare(&engine_a, &engine_b, Tables::shared(table));
+//! if report.evaluate(ComparisonProfile::Interop) == Verdict::Pass {
 //!     // Same traffic, same events.
 //! } else {
 //!     for divergence in report.divergences() {
@@ -52,10 +52,14 @@
 
 extern crate alloc;
 
+pub mod comparability;
 pub mod divergence;
+pub mod profile;
 pub mod recording;
 pub mod report;
 
+pub use comparability::Comparability;
 pub use divergence::{Divergence, Layer};
+pub use profile::{ComparisonProfile, Incomparable, Verdict};
 pub use recording::Recording;
-pub use report::{Report, compare, replay};
+pub use report::{Report, Tables, compare, replay};

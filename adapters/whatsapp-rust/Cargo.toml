@@ -2,6 +2,9 @@
 name = "wa-wire-adapter-whatsapp-rust"
 version = "0.1.0"
 description = "wa-wire adapter for the whatsapp-rust engine, in tap mode"
+# Depends on the engine by path, outside this repository. Publishing would mean
+# pinning a released `whatsapp-rust`, which is a decision for when there is one.
+publish = false
 edition = "2024"
 rust-version = "1.90"
 license = "MIT"
@@ -38,6 +41,7 @@ wa-wire-conformance = { path = "../../crates/wa-wire-conformance" }
 wa-wire-contract = { path = "../../crates/wa-wire-contract" }
 wa-wire-example-consumer = { path = "../../crates/wa-wire-example-consumer" }
 wa-wire-l1 = { path = "../../crates/wa-wire-l1" }
+wa-wire-recording = { path = "../../crates/wa-wire-recording" }
 whatsapp-rust-tokio-transport = { path = "../../../whatsapp-rust/transports/tokio-transport" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 ureq = "3"

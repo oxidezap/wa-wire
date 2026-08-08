@@ -23,36 +23,19 @@ import { decodeBinaryNode, encodeBinaryNode } from 'zapo-js/transport'
 import type { BinaryNode } from 'zapo-js'
 
 import { Direction, FrameOrigin, encodeEnvelope, type Stanza } from '../src/envelope.js'
+import { INFO } from '../src/capability.js'
+import {
+    ArtifactClass,
+    RecordKind,
+    crc32,
+    encodeRecording,
+    type RecordInput,
+} from '../src/recording.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
 const CORPUS = join(ROOT, '..', '..', 'crates', 'wa-wire-conformance', 'corpus')
 const OUT = join(ROOT, 'recordings', 'zapo.recording')
-
-/**
- * A recording file: `WAWR`, a u32 count, then each envelope length-prefixed.
- *
- * Deliberately trivial. The envelope format is the contract; this is only a way
- * to put several of them in one file, and a reader that needs a spec for the
- * container is a reader spending attention in the wrong place.
- */
-function encodeRecording(envelopes: readonly Uint8Array[]): Uint8Array {
-    const total =
-        4 + 4 + envelopes.reduce((sum, envelope) => sum + 4 + envelope.length, 0)
-    const out = new Uint8Array(total)
-    const view = new DataView(out.buffer)
-    out.set(new TextEncoder().encode('WAWR'), 0)
-    view.setUint32(4, envelopes.length, false)
-
-    let offset = 8
-    for (const envelope of envelopes) {
-        view.setUint32(offset, envelope.length, false)
-        offset += 4
-        out.set(envelope, offset)
-        offset += envelope.length
-    }
-    return out
-}
 
 /** What the adapter does with one stanza, minus the plugin plumbing. */
 function adapterEnvelope(node: BinaryNode): Uint8Array {
@@ -89,15 +72,59 @@ if (names.length === 0) {
     throw new Error(`no corpus in ${CORPUS} — run \`cargo run --example emit-corpus\``)
 }
 
-const envelopes: Uint8Array[] = []
+const records: RecordInput[] = []
+const frames: Uint8Array[] = []
 for (const name of names) {
     const frame = new Uint8Array(readFileSync(join(CORPUS, name)))
+    frames.push(frame)
     // `decodeBinaryNode` takes the frame without the leading format byte, which
     // is exactly what the corpus holds.
-    const node = decodeBinaryNode(Buffer.from(frame))
-    envelopes.push(adapterEnvelope(node))
-    console.log(`${name}: <${node.tag}> -> ${envelopes[envelopes.length - 1]?.length} bytes`)
+    const node = decodeBinaryNode(frame)
+    const envelope = adapterEnvelope(node)
+    records.push({ kind: RecordKind.Envelope, envelope })
+    console.log(`${name}: <${node.tag}> -> ${envelope.length} bytes`)
 }
 
-writeFileSync(OUT, encodeRecording(envelopes))
-console.log(`\n${OUT}: ${names.length} envelopes`)
+/**
+ * Which traffic this is a replay of.
+ *
+ * The checksum of the corpus, in name order — the same order the Rust side
+ * walks it in, so the two arrive at the same value without coordinating. This
+ * is what makes the comparison a checked claim rather than a convention: two
+ * recordings of *different* corpora are refused instead of reported as an
+ * engine regression.
+ */
+function corpusDigest(): Uint8Array {
+    let total = 0
+    for (const frame of frames) total += frame.length
+    const joined = new Uint8Array(total)
+    let at = 0
+    for (const frame of frames) {
+        joined.set(frame, at)
+        at += frame.length
+    }
+    const out = new Uint8Array(4)
+    new DataView(out.buffer).setUint32(0, crc32(joined), true)
+    return out
+}
+
+const bytes = encodeRecording(
+    {
+        adapter: {
+            id: INFO.id,
+            version: INFO.version,
+            engineVersion: INFO.engineVersion,
+            contractVersion: INFO.contractVersion,
+            capabilities: INFO.capabilities,
+        },
+        // Replayed, not captured: these envelopes came from feeding the corpus
+        // through the engine, so something else can have seen the same input.
+        artifactClass: ArtifactClass.Replayed,
+        inputDigest: corpusDigest(),
+        note: 'the conformance corpus, replayed through zapo',
+    },
+    records,
+)
+
+writeFileSync(OUT, bytes)
+console.log(`\n${OUT}: ${names.length} envelopes, ${bytes.length} bytes`)

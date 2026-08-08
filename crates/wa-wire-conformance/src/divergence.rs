@@ -7,31 +7,30 @@
 
 use core::fmt;
 
+use wa_wire_contract::{Direction, NodePath, PlaintextStatus};
 use wa_wire_l1::DeriveError;
 
 /// Where a disagreement was found.
+///
+/// The layer says what kind of thing disagreed, not how bad it is: some L0
+/// differences are two valid encodings of one stanza and some are one engine
+/// losing traffic. Whether a finding is a fault is
+/// [`ComparisonProfile::is_failure`], per divergence and per profile.
+///
+/// [`ComparisonProfile::is_failure`]: crate::ComparisonProfile::is_failure
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Layer {
-    /// The frame bytes an engine forwarded.
-    ///
-    /// A difference here is worth knowing but is not on its own a fault: two
-    /// encodings of one stanza are both valid, and what matters is whether they
-    /// derive to the same thing.
+    /// The envelope an engine forwarded: its frame bytes, its direction, and
+    /// the plaintext it carried.
     L0,
     /// The event derived from the frame.
     ///
-    /// A difference here is a fault. The derivation is a pure function of the
-    /// stanza, so two engines cannot both be right.
+    /// A difference here is always a fault. The derivation is a pure function
+    /// of the stanza, so two engines cannot both be right.
     L1,
 }
 
 impl Layer {
-    /// Whether a difference at this layer is necessarily a fault.
-    #[must_use]
-    pub const fn is_fault(self) -> bool {
-        matches!(self, Self::L1)
-    }
-
     /// A stable name.
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -53,6 +52,10 @@ impl fmt::Display for Layer {
 #[non_exhaustive]
 pub enum Divergence<'a> {
     /// The recordings hold different numbers of stanzas.
+    ///
+    /// A fault, though it does not say whose: both recordings are of the same
+    /// traffic, so one engine dropped a stanza or invented one. Which of the
+    /// two needs a human, but the run must not pass either way.
     ///
     /// Reported once and further comparison stops: after a missing stanza every
     /// later index is off by one, and reporting all of them would say the same
@@ -85,6 +88,79 @@ pub enum Divergence<'a> {
         left_len: usize,
         /// Bytes in the second's.
         right_len: usize,
+    },
+    /// The two engines disagree about which way the same stanza travelled.
+    ///
+    /// A fault: direction is a property of the stanza, not of the engine, so
+    /// one of them mislabelled it and a consumer reading either would be
+    /// wrong about the other.
+    Direction {
+        /// Which stanza.
+        index: usize,
+        /// What the first recording said.
+        left: Direction,
+        /// What the second said.
+        right: Direction,
+    },
+    /// Both engines decrypted the same `<enc>` and got different bytes.
+    ///
+    /// A fault, and the sharpest one the L0 comparison can make: the two
+    /// agreed the payload was usable, so this is not a limitation of either
+    /// adapter's observation.
+    Plaintext {
+        /// Which stanza.
+        index: usize,
+        /// The node both entries addressed.
+        path: NodePath<'a>,
+        /// Bytes in the first recording's payload.
+        left_len: usize,
+        /// Bytes in the second's.
+        right_len: usize,
+    },
+    /// The two describe the same frame's bytes as coming from different
+    /// places: one verbatim from its engine's decoder, one re-encoded.
+    ///
+    /// Recorded rather than judged. Between two engines this is how they
+    /// differ by design and says nothing; between two builds of one adapter,
+    /// `degraded` means it stopped reaching its own buffer.
+    FrameOrigin {
+        /// Which stanza.
+        index: usize,
+        /// Whether the *second* recording is the re-encoded one — a loss, if
+        /// the two are builds of the same adapter.
+        degraded: bool,
+    },
+    /// Both engines failed to produce plaintext for a node, and reported
+    /// different reasons.
+    ///
+    /// Neither carries a payload, so nothing about the traffic differs. What
+    /// differs is how much each could say about the failure, which between
+    /// versions of one adapter is diagnostic ground lost or gained.
+    PlaintextStatus {
+        /// Which stanza.
+        index: usize,
+        /// The node both entries addressed.
+        path: NodePath<'a>,
+        /// What the first recording reported.
+        left: PlaintextStatus,
+        /// What the second reported.
+        right: PlaintextStatus,
+    },
+    /// One engine reported usable plaintext for a node the other did not.
+    ///
+    /// Not a fault. How much an adapter can observe is a property of the
+    /// adapter, which is why [`PlaintextStatus::Unobserved`] exists and why
+    /// D-055 leaves a fan-out stanza with no table at all. Worth reporting
+    /// because it says how much of the L0-plain comparison actually ran.
+    ///
+    /// [`PlaintextStatus::Unobserved`]: wa_wire_contract::PlaintextStatus::Unobserved
+    PlaintextCoverage {
+        /// Which stanza.
+        index: usize,
+        /// Nodes only the first recording has usable plaintext for.
+        only_left: usize,
+        /// Nodes only the second has.
+        only_right: usize,
     },
     /// The two engines derived different events from the same stanza.
     Derivation {
@@ -122,29 +198,15 @@ impl Divergence<'_> {
             Self::Frame { .. }
             | Self::MalformedEnvelope { .. }
             | Self::UnparsableFrame { .. }
-            | Self::Length { .. } => Layer::L0,
+            | Self::Length { .. }
+            | Self::Direction { .. }
+            | Self::Plaintext { .. }
+            | Self::FrameOrigin { .. }
+            | Self::PlaintextStatus { .. }
+            | Self::PlaintextCoverage { .. } => Layer::L0,
             Self::Derivation { .. } | Self::DerivationOutcome { .. } | Self::Provenance { .. } => {
                 Layer::L1
             }
-        }
-    }
-
-    /// Whether this is necessarily a fault in one of the engines.
-    ///
-    /// A frame difference is not: two encodings of one stanza are both valid.
-    /// A provenance difference is not either — it says the comparison itself
-    /// was between unlike things.
-    #[must_use]
-    pub const fn is_fault(&self) -> bool {
-        match self {
-            // A derivation difference means one engine is wrong; a frame that
-            // will not decode or parse means one engine emitted something
-            // unusable. Both need someone to look.
-            Self::Derivation { .. }
-            | Self::DerivationOutcome { .. }
-            | Self::MalformedEnvelope { .. }
-            | Self::UnparsableFrame { .. } => true,
-            Self::Frame { .. } | Self::Length { .. } | Self::Provenance { .. } => false,
         }
     }
 
@@ -155,6 +217,11 @@ impl Divergence<'_> {
             Self::MalformedEnvelope { index, .. }
             | Self::UnparsableFrame { index, .. }
             | Self::Frame { index, .. }
+            | Self::Direction { index, .. }
+            | Self::Plaintext { index, .. }
+            | Self::FrameOrigin { index, .. }
+            | Self::PlaintextStatus { index, .. }
+            | Self::PlaintextCoverage { index, .. }
             | Self::Derivation { index, .. }
             | Self::DerivationOutcome { index, .. } => Some(*index),
             Self::Length { .. } | Self::Provenance { .. } => None,
@@ -186,6 +253,49 @@ impl fmt::Display for Divergence<'_> {
                 "[L0] stanza {index}: frames differ ({left_len} bytes against {right_len}) \
                  — not a fault on its own"
             ),
+            Self::Direction { index, left, right } => write!(
+                f,
+                "[L0] stanza {index}: directions differ ({left:?} against {right:?})"
+            ),
+            Self::Plaintext {
+                index,
+                path,
+                left_len,
+                right_len,
+            } => write!(
+                f,
+                "[L0] stanza {index} at {path}: both decrypted, and the plaintexts differ \
+                 ({left_len} bytes against {right_len})"
+            ),
+            Self::FrameOrigin { index, degraded } => write!(
+                f,
+                "[L0] stanza {index}: frame origins differ ({}) — only a loss if the two are \
+                 builds of one adapter",
+                if *degraded {
+                    "the second re-encoded"
+                } else {
+                    "the first re-encoded"
+                }
+            ),
+            Self::PlaintextStatus {
+                index,
+                path,
+                left,
+                right,
+            } => write!(
+                f,
+                "[L0] stanza {index} at {path}: neither decrypted, and they say so differently \
+                 ({left} against {right})"
+            ),
+            Self::PlaintextCoverage {
+                index,
+                only_left,
+                only_right,
+            } => write!(
+                f,
+                "[L0] stanza {index}: plaintext coverage differs ({only_left} node(s) only on \
+                 one side, {only_right} only on the other) — not a fault on its own"
+            ),
             Self::Derivation { index, tag } => match tag {
                 Some(tag) => write!(f, "[L1] stanza {index} <{tag}>: derived events differ"),
                 None => write!(f, "[L1] stanza {index}: derived events differ"),
@@ -214,12 +324,15 @@ mod tests {
     extern crate alloc;
     use alloc::string::ToString;
 
+    fn path(components: &[u16]) -> alloc::vec::Vec<u8> {
+        components.iter().flat_map(|c| c.to_le_bytes()).collect()
+    }
+
     #[test]
-    fn layers_say_whether_a_difference_is_a_fault() {
-        assert!(!Layer::L0.is_fault(), "two encodings can both be valid");
-        assert!(Layer::L1.is_fault(), "a pure function has one answer");
+    fn layers_name_themselves() {
         assert_eq!(Layer::L0.name(), "L0");
         assert_eq!(Layer::L1.to_string(), "L1");
+        assert_ne!(Layer::L0, Layer::L1);
     }
 
     #[test]
@@ -275,57 +388,52 @@ mod tests {
             .layer(),
             Layer::L1
         );
-    }
-
-    #[test]
-    fn only_some_divergences_are_faults() {
-        // A frame difference means two valid encodings; a derivation difference
-        // means one engine is wrong.
-        assert!(
-            !Divergence::Frame {
+        let p = path(&[0]);
+        assert_eq!(
+            Divergence::Direction {
                 index: 0,
+                left: Direction::Inbound,
+                right: Direction::Outbound
+            }
+            .layer(),
+            Layer::L0
+        );
+        assert_eq!(
+            Divergence::Plaintext {
+                index: 0,
+                path: NodePath::from_le_bytes(&p),
                 left_len: 1,
                 right_len: 2
             }
-            .is_fault()
+            .layer(),
+            Layer::L0
         );
-        assert!(!Divergence::Length { left: 1, right: 2 }.is_fault());
-        assert!(
-            !Divergence::Provenance {
-                left: "a",
-                right: "b"
-            }
-            .is_fault()
-        );
-
-        assert!(
-            Divergence::Derivation {
+        assert_eq!(
+            Divergence::PlaintextCoverage {
                 index: 0,
-                tag: None
+                only_left: 1,
+                only_right: 0
             }
-            .is_fault()
+            .layer(),
+            Layer::L0
         );
-        assert!(
-            Divergence::DerivationOutcome {
+        assert_eq!(
+            Divergence::FrameOrigin {
                 index: 0,
-                left: None,
-                right: None
+                degraded: false
             }
-            .is_fault()
+            .layer(),
+            Layer::L0
         );
-        assert!(
-            Divergence::MalformedEnvelope {
-                adapter: "x",
-                index: 0
+        assert_eq!(
+            Divergence::PlaintextStatus {
+                index: 0,
+                path: NodePath::from_le_bytes(&p),
+                left: PlaintextStatus::Unsupported,
+                right: PlaintextStatus::Unobserved
             }
-            .is_fault()
-        );
-        assert!(
-            Divergence::UnparsableFrame {
-                adapter: "x",
-                index: 0
-            }
-            .is_fault()
+            .layer(),
+            Layer::L0
         );
     }
 
@@ -374,6 +482,54 @@ mod tests {
             Some(4)
         );
 
+        let p = path(&[0]);
+        assert_eq!(
+            Divergence::Direction {
+                index: 9,
+                left: Direction::Inbound,
+                right: Direction::Outbound
+            }
+            .index(),
+            Some(9)
+        );
+        assert_eq!(
+            Divergence::Plaintext {
+                index: 10,
+                path: NodePath::from_le_bytes(&p),
+                left_len: 1,
+                right_len: 2
+            }
+            .index(),
+            Some(10)
+        );
+        assert_eq!(
+            Divergence::PlaintextCoverage {
+                index: 11,
+                only_left: 1,
+                only_right: 0
+            }
+            .index(),
+            Some(11)
+        );
+        assert_eq!(
+            Divergence::FrameOrigin {
+                index: 12,
+                degraded: true
+            }
+            .index(),
+            Some(12)
+        );
+        assert_eq!(
+            Divergence::PlaintextStatus {
+                index: 13,
+                path: NodePath::from_le_bytes(&p),
+                left: PlaintextStatus::DecryptFailed,
+                right: PlaintextStatus::Unobserved
+            }
+            .index(),
+            Some(13)
+        );
+
         // These are about the pair, not a stanza.
         assert_eq!(Divergence::Length { left: 1, right: 2 }.index(), None);
         assert_eq!(
@@ -387,9 +543,58 @@ mod tests {
     }
 
     #[test]
-    fn every_divergence_renders_its_layer_and_detail() {
-        let cases: [(Divergence<'_>, &[&str]); 8] = [
+    fn every_l0_divergence_renders_its_layer_and_detail() {
+        let p = path(&[2, 1]);
+        let cases: [(Divergence<'_>, &[&str]); 10] = [
+            (
+                Divergence::FrameOrigin {
+                    index: 2,
+                    degraded: true,
+                },
+                &["L0", "2", "the second re-encoded"],
+            ),
+            (
+                Divergence::FrameOrigin {
+                    index: 2,
+                    degraded: false,
+                },
+                &["L0", "2", "the first re-encoded"],
+            ),
+            (
+                Divergence::PlaintextStatus {
+                    index: 4,
+                    path: NodePath::from_le_bytes(&p),
+                    left: PlaintextStatus::DecryptFailed,
+                    right: PlaintextStatus::Unobserved,
+                },
+                &["L0", "4", "/2/1", "decrypt-failed", "unobserved"],
+            ),
             (Divergence::Length { left: 3, right: 5 }, &["L0", "3", "5"]),
+            (
+                Divergence::Direction {
+                    index: 5,
+                    left: Direction::Inbound,
+                    right: Direction::Outbound,
+                },
+                &["L0", "5", "Inbound", "Outbound"],
+            ),
+            (
+                Divergence::Plaintext {
+                    index: 9,
+                    path: NodePath::from_le_bytes(&p),
+                    left_len: 40,
+                    right_len: 41,
+                },
+                &["L0", "9", "/2/1", "40", "41"],
+            ),
+            (
+                Divergence::PlaintextCoverage {
+                    index: 3,
+                    only_left: 2,
+                    only_right: 0,
+                },
+                &["L0", "3", "2", "not a fault"],
+            ),
             (
                 Divergence::MalformedEnvelope {
                     adapter: "zapo",
@@ -412,6 +617,13 @@ mod tests {
                 },
                 &["L0", "1", "10", "12", "not a fault"],
             ),
+        ];
+        assert_renders(cases);
+    }
+
+    #[test]
+    fn every_l1_divergence_renders_its_layer_and_detail() {
+        let cases: [(Divergence<'_>, &[&str]); 4] = [
             (
                 Divergence::Derivation {
                     index: 6,
@@ -442,6 +654,12 @@ mod tests {
                 &["L1", "sha256:a", "sha256:b"],
             ),
         ];
+        assert_renders(cases);
+    }
+
+    /// Every rendering has to name its layer and every value it carries: a
+    /// report is the only place a divergence is ever read from.
+    fn assert_renders<const N: usize>(cases: [(Divergence<'_>, &[&str]); N]) {
         for (divergence, fragments) in cases {
             let text = divergence.to_string();
             for fragment in fragments {

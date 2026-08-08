@@ -249,6 +249,64 @@ mod tests {
     }
 
     #[test]
+    fn every_request_failure_names_itself_and_keeps_its_cause() {
+        // A consumer picks its response from these: a failed send can be
+        // retried, a timeout may already have been acted on, and a rejection
+        // is the server's answer rather than a transport problem.
+        let sent = RequestError::from(SendError::NotConnected);
+        assert!(sent.to_string().contains("not sent"), "{sent}");
+        assert!(
+            core::error::Error::source(&sent).is_some(),
+            "the send failure stays reachable"
+        );
+        assert!(matches!(sent, RequestError::Send(SendError::NotConnected)));
+
+        let timed_out = RequestError::TimedOut;
+        assert!(timed_out.to_string().contains("deadline"));
+        assert!(core::error::Error::source(&timed_out).is_none());
+
+        let with_frame = RequestError::Rejected {
+            frame: Some(alloc::vec![1, 2, 3]),
+        };
+        let text = with_frame.to_string();
+        assert!(text.contains("error") && text.contains('3'), "{text}");
+        assert!(core::error::Error::source(&with_frame).is_none());
+
+        // The difference between engines this variant exists to name: some
+        // parse a rejection and drop its bytes, so a consumer that needs them
+        // has to check rather than assume.
+        let without = RequestError::Rejected { frame: None };
+        assert!(without.to_string().contains("did not hand over"));
+        assert!(!alloc::format!("{without:?}").is_empty());
+    }
+
+    #[test]
+    fn a_requester_hands_back_the_reply_behind_a_trait_object() {
+        struct Engine;
+
+        impl StanzaSender for Engine {
+            fn send_frame<'a>(&'a self, _frame: &'a [u8]) -> SendFuture<'a> {
+                Box::pin(async { Ok(()) })
+            }
+        }
+
+        impl StanzaRequester for Engine {
+            fn request_frame<'a>(&'a self, frame: &'a [u8]) -> RequestFuture<'a> {
+                Box::pin(async move { Ok(frame.to_vec()) })
+            }
+        }
+
+        // Through the trait object, because that is how a consumer holds it:
+        // requesting has to remain usable without naming the engine.
+        let engine: &dyn StanzaRequester = &Engine;
+        assert!(block_on(engine.send_frame(b"out")).is_ok());
+        assert_eq!(
+            block_on(engine.request_frame(b"round-trip")).expect("a reply"),
+            b"round-trip".to_vec()
+        );
+    }
+
+    #[test]
     fn a_sender_is_usable_behind_a_trait_object() {
         // The property the boxed future exists for: a consumer holds "some
         // engine" and does not know which.
