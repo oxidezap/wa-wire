@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 29
+> **Last revised:** rev 30
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1828,10 +1828,44 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-095 | Provenance carries a digest per domain, not one for the build | WhatsApp can renumber a protobuf field without touching how a stanza parses. One digest would call two builds the same spec when only half of it matched | 28 |
 | D-091 | A payload whose first field is unmodelled crosses as `Unmodelled(n)`, never as empty | Without the whole schema, an unknown variant and a metadata field are indistinguishable, so reporting the number seen is the most that can be claimed. Reporting nothing would make a protocol change look like an empty message, which is the one reading that is certainly wrong | 27 |
 | D-092 | Wrappers are unwrapped before the kind is reported, and the depth is reported | A consumer asking what a message said does not mean "it was a device-sent copy of an ephemeral wrapper". The count is kept because a nested payload is a fact worth seeing rather than one to hide | 27 |
+| D-098 | A field is read by its `wireName`, and the test that says so is written by hand | The spec records two names per field and they differ for fifty of them. A generated test cannot catch the generator reading the wrong one: the fixture is built from the same spec by the same rule, so the pair agrees with each other and with no stanza a server sends | 30 |
+| D-099 | What the generator cannot express is reported in three lists, not one | One list read as one backlog. Nine of its fifteen entries were assertions no pure derivation can ever make, and burying them next to six real gaps made the real ones look like the same kind of thing. Separated, one list is a design limit that will never shrink and the others are work | 30 |
+| D-100 | A response-to-request assertion is a design limit, not a gap | `derive` is a pure function of one stanza (D-010), so `from` matching the request's `to` is not something it can check — the request is not in scope and giving it one would end the purity that lets derivation run once, host-side. The assertions are emitted as text for the caller that does hold the request | 30 |
+| D-101 | Two spec fields differing only by category are both emitted, the second aliased | `verified_name` arrives as a child on one shape and an attribute on another. Dropping either would silently lose a reading; renaming the collision by its category keeps both and says which is which | 30 |
 
 ---
 
 ## Changelog
+
+### rev 30 — 2026-08-08
+
+- **The generator was reading the wrong name for fifty fields.** whatspec
+  records both a bundle-side name and the name that travels on the wire, and
+  they differ for fifty of them. The emitter used the bundle's. Two shapes were
+  live-wrong — `applicationError` for `application_error`, `serverId` for
+  `server_id` — and nothing failed, because the fixture builder walked the same
+  spec by the same rule and produced stanzas that were wrong the same way. The
+  pair agreed with each other and with no stanza a server sends (D-098). The
+  test that pins this is hand-written for exactly that reason, and it was
+  checked against the old behaviour before being kept.
+- **`UNMODELLED_FIELDS` was three different things under one name** (D-099). It
+  held fifteen entries and read as fifteen pieces of work:
+  - **Nine were assertions no pure derivation can make** — `from` must match the
+    request's `to`, and equivalents for `id` and `type`. Derivation sees one
+    stanza and no request (D-010), so these are a design limit rather than a
+    backlog, and they now say so in their own list for the caller that does hold
+    the request (D-100).
+  - **One was an enum the spec declares with no variants**, whose values live on
+    sibling shapes as literal guards. It reads as text, which is what the wire
+    carries anyway, and is listed as untyped rather than missing.
+  - **One was a name collision**: `verified_name` genuinely arrives as a child
+    on one shape and as an attribute on another. Both are emitted now, the
+    second aliased by its category (D-101).
+  - **Four are real and remain** — union mixins with two or three variants each,
+    each variant a named shape carrying its own fields and assertions, and
+    nesting further mixins inside. Modelling them means recursive in-struct
+    dispatch, which is a piece of its own rather than the tail of this one. The
+    look was the deliverable here; the build is not promised.
 
 ### rev 29 — 2026-08-08
 

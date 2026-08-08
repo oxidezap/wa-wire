@@ -202,6 +202,14 @@ derivation that quietly omitted a field would look complete and be wrong, and no
 conformance run could tell — every engine would agree on the same missing
 field.
 
+What they could not express is reported in three lists, because it is three
+different things. `REQUEST_SCOPED_ASSERTIONS` are checks a pure derivation can
+never make: a response's `from` matching the request's `to` needs the request,
+and derivation sees one stanza. That list is a design limit and will not shrink.
+`UNTYPED_FIELDS` read as text where the spec declares an enum with no variants.
+`UNMODELLED_FIELDS` is the one that is actually work — four union mixins, still
+open.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
