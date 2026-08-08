@@ -390,18 +390,22 @@ fn the_consumer_actually_did_something() {
         corpus().len(),
         "every corpus stanza reached the consumer"
     );
-    assert!(tally.derived >= 8, "and most of them derived an event");
+    assert_eq!(
+        tally.derived,
+        tally.stanzas - 1,
+        "every stanza but the deliberately unmodelled <presence> derived an event"
+    );
     assert_eq!(
         tally.inbound, tally.stanzas,
         "the corpus is inbound traffic"
     );
-    // Two kinds, not one repeated. It is only two because the corpus's
-    // `<message>` and `<call>` stanzas match no shape the derivation models —
-    // worth knowing about the corpus, and not something this test can fix.
+    // All four tags the derivation models. That matters for what the
+    // two-engine equality is worth: agreement across the whole modelled
+    // surface, not on one stanza kind repeated.
     assert_eq!(
         tally.by_tag.keys().copied().collect::<Vec<_>>(),
-        ["ack", "receipt"],
-        "the derivation covers these; a change here is a change in coverage"
+        ["ack", "call", "message", "receipt"],
+        "a change here is a change in what the derivation covers"
     );
     assert!(
         !tally.ids.is_empty(),

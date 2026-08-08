@@ -1464,6 +1464,7 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-059 | Captured frames are not scrubbed | A scrubber that misses a field is worse than none, because it invites trusting the output. Capture from a test account and review what gets committed | 16 |
 | D-060 | Encoder divergences are listed by name, not counted | A count going up says nothing about whether the new difference is a valid encoding choice or one engine being wrong. A named list makes each one a reviewed decision | 16 |
 | D-061 | The example consumer's dependency graph is enforced by a test | "Swap the engine and the consumer does not change" erodes with one convenience dependency, and nothing would fail to say so. The test is what says so | 17 |
+| D-062 | A packed run is read as an integer where one is expected | The nibble alphabet exists to compress runs of digits, so any real encoder packs timestamps. Reading only strings meant every packed integer failed to derive | 17 |
 
 ---
 
@@ -1486,10 +1487,22 @@ Portability is enforced too: the contract builds with no allocator and for
   reaches the consumer, most derive an event, and the two engines' envelopes
   differ on every single stanza — one declares the frame verbatim, the other
   re-encoded. Different input, same conclusion.
-- **A coverage gap it surfaced**: the corpus's `<message>` and `<call>` stanzas
-  match no shape the derivation models, so only `ack` and `receipt` derive. That
-  is now asserted explicitly, so a change in derivation coverage shows up rather
-  than passing unnoticed.
+- **It surfaced a real bug, which is what an example is for** (D-062). Only
+  `ack` and `receipt` derived; `<message>` and `<call>` did not. Two causes, one
+  trivial and one not:
+  - the corpus was missing attributes the shapes require (`recipient` on a
+    message, the four on `<offer-notice>`) — a corpus fault;
+  - and `parse_int` read only strings. The nibble alphabet exists to compress
+    runs of digits, so **every encoder packs timestamps** — which meant every
+    packed `t` in real traffic failed to derive, taking `<message>` and
+    `<call>` with it. The two most important stanza kinds did not derive at
+    all, and nothing had noticed.
+
+  Fixed by reading the digits straight out of the packed run, without
+  materialising a string (`no_std`). A packed run that is not numeric — the
+  alphabet also carries `-` and `.` — is still reported as not-an-int rather
+  than guessed at. All four modelled tags now derive, and the consumer test
+  asserts the full set.
 
 ### rev 16 — 2026-08-07
 

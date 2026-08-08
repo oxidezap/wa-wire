@@ -9,7 +9,7 @@
 //! of a packed run or a JID exists nowhere in the frame to borrow; comparing or
 //! rendering it is the consumer's call, and both are allocation-free.
 
-use wa_wire_codec::{Jid, NodeRef, Value};
+use wa_wire_codec::{Jid, NodeRef, Packed, Value};
 
 use crate::error::{DeriveError, Field};
 
@@ -146,10 +146,36 @@ pub fn content_uint(node: &NodeRef<'_>) -> Result<u64, DeriveError> {
 }
 
 fn parse_int(value: Value<'_>, key: &'static str) -> Result<i64, DeriveError> {
-    value
-        .as_str()
-        .and_then(|text| text.parse::<i64>().ok())
-        .ok_or(DeriveError::NotAnInt { key })
+    if let Some(text) = value.as_str() {
+        return text
+            .parse::<i64>()
+            .map_err(|_| DeriveError::NotAnInt { key });
+    }
+    // A run of digits is exactly what the nibble alphabet exists to compress,
+    // so any encoder that packs will pack a timestamp — and reading only
+    // `as_str` here meant every packed integer in real traffic failed to
+    // derive. Read the digits out rather than materialising a string: this
+    // crate is `no_std` and the value is at most twenty of them.
+    if let Some(packed) = value.as_packed() {
+        return packed_int(packed).ok_or(DeriveError::NotAnInt { key });
+    }
+    Err(DeriveError::NotAnInt { key })
+}
+
+/// A packed run read as a decimal integer, or `None` if it is not one.
+///
+/// The nibble alphabet also carries `-`, `.` and a couple of others, so a
+/// packed run is not necessarily a number — a phone number with a leading `+`
+/// is the obvious case.
+fn packed_int(packed: Packed<'_>) -> Option<i64> {
+    let mut value: i64 = 0;
+    let mut digits = 0u32;
+    for character in packed.chars() {
+        let digit = character.to_digit(10)?;
+        value = value.checked_mul(10)?.checked_add(i64::from(digit))?;
+        digits = digits.saturating_add(1);
+    }
+    (digits > 0).then_some(value)
 }
 
 #[cfg(test)]
@@ -162,6 +188,47 @@ mod tests {
 
     fn node(fixture: &Fixture) -> NodeRef<'_> {
         parse(fixture)
+    }
+
+    #[test]
+    fn a_packed_integer_reads_as_a_number() {
+        // The bug this covers: an encoder packs a run of digits into nibbles —
+        // which is what the alphabet is for — and the extractor only knew how
+        // to read strings. Every packed timestamp in real traffic failed to
+        // derive, which took `<message>` and `<call>` with it.
+        let fixture = Fixture::node("message")
+            .packed_attr("t", "1700000010")
+            .build();
+        let node = node(&fixture);
+
+        assert_eq!(attr_int(&node, "t"), Ok(1_700_000_010));
+        assert_eq!(attr_time(&node, "t"), Ok(1_700_000_010));
+    }
+
+    #[test]
+    fn a_packed_run_that_is_not_a_number_is_reported_as_such() {
+        // The nibble alphabet carries `-` and `.` too, so packed does not imply
+        // numeric. Saying "not an int" is right; guessing a number is not.
+        let fixture = Fixture::node("message")
+            .packed_attr("t", "55-11-999")
+            .build();
+        let node = node(&fixture);
+
+        assert_eq!(
+            attr_int(&node, "t"),
+            Err(DeriveError::NotAnInt { key: "t" })
+        );
+    }
+
+    #[test]
+    fn an_unparsable_string_is_still_an_error_not_a_zero() {
+        let fixture = Fixture::node("message").attr("t", "later").build();
+        let node = node(&fixture);
+
+        assert_eq!(
+            attr_int(&node, "t"),
+            Err(DeriveError::NotAnInt { key: "t" })
+        );
     }
 
     #[test]

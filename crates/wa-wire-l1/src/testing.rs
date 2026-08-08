@@ -23,6 +23,7 @@ const LIST_EMPTY: u8 = 0;
 const BINARY_8: u8 = 252;
 const BINARY_32: u8 = 254;
 const JID_PAIR: u8 = 250;
+const NIBBLE_8: u8 = 255;
 
 /// Servers a fixture JID can name. Slot 0 is the `LIST_EMPTY` placeholder, as
 /// in every real table.
@@ -99,6 +100,47 @@ impl FixtureBuilder {
         let mut encoded = alloc::vec![JID_PAIR];
         encoded.extend_from_slice(&binary(user.as_bytes()));
         encoded.push(SERVER_PN_TAG);
+        self.attrs.push((binary(key.as_bytes()), encoded));
+        self
+    }
+
+    /// Add an attribute packed into the nibble alphabet.
+    ///
+    /// What an encoder does with a run of digits, and therefore what a
+    /// timestamp really looks like on the wire. `-` and `.` are in the alphabet
+    /// too; anything else is rejected here rather than silently mangled.
+    ///
+    /// A character outside the alphabet is dropped rather than encoded, so a
+    /// fixture that tries to pack one is visibly wrong when it is read back.
+    #[must_use]
+    pub fn packed_attr(mut self, key: &str, value: &str) -> Self {
+        let nibbles: Vec<u8> = value
+            .chars()
+            .filter_map(|character| match character {
+                '0'..='9' => Some((character as u8).wrapping_sub(b'0')),
+                '-' => Some(10),
+                '.' => Some(11),
+                // Not in the alphabet, so it cannot be written. Dropping it
+                // makes the fixture visibly wrong rather than the builder
+                // unusable from a `no_panic` crate.
+                _ => None,
+            })
+            .collect();
+        let odd = nibbles.len() % 2 == 1;
+        let mut packed = Vec::with_capacity(nibbles.len().div_ceil(2));
+        for pair in nibbles.chunks(2) {
+            // A trailing half-byte is padded with 0x0F, which `odd` marks.
+            let high = pair.first().copied().unwrap_or(0);
+            let low = pair.get(1).copied().unwrap_or(0x0F);
+            packed.push((high << 4) | low);
+        }
+
+        let mut encoded = alloc::vec![NIBBLE_8];
+        // A fixture longer than a byte's worth of packed bytes is a fixture
+        // that has stopped being a fixture; truncating says so on read-back.
+        let header = u8::try_from(packed.len()).unwrap_or(u8::MAX);
+        encoded.push(if odd { header | 0x80 } else { header });
+        encoded.extend_from_slice(&packed);
         self.attrs.push((binary(key.as_bytes()), encoded));
         self
     }

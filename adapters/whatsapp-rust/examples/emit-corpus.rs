@@ -82,6 +82,9 @@ fn corpus() -> Vec<(&'static str, Node)> {
             NodeBuilder::new("message")
                 .attr("id", "MSG-1")
                 .attr("from", "5511999998888@s.whatsapp.net")
+                // `recipient` and a typed `t` are what whatspec marks required,
+                // so a message without them falls outside the shape entirely.
+                .attr("recipient", "5511777776666@s.whatsapp.net")
                 .attr("type", "text")
                 .attr("t", "1700000010")
                 .children([NodeBuilder::new("enc")
@@ -97,6 +100,7 @@ fn corpus() -> Vec<(&'static str, Node)> {
                 .attr("id", "MSG-GRP-1")
                 .attr("from", "120363000000000000@g.us")
                 .attr("participant", "5511999998888@s.whatsapp.net")
+                .attr("recipient", "5511777776666@s.whatsapp.net")
                 .attr("type", "text")
                 .attr("t", "1700000011")
                 .children([
@@ -120,7 +124,9 @@ fn corpus() -> Vec<(&'static str, Node)> {
             NodeBuilder::new("message")
                 .attr("id", "MSG-DI-1")
                 .attr("from", "5511999998888@s.whatsapp.net")
+                .attr("recipient", "5511777776666@s.whatsapp.net")
                 .attr("type", "text")
+                .attr("t", "1700000012")
                 .children([
                     NodeBuilder::new("device-identity")
                         .bytes(b"identity-blob".to_vec())
@@ -157,9 +163,11 @@ fn corpus() -> Vec<(&'static str, Node)> {
                 .attr("id", "CALL-1")
                 .attr("from", "5511999998888@s.whatsapp.net")
                 .attr("t", "1700000030")
-                .children([NodeBuilder::new("offer")
+                .children([NodeBuilder::new("offer-notice")
                     .attr("call-id", "CALLID-1")
                     .attr("call-creator", "5511999998888@s.whatsapp.net")
+                    .attr("type", "offer")
+                    .attr("media", "audio")
                     .build()])
                 .build(),
         ),
