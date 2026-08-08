@@ -42,7 +42,7 @@ use wa_wire_codec::TokenTable;
 use wa_wire_conformance::{
     Comparability, ComparisonProfile, Incomparable, Recording, Tables, Verdict, compare,
 };
-use wa_wire_contract::{Direction, EnvelopeRef};
+use wa_wire_contract::{ContractVersion, Direction, EnvelopeRef};
 use wa_wire_l1::content::derive_content;
 use wa_wire_recording::RecordingRef;
 
@@ -296,6 +296,30 @@ pub fn run(baseline: &[u8], candidate: &[u8], profile: ComparisonProfile, max: u
             };
         }
     };
+
+    // The contract version each recording was written under, before anything
+    // is read out of it.
+    //
+    // `AdapterInfo` is rebuilt here at whatever this build's version is, so
+    // nothing downstream would ever consult the one in the file — and a
+    // recording written under a later contract would be compared as though it
+    // were this one. The layout may mean something else there; a field that
+    // moved would be read as the field that used to be at that offset, and the
+    // comparison would report differences that are nothing but the two builds
+    // disagreeing about where things are.
+    for (label, recording) in [("baseline", &left), ("candidate", &right)] {
+        // A recording with no adapter metadata declares no version, and there
+        // is nothing to check: it is caught later as an undeclared input.
+        let Some(meta) = recording.adapter() else {
+            continue;
+        };
+        if let Err(mismatch) = ContractVersion::new(meta.contract_version).check() {
+            return Outcome {
+                verdict: None,
+                report: format!("{label}: {mismatch}\n"),
+            };
+        }
+    }
 
     let mut report = String::new();
     let dictionaries = (Dictionary::resolve(&left), Dictionary::resolve(&right));

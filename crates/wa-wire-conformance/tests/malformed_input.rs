@@ -216,7 +216,10 @@ fn check_recording(recording: &RecordingRef<'_>, buf: &[u8], what: &str) {
     );
 
     match recording.integrity() {
-        Integrity::Complete | Integrity::Damaged { .. } | Integrity::Truncated { .. } => {}
+        Integrity::Complete
+        | Integrity::Damaged { .. }
+        | Integrity::Truncated { .. }
+        | Integrity::TrailingBytes { .. } => {}
     }
 
     // Every accessor has to be callable on anything that decoded.

@@ -46,6 +46,14 @@
 
 use core::fmt;
 
+/// How deep groups may nest before a payload is treated as malformed.
+///
+/// Generous by orders of magnitude: nothing in WhatsApp's schema uses groups
+/// at all, and a payload nesting them deeper than this is one nobody sent. The
+/// bound exists because the alternative is a growable stack, and this crate
+/// has no allocator.
+const MAX_GROUP_DEPTH: usize = 32;
+
 /// Why a payload could not be read.
 ///
 /// A payload arrives from another party's encoder, so a malformed one is an
@@ -292,7 +300,21 @@ impl<'a> Reader<'a> {
     /// Everything between a start-group tag and its matching end.
     fn read_group(&mut self, number: u32) -> Result<&'a [u8], Error> {
         let body = self.rest;
+        // The numbers of the groups currently open, outermost first.
+        //
+        // A depth counter alone only checks the outermost close: `group 1,
+        // group 2, end 3, end 1` balances, and the mismatched `end 3` passes
+        // unremarked because the check waits for depth to reach zero. Every
+        // end-group names the field it closes, so every one can be checked
+        // against the start it is supposed to match.
+        //
+        // A fixed array rather than a growable stack, this crate having no
+        // allocator. The bound is generous by orders of magnitude: nothing in
+        // WhatsApp's schema uses groups at all, and a payload nesting them
+        // deeper than this is a payload nobody sent.
+        let mut open = [0u32; MAX_GROUP_DEPTH];
         let mut depth = 1usize;
+        *open.first_mut().ok_or(Error::MalformedVarint)? = number;
         loop {
             let before = self.rest.len();
             let tag = self.read_varint()?;
@@ -311,13 +333,21 @@ impl<'a> Reader<'a> {
                     let len = payload_len(self.read_varint()?, self.rest.len())?;
                     self.take(len)?;
                 }
-                3 => depth = depth.saturating_add(1),
+                3 => {
+                    let Some(slot) = open.get_mut(depth) else {
+                        return Err(Error::UnexpectedGroupEnd { number: inner });
+                    };
+                    *slot = inner;
+                    depth = depth.saturating_add(1);
+                }
                 4 => {
                     depth = depth.saturating_sub(1);
+                    // Each end-group against the start it closes, not only the
+                    // outermost one.
+                    if open.get(depth).copied() != Some(inner) {
+                        return Err(Error::UnexpectedGroupEnd { number: inner });
+                    }
                     if depth == 0 {
-                        if inner != number {
-                            return Err(Error::UnexpectedGroupEnd { number: inner });
-                        }
                         // Everything before the tag that closed it.
                         let end = body.len().saturating_sub(before);
                         return body.get(..end).ok_or(Error::UnterminatedGroup { number });
@@ -343,6 +373,14 @@ impl<'a> Reader<'a> {
         for index in 0u32..10 {
             let byte = *self.rest.first().ok_or(Error::MalformedVarint)?;
             self.rest = self.rest.get(1..).unwrap_or(&[]);
+            // Nine groups of seven bits reach bit 62; the tenth byte carries
+            // bit 63 and nothing else. A `2` there shifts left by 63 and falls
+            // out of the word, so the reader would accept nine `0x80`s and a
+            // `0x02` as *zero* — a malformed varint read as a value, which is
+            // worse than one refused.
+            if index == 9 && byte & 0xFE != 0 {
+                return Err(Error::MalformedVarint);
+            }
             value |= u64::from(byte & 0x7F) << index.saturating_mul(7);
             if byte & 0x80 == 0 {
                 return Ok(value);

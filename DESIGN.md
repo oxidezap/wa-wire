@@ -9,7 +9,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 39
+> **Last revised:** rev 40
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1981,6 +1981,56 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 40 — 2026-08-08
+
+Review of the last two revisions. Almost all of it was real, and the gate could
+return the wrong verdict five ways.
+
+- **A recording could lose its entire inbound half and pass.** The exemption
+  that keeps an observer's limited reach from being blamed on its engine was
+  written for the outbound sequence and applied to both, so a candidate with no
+  inbound stanzas at all produced no divergences. Introduced in rev 36 and
+  fixed here.
+- **Bytes after the trailer read as `Complete`.** The checksum covers what
+  precedes the trailer, which is everything the trailer knew about, so appended
+  records leave the count right, the checksum right and the file wrong. A new
+  `Integrity::TrailingBytes` names it, and makes such a recording incomparable
+  since `whole` already requires `Complete`.
+- **Three more ways a comparison ran on nothing:** a recording written under a
+  later contract version was read as this one, because `AdapterInfo` is rebuilt
+  at the current version and nothing consulted the file's; a skipped record —
+  the container's own escape hatch for a kind a reader does not know — was
+  counted and then ignored; and two recordings that both declared *no* artifact
+  class were compared as though two absences were an agreement, as were two
+  `Sanitized` ones naming no transform.
+- **Two in the protobuf reader.** The tenth byte of a varint carries bit 63 and
+  no more, so nine `0x80`s and a `0x02` were accepted as *zero* — a malformed
+  varint read as a value. And an end-group was checked only at depth zero, so
+  `group 1 { group 2 { end 3 } end 1 }` balanced with the mismatch unremarked.
+- **Four in the Go adapter**, three of them from the two hooks running on
+  different goroutines — something the other two adapters do not have to
+  contend with:
+  - Deliveries to the sink could overlap, since both hooks reached it after
+    releasing the joiner's lock.
+  - The lookahead aged by frames received while payloads arrive from behind a
+    256-deep queue, so a message could be given up on while its plaintext was
+    still queued. The default is now larger than that queue, and says why.
+  - A stanza waiting on payloads let the ones behind it overtake it. The queue
+    now drains in arrival order, which is also the order a recording is
+    compared in.
+  - `TakeoverInfo` promised `l0.plaintext`, and a claimed stanza is never
+    decrypted — `Require(Takeover, L0Plaintext)` succeeded for a combination
+    the engine cannot produce.
+- **The format moved into its own Go package.** The fixtures are the only check
+  on that encoder, and CI could not regenerate them while the command pulled in
+  the engine. `wire/` imports nothing but the standard library, so CI now
+  regenerates and requires no diff — reading committed files proves the reader
+  agrees with what was committed, not that the writer still produces it.
+- Smaller: `derive_all` handed outbound envelopes back as inbound events; an
+  interop JID written as text lost its integrator, so the two spellings of one
+  identity derived differently; and `capture-corpus` left a previous run's
+  files in the directory for the emitter to sweep up.
 
 ### rev 39 — 2026-08-08
 

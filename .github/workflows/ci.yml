@@ -98,6 +98,22 @@ jobs:
       - name: Regenerate the outgoing derivation
         run: python3 tools/generate-outgoing.py
 
+      # The Go adapter's fixtures are read by `cargo test -p wa-wire-conformance`
+      # and are the only check on that encoder, which has no Rust to compare
+      # itself against. Reading committed files proves the *reader* agrees with
+      # what was committed; regenerating them is what proves the writer still
+      # produces it.
+      #
+      # The encoder is a package of its own with no engine dependency, so this
+      # needs Go and nothing else — `emit-fixtures` imports the format and not
+      # the adapter.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Regenerate the Go adapter's fixtures
+        working-directory: adapters/hypermeow
+        run: go run ./cmd/emit-fixtures
+
       - name: Require no change
         run: |
           if ! git diff --quiet; then

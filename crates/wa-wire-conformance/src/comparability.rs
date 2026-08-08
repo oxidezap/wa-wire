@@ -43,6 +43,13 @@ pub struct Comparability<'a> {
     pub whole: bool,
     /// Whether a critical metadata tag was skipped for want of understanding.
     pub unknown_critical: bool,
+    /// Whether a record was skipped for want of a kind this build reads.
+    ///
+    /// The container lets a reader skip a record kind it does not know so that
+    /// one new kind does not make a whole file unreadable. Skipping is how it
+    /// keeps reading; it is not how it understands. A record that turns out to
+    /// carry traffic would leave a comparison passing on the part it did read.
+    pub skipped_records: bool,
 }
 
 impl<'a> Comparability<'a> {
@@ -56,6 +63,7 @@ impl<'a> Comparability<'a> {
             dictionary: recording.dictionary(),
             whole: matches!(recording.integrity(), Integrity::Complete),
             unknown_critical: recording.unknown_critical_tags() > 0,
+            skipped_records: recording.skipped_records() > 0,
         }
     }
 
@@ -68,6 +76,7 @@ impl<'a> Comparability<'a> {
             transform: None,
             dictionary: None,
             whole: true,
+            skipped_records: false,
             unknown_critical: false,
         }
     }
@@ -108,6 +117,9 @@ pub fn check(
     if left.unknown_critical || right.unknown_critical {
         return Some(Incomparable::UnknownCriticalTag);
     }
+    if left.skipped_records || right.skipped_records {
+        return Some(Incomparable::SkippedRecord);
+    }
     if !left.whole || !right.whole {
         return Some(Incomparable::NotWhole);
     }
@@ -120,11 +132,21 @@ pub fn check(
         _ => return Some(Incomparable::UndeclaredInput),
     }
 
-    if left.artifact_class != right.artifact_class {
+    // What kind of artifact each is, before whether they are the same kind.
+    //
+    // Two absences are not an agreement: nothing establishes that a pair with
+    // no class declared came to exist the same way, and the comparison would
+    // run on the assumption that they did.
+    let (Some(left_class), Some(right_class)) = (left.artifact_class, right.artifact_class) else {
+        return Some(Incomparable::UndeclaredArtifactClass);
+    };
+    if left_class != right_class {
         return Some(Incomparable::DifferentArtifactClass);
     }
-    if matches!(left.artifact_class, Some(ArtifactClass::Sanitized))
-        && left.transform != right.transform
+    // A sanitized pair must name the same transform, and must name one at all.
+    // Both saying "altered" and neither saying how is the same hole again.
+    if left_class == ArtifactClass::Sanitized
+        && (left.transform.is_none() || left.transform != right.transform)
     {
         return Some(Incomparable::DifferentTransform);
     }
@@ -332,5 +354,74 @@ mod tests {
         assert_ne!(one, replayed(b"corpus-2"));
         assert!(!alloc::format!("{one:?}").is_empty());
         assert_eq!(Comparability::default().input_digest, None);
+    }
+
+    /// Two recordings that do not say what they are cannot be compared.
+    ///
+    /// Two absences are not an agreement. One may be a live capture and the
+    /// other a sanitized replay, and the comparison would run as though they
+    /// had come to exist the same way.
+    #[test]
+    fn neither_side_saying_what_it_is_stops_the_comparison() {
+        let nothing = Comparability {
+            input_digest: Some(b"corpus-1"),
+            artifact_class: None,
+            transform: None,
+            dictionary: None,
+            whole: true,
+            unknown_critical: false,
+            skipped_records: false,
+        };
+        assert_eq!(
+            check(Some(nothing), Some(nothing)),
+            Some(Incomparable::UndeclaredArtifactClass)
+        );
+    }
+
+    /// Two sanitized recordings must name the transform, not merely agree that
+    /// there was one.
+    ///
+    /// Both saying "altered" and neither saying how is the same hole: nothing
+    /// establishes that they were altered alike, and a difference the
+    /// sanitizer introduced would read as a difference between the engines.
+    #[test]
+    fn a_sanitized_pair_must_name_its_transform() {
+        let unnamed = Comparability {
+            input_digest: Some(b"corpus-1"),
+            artifact_class: Some(ArtifactClass::Sanitized),
+            transform: None,
+            dictionary: None,
+            whole: true,
+            unknown_critical: false,
+            skipped_records: false,
+        };
+        assert_eq!(
+            check(Some(unnamed), Some(unnamed)),
+            Some(Incomparable::DifferentTransform)
+        );
+
+        let named = Comparability {
+            transform: Some(("scrub", "1.0")),
+            ..unnamed
+        };
+        assert_eq!(check(Some(named), Some(named)), None);
+    }
+
+    /// A record this build does not read makes the recording incomparable.
+    ///
+    /// The container lets a reader skip an unknown record kind so one new kind
+    /// does not make a whole file unreadable. Skipping is how it keeps reading,
+    /// not how it understands — and a record that turns out to carry traffic
+    /// would leave the comparison passing on the part it did read.
+    #[test]
+    fn a_skipped_record_stops_the_comparison() {
+        let skipped = Comparability {
+            skipped_records: true,
+            ..replayed(b"corpus-1")
+        };
+        assert_eq!(
+            check(Some(skipped), Some(replayed(b"corpus-1"))),
+            Some(Incomparable::SkippedRecord)
+        );
     }
 }

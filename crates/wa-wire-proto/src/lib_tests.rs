@@ -396,3 +396,56 @@ fn errors_render_and_are_comparable() {
     assert_error(&Error::MalformedVarint);
     assert!(!alloc::format!("{:?}", Value::Varint(1)).is_empty());
 }
+
+/// The tenth byte of a varint carries one bit, and no more.
+///
+/// Nine groups of seven reach bit 62, so the tenth contributes bit 63 alone.
+/// Anything else shifts out of the word: nine `0x80`s and a `0x02` were read as
+/// *zero*, which is a malformed varint accepted as a value — worse than one
+/// refused, because nothing downstream can tell.
+#[test]
+fn a_tenth_varint_byte_past_one_bit_is_refused() {
+    let mut wire = alloc::vec![0x08u8];
+    wire.extend_from_slice(&[0x80; 9]);
+    wire.push(0x02);
+    let mut reader = Reader::new(&wire);
+    assert!(matches!(reader.next(), Some(Err(Error::MalformedVarint))));
+
+    // Bit 63 itself is legal: every bit on is `u64::MAX`.
+    let mut largest = alloc::vec![0x08u8];
+    largest.extend_from_slice(&[0xFF; 9]);
+    largest.push(0x01);
+    let field = Reader::new(&largest)
+        .next()
+        .expect("a field")
+        .expect("well formed");
+    assert_eq!(field.value.as_u64(), Some(u64::MAX));
+}
+
+/// An end-group naming the wrong field is refused at every depth.
+///
+/// A depth counter alone only checks the outermost close, so
+/// `group 1 { group 2 { end 3 } end 1 }` balanced and the mismatched `end 3`
+/// passed unremarked.
+#[test]
+fn a_nested_group_must_be_closed_by_its_own_number() {
+    let wrong = [
+        0x0Bu8, // start group, field 1
+        0x13,   // start group, field 2
+        0x1C,   // end group, field 3 — closes nothing that is open
+        0x0C,   // end group, field 1
+    ];
+    let mut reader = Reader::new(&wrong);
+    assert!(matches!(
+        reader.next(),
+        Some(Err(Error::UnexpectedGroupEnd { number: 3 }))
+    ));
+
+    // Closed by its own number, the same shape parses.
+    let correct = [0x0Bu8, 0x13, 0x14, 0x0C];
+    let field = Reader::new(&correct)
+        .next()
+        .expect("a field")
+        .expect("well formed");
+    assert_eq!(field.number, 1);
+}

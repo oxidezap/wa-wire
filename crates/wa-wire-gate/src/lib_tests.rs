@@ -610,3 +610,39 @@ fn the_report_counts_each_direction_per_side() {
         "{report}"
     );
 }
+
+/// A recording written under a contract this build does not know is refused.
+///
+/// `AdapterInfo` is rebuilt at this build's version, so nothing downstream
+/// would ever consult the one in the file — and a later layout would be read
+/// as this one. A field that moved would be read as whatever used to be at
+/// that offset, and the comparison would report differences that are nothing
+/// but the two builds disagreeing about where things are.
+#[test]
+fn a_recording_from_a_later_contract_is_refused() {
+    let input = b"corpus";
+    let baseline = recording("left", input, &[envelope(receipt("AAAA"))]);
+
+    let mut meta = MetaBuilder::new()
+        .adapter("right", "0.1.0", "1.0", 2, ["l0.inbound.tap"])
+        .expect("adapter")
+        .artifact_class(ArtifactClass::Replayed)
+        .expect("class");
+    meta = meta.input_digest(input).expect("input");
+    let mut writer = RecordingWriter::new(meta).expect("writer");
+    writer
+        .envelope(&envelope(receipt("AAAA")))
+        .expect("envelope");
+    let candidate = writer.finish();
+
+    let outcome = gate(&baseline, &candidate, ComparisonProfile::Regression);
+    assert_eq!(
+        outcome.verdict, None,
+        "a version this build cannot interpret has no verdict to give"
+    );
+    assert!(
+        outcome.report.contains("candidate"),
+        "the report names which side: {}",
+        outcome.report
+    );
+}

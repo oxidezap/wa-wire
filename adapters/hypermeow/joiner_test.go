@@ -3,7 +3,10 @@ package wawire
 import (
 	"bytes"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	waBinary "go.mau.fi/whatsmeow/binary"
 )
@@ -258,5 +261,158 @@ func TestEveryEmittedEnvelopeSatisfiesTheDeclaration(t *testing.T) {
 
 	if checked != 5 {
 		t.Fatalf("checked %d envelopes, want 5", checked)
+	}
+}
+
+// Stanzas leave in the order they arrived, held or not.
+//
+// A stanza waiting on payloads is not a licence to reorder the ones behind it.
+// Emitting an ack the moment it arrives would put it ahead of a message that
+// came first, and a recording compared position by position would report that
+// as a divergence in whichever engine happened to be slower.
+func TestStanzasLeaveInTheOrderTheyArrived(t *testing.T) {
+	var order []string
+	joiner := NewJoiner(SinkFunc(func(envelope Envelope) {
+		order = append(order, string(envelope.Frame))
+	}))
+
+	joiner.AcceptFrame(messageNode("M1", 1), []byte("message"))
+	joiner.AcceptFrame(&waBinary.Node{Tag: "ack", Attrs: waBinary.Attrs{"id": "A1"}}, []byte("ack"))
+
+	if len(order) != 0 {
+		t.Fatalf("the ack is behind a held message: %v", order)
+	}
+
+	joiner.AcceptPlaintext("M1", 1, []byte("plain"))
+
+	want := []string{"message", "ack"}
+	if len(order) != 2 || order[0] != want[0] || order[1] != want[1] {
+		t.Fatalf("order = %v, want %v", order, want)
+	}
+}
+
+// A retry with an id already waiting does not displace the first stanza.
+//
+// Both were real, and this adapter promises to report every inbound stanza.
+// What the earlier one gives up is the chance of a payload, which it reports as
+// `Unobserved` — losing the frame entirely would be the larger claim.
+func TestARepeatedIdDoesNotLoseTheFirstStanza(t *testing.T) {
+	sink := &collector{}
+	joiner := NewJoiner(sink)
+
+	joiner.AcceptFrame(messageNode("M1", 1), []byte("first"))
+	joiner.AcceptFrame(messageNode("M1", 1), []byte("retry"))
+
+	// The first is finished by the second's arrival and drains at once; the
+	// retry is still waiting behind nothing.
+	if len(sink.envelopes) != 1 || string(sink.envelopes[0].Frame) != "first" {
+		t.Fatalf("the first stanza must still be emitted: %d envelopes", len(sink.envelopes))
+	}
+	if sink.envelopes[0].Plaintexts[0].Status != StatusUnobserved {
+		t.Fatal("it gave up its payload, not its existence")
+	}
+
+	// And the payload goes to the retry, which is the one still holding the id.
+	joiner.AcceptPlaintext("M1", 1, []byte("plain"))
+	if len(sink.envelopes) != 2 || string(sink.envelopes[1].Frame) != "retry" {
+		t.Fatalf("the retry completes on its own payload")
+	}
+	if sink.envelopes[1].Plaintexts[0].Status != StatusOk {
+		t.Fatal("the retry got its payload")
+	}
+}
+
+// A payload for a child this stanza has no `<enc>` at is dropped.
+//
+// Counting it would close the stanza early — the count is what decides
+// completion — and the payload that was actually coming would then find nothing
+// holding its id.
+func TestAPayloadForAnUnexpectedChildIsDropped(t *testing.T) {
+	sink := &collector{}
+	joiner := NewJoiner(sink)
+	joiner.AcceptFrame(messageNode("M1", 1), []byte("frame"))
+
+	// The `<enc>` is at child index 1; nothing is at 9.
+	joiner.AcceptPlaintext("M1", 9, []byte("elsewhere"))
+	if len(sink.envelopes) != 0 {
+		t.Fatal("an unexpected index must not complete the stanza")
+	}
+
+	joiner.AcceptPlaintext("M1", 1, []byte("plain"))
+	if len(sink.envelopes) != 1 {
+		t.Fatal("the real payload still completes it")
+	}
+	if got := string(sink.envelopes[0].Plaintexts[0].Payload); got != "plain" {
+		t.Fatalf("payload = %q", got)
+	}
+}
+
+// The two hooks run on two goroutines, and the sink sees one call at a time.
+//
+// `RawNodeHandler` runs on the receive path and `DecryptedPayloadHandler` on
+// the engine's handler queue, so without serialising them a consumer's `Accept`
+// can be entered twice at once. Run with `-race`.
+func TestTheSinkIsNeverEnteredTwiceAtOnce(t *testing.T) {
+	var inside int32
+	joiner := NewJoiner(SinkFunc(func(Envelope) {
+		if atomic.AddInt32(&inside, 1) != 1 {
+			t.Error("two deliveries in the sink at once")
+		}
+		// Long enough that a second caller would overlap if nothing stopped it.
+		time.Sleep(time.Microsecond)
+		atomic.AddInt32(&inside, -1)
+	}))
+
+	// Frames from one goroutine, payloads from another, as the engine does it.
+	const stanzas = 64
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for index := 0; index < stanzas; index++ {
+			joiner.AcceptFrame(messageNode(fmt.Sprintf("M%d", index), 1), []byte("frame"))
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for index := 0; index < stanzas; index++ {
+			joiner.AcceptPlaintext(fmt.Sprintf("M%d", index), 1, []byte("plain"))
+		}
+	}()
+	wg.Wait()
+	joiner.Flush()
+}
+
+// The lookahead outlasts the engine's handler queue.
+//
+// The two hooks sit on opposite sides of a 256-deep queue, so a message can
+// legitimately lag by the whole of it before its payload appears. A lookahead
+// under that would record `Unobserved` for a stanza that decrypted perfectly
+// well — the one failure mode that looks like an engine defect and is not.
+func TestTheLookaheadOutlastsTheEnginesHandlerQueue(t *testing.T) {
+	const engineHandlerQueue = 256
+	if DefaultLookahead <= engineHandlerQueue {
+		t.Fatalf(
+			"lookahead %d does not outlast a %d-deep queue",
+			DefaultLookahead, engineHandlerQueue,
+		)
+	}
+
+	sink := &collector{}
+	joiner := NewJoiner(sink)
+	joiner.AcceptFrame(messageNode("M1", 1), []byte("frame"))
+	for index := 0; index < engineHandlerQueue; index++ {
+		joiner.AcceptFrame(
+			&waBinary.Node{Tag: "ack", Attrs: waBinary.Attrs{"id": fmt.Sprintf("A%d", index)}},
+			[]byte("ack"),
+		)
+	}
+
+	joiner.AcceptPlaintext("M1", 1, []byte("plain"))
+	if len(sink.envelopes) == 0 {
+		t.Fatal("nothing was emitted")
+	}
+	if sink.envelopes[0].Plaintexts[0].Status != StatusOk {
+		t.Fatal("a payload arriving a full queue later is still its payload")
 	}
 }

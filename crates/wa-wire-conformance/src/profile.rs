@@ -185,6 +185,13 @@ pub enum Incomparable {
     /// One or both sides do not say what traffic they are a replay of, so
     /// nothing establishes that they saw the same input (D-079).
     UndeclaredInput,
+    /// Neither recording says what kind of artifact it is.
+    ///
+    /// Two absences are not an agreement. `Sanitized` against `Sanitized` with
+    /// no transform named is the same shape of hole: both say they were
+    /// altered and neither says how, so nothing establishes that they were
+    /// altered alike.
+    UndeclaredArtifactClass,
     /// Both declare an input, and they are different recordings of different
     /// traffic.
     DifferentInput,
@@ -210,6 +217,14 @@ pub enum Incomparable {
     UnknownCriticalTag,
     /// A recording is missing records: interrupted, or damaged.
     NotWhole,
+    /// A recording carries a record kind this build does not read.
+    ///
+    /// The same reasoning as an unknown *critical tag*, one level out: the
+    /// container let the record be skipped so a reader could go on, and going
+    /// on is not the same as having understood. A record that turns out to
+    /// carry the traffic would leave a comparison passing on the part it did
+    /// read.
+    SkippedRecord,
 }
 
 impl Incomparable {
@@ -218,6 +233,7 @@ impl Incomparable {
     pub const fn name(self) -> &'static str {
         match self {
             Self::UndeclaredInput => "neither side declares its input",
+            Self::UndeclaredArtifactClass => "neither side says what kind of artifact it is",
             Self::DifferentInput => "different input traffic",
             Self::DifferentArtifactClass => "different artifact classes",
             Self::DifferentTransform => "different sanitizing transforms",
@@ -225,6 +241,7 @@ impl Incomparable {
             Self::UnresolvableDictionary => "a token dictionary this host does not have",
             Self::UnknownCriticalTag => "a critical metadata tag was not understood",
             Self::NotWhole => "a recording is truncated or damaged",
+            Self::SkippedRecord => "a recording carries a record kind this build does not read",
         }
     }
 }

@@ -128,6 +128,25 @@ struct FrameWriter {
 impl FrameWriter {
     fn new(dir: PathBuf) -> std::io::Result<Self> {
         std::fs::create_dir_all(&dir)?;
+
+        // Clear the `.bin` files a previous run left.
+        //
+        // The counter restarts but the names carry the stanza's tag too, so the
+        // same position can produce a different filename — and the emitter
+        // downstream sweeps every `.bin` in the directory. Left alone, a second
+        // capture mixes into the first and the corpus becomes two sessions
+        // nobody meant to compare.
+        //
+        // Only `.bin`, and only at the top level: this deletes files in a
+        // directory the caller named, and deleting more than what this program
+        // writes would be the kind of surprise a capture tool must not have.
+        for entry in std::fs::read_dir(&dir)? {
+            let path = entry?.path();
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "bin") {
+                std::fs::remove_file(&path)?;
+            }
+        }
+
         Ok(Self {
             dir,
             written: 0,

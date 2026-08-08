@@ -898,3 +898,59 @@ fn an_outbound_iq_derives_where_an_inbound_reading_has_nothing() {
     assert!(wa_wire_l1::derive(&node).is_err());
     assert!(wa_wire_l1::derive_outgoing(&node).is_ok());
 }
+
+/// Losing the whole inbound half is a fault, never a coverage difference.
+///
+/// The exemption that keeps an observer's reach from being blamed on its engine
+/// belongs to the outbound sequence alone. Every adapter observes the inbound
+/// half — that is what `l0.inbound.tap` means — so a recording with none
+/// against one with many has lost the traffic, and a comparison that skipped it
+/// reported nothing at all and passed.
+#[test]
+fn a_candidate_that_recorded_nothing_inbound_fails() {
+    let stanza = envelope(receipt("AAAA"));
+    let (la, rb): ([&[u8]; 1], [&[u8]; 0]) = ([&stanza], []);
+
+    let report = compare(
+        &recording("left", &la),
+        &recording("right", &rb),
+        Tables::shared(FIXTURE_TABLE),
+    );
+
+    let found: Vec<_> = report.divergences().collect();
+    assert!(
+        found.iter().any(|d| matches!(d, Divergence::Length { .. })),
+        "the stanzas are gone and nothing says so: {found:?}"
+    );
+    assert_ne!(
+        report.evaluate(ComparisonProfile::Interop),
+        Verdict::Pass,
+        "a total loss of the input cannot pass"
+    );
+}
+
+/// `derive_all` is the inbound derivation, and says nothing about the rest.
+///
+/// It hands back `Event`, which is what an *arriving* stanza means. An
+/// outbound `<ack>` satisfies the same shapes and means the opposite, so
+/// returning one would be the confident wrong answer — `None` says "not
+/// derived here" rather than "did not derive".
+#[test]
+fn derive_all_leaves_the_outbound_half_alone() {
+    let inbound = envelope(receipt("AAAA"));
+    let outbound = outbound_envelope(receipt("BBBB"));
+    let bytes: [&[u8]; 2] = [&inbound, &outbound];
+
+    let derived: Vec<_> = derive_all(&recording("engine", &bytes), FIXTURE_TABLE).collect();
+
+    assert_eq!(
+        derived.len(),
+        2,
+        "positions stay aligned with the recording"
+    );
+    assert!(derived[0].is_some(), "the inbound one derives");
+    assert!(
+        derived[1].is_none(),
+        "the outbound one is not an inbound event"
+    );
+}

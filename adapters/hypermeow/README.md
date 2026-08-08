@@ -19,9 +19,15 @@ implemented by someone who cannot use any of our code — which is the differenc
 between a specification and a library with three callers.
 
 Three descriptions only ever tested separately are three formats waiting to
-diverge, so the [fixtures](fixtures) this package writes are
+diverge, so the [fixtures](fixtures) are
 [read back by the Rust side](../../crates/wa-wire-conformance/tests/cross_language_go.rs).
 The Go encoder has no Rust to check itself against; that test is the check.
+
+The format lives in [`wire/`](wire), importing nothing but the standard
+library. That is what lets CI regenerate the fixtures and require no diff
+without having the engine checked out — reading committed files only proves the
+*reader* agrees with what was committed, and regenerating them is what proves
+the writer still produces it.
 
 ## Building
 

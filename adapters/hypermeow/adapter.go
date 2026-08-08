@@ -4,8 +4,47 @@ import (
 	"context"
 	"strings"
 
+	"github.com/oxidezap/wa-wire/adapters/hypermeow/wire"
 	"go.mau.fi/whatsmeow"
 	waBinary "go.mau.fi/whatsmeow/binary"
+)
+
+// The boundary format, re-exported so a consumer of this adapter sees one
+// package. The format lives apart because it does not need the engine; that it
+// does not is the point, not an inconvenience to paper over.
+type (
+	// Envelope is one stanza crossing the boundary.
+	Envelope = wire.Envelope
+	// Plaintext is one decrypted payload, addressed by its node's path.
+	Plaintext = wire.Plaintext
+	// Direction says which way a stanza was travelling.
+	Direction = wire.Direction
+	// FrameOrigin says whether the frame is the engine's own buffer.
+	FrameOrigin = wire.FrameOrigin
+	// PlaintextStatus says whether an entry holds usable bytes.
+	PlaintextStatus = wire.PlaintextStatus
+)
+
+// The format's constants, re-exported alongside its types.
+const (
+	// ContractVersion is the boundary version this adapter writes.
+	ContractVersion = wire.ContractVersion
+	// Inbound is a stanza received from the server.
+	Inbound = wire.Inbound
+	// Outbound is a stanza the client sent.
+	Outbound = wire.Outbound
+	// Original is the buffer the engine's decoder consumed, verbatim.
+	Original = wire.Original
+	// ReEncoded came from a decoded node, the bytes being unreachable.
+	ReEncoded = wire.ReEncoded
+	// StatusOk carries the plaintext.
+	StatusOk = wire.StatusOk
+	// StatusDecryptFailed means Signal refused it.
+	StatusDecryptFailed = wire.StatusDecryptFailed
+	// StatusUnsupported means the adapter cannot decrypt this kind.
+	StatusUnsupported = wire.StatusUnsupported
+	// StatusUnobserved means the node produced nothing the adapter saw.
+	StatusUnobserved = wire.StatusUnobserved
 )
 
 // Capability is one thing an adapter may or may not be able to do.
@@ -87,10 +126,16 @@ var Info = AdapterInfo{
 
 // TakeoverInfo is the declaration when the adapter also claims stanzas.
 //
-// A separate set because the two modes are not the same adapter. Taking a
-// stanza over means the engine's own handler does not run, which is a
-// different thing to promise than watching one go past — and a consumer holding
-// one of the two should not be told about the other's reach.
+// A separate set because the two modes are not the same adapter, and not a
+// superset of the tap: claiming a stanza returns `drop` from the raw-node hook,
+// and the engine's `handleFrame` returns there — before the stanza is queued
+// for decryption. So a claimed stanza never reaches Signal and no plaintext
+// ever arrives for it.
+//
+// Declaring `l0.plaintext` here would let `Require(Takeover, L0Plaintext)`
+// succeed for a combination the engine cannot produce, and the consumer would
+// discover it as missing payloads. The absence is the honest half of the
+// promise.
 var TakeoverInfo = AdapterInfo{
 	ID:              ID,
 	AdapterVersion:  AdapterVersion,
@@ -99,7 +144,6 @@ var TakeoverInfo = AdapterInfo{
 	Capabilities: []Capability{
 		L0InboundTap,
 		L0InboundAuthPhase,
-		L0Plaintext,
 		ZeroCopyFrame,
 		Takeover,
 	},

@@ -472,3 +472,52 @@ fn the_writer_reports_what_it_holds() {
     assert!(!writer.is_empty());
     assert!(!writer.as_bytes().is_empty());
 }
+
+/// A recording that says it ends and does not is not complete.
+///
+/// The checksum cannot catch this. It covers the bytes up to the trailer,
+/// which is everything the trailer knew about — so records appended afterwards
+/// leave the count right, the checksum right, and the file wrong. A gate
+/// reading one would compare the prefix and pass on traffic it never saw.
+#[test]
+fn records_appended_after_the_trailer_are_reported() {
+    let mut writer = RecordingWriter::new(meta()).expect("writer");
+    writer.envelope(b"first").expect("envelope");
+    let mut bytes = writer.finish();
+
+    let whole = RecordingRef::decode(&bytes).expect("decodes");
+    assert_eq!(whole.integrity(), Integrity::Complete);
+
+    // A second writer's output, appended — the shape a naive `cat` produces.
+    let mut second = RecordingWriter::new(meta()).expect("writer");
+    second.envelope(b"appended").expect("envelope");
+    let extra = second.finish();
+    bytes.extend_from_slice(&extra);
+
+    let joined = RecordingRef::decode(&bytes).expect("still decodes");
+    assert_eq!(
+        joined.integrity(),
+        Integrity::TrailingBytes {
+            found: 1,
+            trailing: extra.len(),
+        },
+        "the first trailer accounted for one record and the file holds more"
+    );
+    // What was appended is not read: guessing what it is would invent the
+    // thing the trailer exists to state.
+    assert_eq!(joined.envelope_count(), 1);
+}
+
+/// Even a single stray byte after the trailer is reported.
+#[test]
+fn one_byte_after_the_trailer_is_enough() {
+    let mut writer = RecordingWriter::new(meta()).expect("writer");
+    writer.envelope(b"only").expect("envelope");
+    let mut bytes = writer.finish();
+    bytes.push(0);
+
+    assert!(matches!(
+        RecordingRef::decode(&bytes).expect("decodes").integrity(),
+        Integrity::TrailingBytes { trailing: 1, .. }
+    ));
+}

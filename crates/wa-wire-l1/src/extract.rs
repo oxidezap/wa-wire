@@ -9,7 +9,7 @@
 //! of a packed run or a JID exists nowhere in the frame to borrow; comparing or
 //! rendering it is the consumer's call, and both are allocation-free.
 
-use wa_wire_codec::{Jid, NodeRef, Packed, User, Value};
+use wa_wire_codec::{Jid, NodeRef, Packed, User, Value, token};
 
 use crate::error::{DeriveError, Field};
 
@@ -109,14 +109,39 @@ fn jid_from_text(text: &str, bare_server_allowed: bool) -> Option<Jid<'_>> {
         return Some(Jid::pair(User::None, server));
     };
     // `user:device` splits the device off; `user` alone is device zero.
-    match user.split_once(':') {
-        Some((user, device)) => {
-            let device = device.parse::<u16>().ok()?;
-            (!user.is_empty())
-                .then(|| Jid::with_device(User::Bytes(user.as_bytes()), server, device))
-        }
-        None => (!user.is_empty()).then(|| Jid::pair(User::Bytes(user.as_bytes()), server)),
+    let (user, device) = match user.split_once(':') {
+        Some((user, device)) => (user, device.parse::<u16>().ok()?),
+        None => (user, 0),
+    };
+    if user.is_empty() {
+        return None;
     }
+
+    // An interop JID writes its integrator ahead of the user, joined by `-`.
+    //
+    // The binary form carries the integrator as a field of its own, so a JID
+    // that arrives packed becomes `Jid::interop(user, device, integrator)`
+    // while the same JID written out becomes a plain user called `42-user`.
+    // Two spellings of one identity deriving to different values is exactly
+    // what `semantic_eq` cannot paper over — it compares the parts, and these
+    // have different parts.
+    if server == token::SERVER_INTEROP
+        && let Some((integrator, user)) = user.split_once('-')
+        && let Ok(integrator) = integrator.parse::<u16>()
+        && !user.is_empty()
+    {
+        return Some(Jid::interop(
+            User::Bytes(user.as_bytes()),
+            device,
+            integrator,
+        ));
+    }
+
+    Some(if device == 0 {
+        Jid::pair(User::Bytes(user.as_bytes()), server)
+    } else {
+        Jid::with_device(User::Bytes(user.as_bytes()), server, device)
+    })
 }
 
 /// A required enum-valued attribute, resolved by the caller's `from_wire`.
@@ -605,5 +630,33 @@ mod tests {
             content_uint(&node(&fixture)),
             Err(DeriveError::ContentTooWide { len: 9 })
         );
+    }
+
+    /// One interop JID, two spellings, one derivation.
+    ///
+    /// The binary form carries the integrator as a field of its own; the
+    /// textual form writes it ahead of the user, joined by `-`. Reading the
+    /// second as a plain user called `42-alice` gives the two spellings
+    /// different parts, and `semantic_eq` compares the parts — so the same
+    /// identity from two engines would read as a divergence.
+    #[test]
+    fn the_two_spellings_of_an_interop_jid_agree() {
+        let textual = jid_from_text("42-alice:7@interop", false).expect("parses");
+        let binary = Jid::interop(User::Bytes(b"alice"), 7, 42);
+
+        assert!(
+            textual.semantic_eq(binary),
+            "textual {textual:?} against binary {binary:?}"
+        );
+    }
+
+    /// The `-` only means an integrator on the interop server.
+    ///
+    /// A user called `42-alice` elsewhere is a user called `42-alice`, and
+    /// splitting it would invent an integrator the wire never carried.
+    #[test]
+    fn a_hyphen_elsewhere_is_part_of_the_user() {
+        let jid = jid_from_text("42-alice@s.whatsapp.net", false).expect("parses");
+        assert!(jid.semantic_eq(Jid::pair(User::Bytes(b"42-alice"), "s.whatsapp.net")));
     }
 }

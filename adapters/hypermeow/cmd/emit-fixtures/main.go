@@ -16,7 +16,7 @@ import (
 	"os"
 	"path/filepath"
 
-	wawire "github.com/oxidezap/wa-wire/adapters/hypermeow"
+	wawire "github.com/oxidezap/wa-wire/adapters/hypermeow/wire"
 )
 
 func main() {

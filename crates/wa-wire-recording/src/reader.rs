@@ -37,6 +37,25 @@ pub enum Integrity {
         /// Whether the checksum matched.
         checksum_ok: bool,
     },
+    /// The trailer was found and something follows it.
+    ///
+    /// Distinct from [`Damaged`] because nothing before the trailer is wrong:
+    /// the count holds, the checksum holds, and the file still is not what it
+    /// says it is. The checksum cannot cover this — it covers the bytes up to
+    /// the trailer, which is everything the trailer knew about — so appended
+    /// records read as a complete recording with traffic silently left out.
+    ///
+    /// What was appended is not read. It may be a second recording, a partial
+    /// write, or padding, and guessing between them would be inventing the
+    /// thing the trailer exists to state.
+    ///
+    /// [`Damaged`]: Self::Damaged
+    TrailingBytes {
+        /// Records the trailer accounted for.
+        found: u32,
+        /// Bytes after the trailer.
+        trailing: usize,
+    },
     /// No trailer: the writer was interrupted.
     ///
     /// Not an error (D-076). Every complete record before the cut is readable,
@@ -316,7 +335,18 @@ fn walk(buf: &[u8], meta_len: usize, body: &[u8]) -> (Integrity, u32) {
             let actual = Crc32::new().update(buf.get(..upto).unwrap_or(&[])).finish();
             let checksum_ok = actual == stated;
 
-            let integrity = if checksum_ok && claimed == found {
+            // `tail` is what follows the trailer; `rest` still holds the
+            // trailer itself.
+            let integrity = if !tail.is_empty() {
+                // The trailer says the recording ends here and it does not.
+                // Reported before the checksum, which cannot see this: it
+                // covers the bytes up to the trailer, so appended records
+                // leave every earlier claim holding and the file still wrong.
+                Integrity::TrailingBytes {
+                    found,
+                    trailing: tail.len(),
+                }
+            } else if checksum_ok && claimed == found {
                 Integrity::Complete
             } else {
                 Integrity::Damaged {

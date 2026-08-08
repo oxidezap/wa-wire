@@ -208,11 +208,22 @@ pub fn compare<'a>(left: &Recording<'a>, right: &Recording<'a>, tables: Tables<'
     }
 
     let (left_parser, right_parser) = (Parser::new(tables.left), Parser::new(tables.right));
-    for (lefts, rights) in [(&left_in, &right_in), (&left_out, &right_out)] {
+    for (direction, lefts, rights) in [
+        (Direction::Inbound, &left_in, &right_in),
+        (Direction::Outbound, &left_out, &right_out),
+    ] {
         if lefts.is_empty() && rights.is_empty() {
             continue;
         }
-        if (lefts.is_empty() || rights.is_empty()) && !both_observe {
+        // The exemption is the *outbound* sequence's alone.
+        //
+        // Every adapter observes the inbound half — it is what `l0.inbound.tap`
+        // means and no engine has ever lacked it — so a recording with none
+        // against one with many is a loss, not a difference in reach. Letting
+        // the exemption cover inbound too made a total loss of the input
+        // produce no divergences at all, and a `Pass`.
+        let uncovered = direction == Direction::Outbound && !both_observe;
+        if (lefts.is_empty() || rights.is_empty()) && uncovered {
             // One side could not see this direction. Already reported as
             // coverage; comparing an empty sequence against a full one would
             // add a length finding saying the same thing in worse terms.
@@ -512,7 +523,21 @@ pub fn derive_all<'a>(
 ) -> impl Iterator<Item = Option<Result<Event<'a>, DeriveError>>> + use<'a> {
     let parser = Parser::new(table);
     recording.envelopes().map(move |envelope| {
-        let node = parser.parse(envelope?.frame()).ok()?;
+        let envelope = envelope?;
+        // The inbound derivation, and only for what came in. An outbound
+        // `<ack>` satisfies these shapes and means the opposite — the server
+        // acknowledging our send against us acknowledging a delivery — so
+        // handing one back as an `Event` would be the confident wrong answer
+        // this crate takes trouble elsewhere to avoid.
+        //
+        // `None` for an outbound envelope, which is the same thing this
+        // iterator already says about one that will not decode: not derived
+        // here, rather than did not derive. A caller wanting the other half
+        // wants `derive_outgoing` and a different return type.
+        if envelope.flags().direction != Direction::Inbound {
+            return None;
+        }
+        let node = parser.parse(envelope.frame()).ok()?;
         Some(derive(&node))
     })
 }

@@ -1,4 +1,4 @@
-package wawire
+package wire
 
 import (
 	"bytes"
@@ -154,5 +154,26 @@ func TestTheReservedLengthIsTheWrittenLength(t *testing.T) {
 	}
 	if cap(got) != envelope.encodedLen() {
 		t.Fatalf("capacity %d, reserved %d — the slice grew", cap(got), envelope.encodedLen())
+	}
+}
+
+// Go's enums are open, so a caller can build a value this contract has no name
+// for. Encoding one would either normalise it silently — a stanza recorded
+// travelling the wrong way — or write a byte the Rust reader refuses, turning a
+// caller's mistake into a file nobody can read.
+func TestAValueOutsideTheContractIsRefused(t *testing.T) {
+	for _, testCase := range []struct {
+		name     string
+		envelope Envelope
+	}{
+		{"direction", Envelope{Direction: Direction(2)}},
+		{"frame origin", Envelope{FrameOrigin: FrameOrigin(2)}},
+		{"status", Envelope{Plaintexts: []Plaintext{{Status: PlaintextStatus(9)}}}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			if _, err := testCase.envelope.Encode(); !errors.Is(err, ErrUnknownDiscriminant) {
+				t.Fatalf("err = %v, want ErrUnknownDiscriminant", err)
+			}
+		})
 	}
 }

@@ -1,6 +1,12 @@
-// Package wawire is the wa-wire adapter for the hypermeow engine.
+// Package wire is the wa-wire boundary format, written in Go.
 //
-// The boundary format, written out a third time. `wa-wire-contract` decodes
+// Its own package, importing nothing but the standard library, because it is
+// the format rather than the adapter. That keeps it buildable — and its
+// fixtures regenerable — by anyone who does not have the engine checked out,
+// which is what lets CI check the encoder against the Rust reader without
+// depending on someone else's release cadence.
+//
+// Written out a third time. `wa-wire-contract` decodes
 // it, the zapo adapter writes it in TypeScript, and this writes it in Go —
 // because an adapter runs inside its engine, and this engine is Go. Rust in Go
 // means cgo, and cgo in the per-stanza hot path is the cost the boundary exists
@@ -29,7 +35,7 @@
 //
 // Little-endian throughout — unlike the stanza inside frame, which is
 // WhatsApp's own big-endian encoding and travels untouched.
-package wawire
+package wire
 
 import (
 	"encoding/binary"
@@ -129,6 +135,17 @@ var (
 	ErrTooManyPlaintexts = errors.New("wawire: more plaintexts than the contract can count")
 	// ErrFrameTooLong is a frame longer than the length field can hold.
 	ErrFrameTooLong = errors.New("wawire: frame is longer than the contract can count")
+	// ErrPayloadTooLong is a payload longer than its length field can hold.
+	ErrPayloadTooLong = errors.New("wawire: payload is longer than the contract can count")
+	// ErrUnknownDiscriminant is a value outside what this contract version
+	// defines.
+	//
+	// Go's enums are open, so a caller can construct `Direction(2)` or
+	// `PlaintextStatus(9)`. The first two would normalise silently to inbound
+	// and original — a stanza recorded travelling the wrong way — and the last
+	// writes a byte the Rust reader refuses, turning a caller's mistake into a
+	// file nobody can read.
+	ErrUnknownDiscriminant = errors.New("wawire: value is outside contract version 1")
 )
 
 // Encode writes the envelope in the boundary format.
@@ -137,15 +154,33 @@ var (
 // need — but this adapter's consumer is on the other side of a process or a
 // language, so the copy is the crossing rather than an overhead on top of it.
 func (e Envelope) Encode() ([]byte, error) {
-	if len(e.Frame) > int(^uint32(0)) {
+	// Widened rather than compared as `int`: `int(^uint32(0))` does not fit an
+	// `int` on a 32-bit build and the package would not compile there. A
+	// boundary format that only exists on one word size is not one.
+	if uint64(len(e.Frame)) > uint64(^uint32(0)) {
 		return nil, ErrFrameTooLong
 	}
-	if len(e.Plaintexts) > int(^uint16(0)) {
+	if uint64(len(e.Plaintexts)) > uint64(^uint16(0)) {
 		return nil, ErrTooManyPlaintexts
+	}
+	if e.Direction != Inbound && e.Direction != Outbound {
+		return nil, fmt.Errorf("%w: direction %d", ErrUnknownDiscriminant, e.Direction)
+	}
+	if e.FrameOrigin != Original && e.FrameOrigin != ReEncoded {
+		return nil, fmt.Errorf("%w: frame origin %d", ErrUnknownDiscriminant, e.FrameOrigin)
 	}
 	for index, plaintext := range e.Plaintexts {
 		if len(plaintext.Path) > MaxPathDepth {
 			return nil, fmt.Errorf("%w: entry %d has %d components", ErrPathTooDeep, index, len(plaintext.Path))
+		}
+		// Each payload, not only the frame. One past what the length field can
+		// count would be written whole behind a truncated prefix, and the
+		// reader would find bytes it was never told about.
+		if uint64(len(plaintext.Payload)) > uint64(^uint32(0)) {
+			return nil, fmt.Errorf("%w: entry %d", ErrPayloadTooLong, index)
+		}
+		if plaintext.Status > StatusUnobserved {
+			return nil, fmt.Errorf("%w: status %d", ErrUnknownDiscriminant, plaintext.Status)
 		}
 		if plaintext.Status != StatusOk && len(plaintext.Payload) > 0 {
 			return nil, fmt.Errorf("%w: entry %d", ErrPayloadWithoutOk, index)

@@ -165,3 +165,23 @@ func TestAForbiddenEnvelopeNeverReachesTheSink(t *testing.T) {
 	}()
 	guard.Accept(Envelope{Plaintexts: []Plaintext{{Status: StatusUnobserved}}})
 }
+
+// Takeover cannot promise plaintext, because the engine cannot deliver both.
+//
+// Claiming a stanza returns `drop` from the raw-node hook, and the engine's
+// `handleFrame` returns there — before the stanza is queued for decryption. So
+// a claimed stanza never reaches Signal. A declaration offering both would let
+// a consumer require a combination that cannot happen and discover it as
+// missing payloads.
+func TestTakeoverDoesNotPromisePlaintext(t *testing.T) {
+	if TakeoverInfo.Has(L0Plaintext) {
+		t.Fatal("a claimed stanza is never decrypted")
+	}
+	if err := TakeoverInfo.Require(Takeover, L0Plaintext); err == nil {
+		t.Fatal("the impossible combination must be refused at setup")
+	}
+	// And the tap, which claims nothing, still has it.
+	if !Info.Has(L0Plaintext) {
+		t.Fatal("the tap does get plaintexts")
+	}
+}
