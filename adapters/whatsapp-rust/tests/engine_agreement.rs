@@ -9,17 +9,21 @@
 //! each entitled to encode a value its own way, feeding one derivation that has
 //! to read them identically.
 //!
-//! # The result
+//! # What a byte difference here actually measures
 //!
-//! They agree on every derived event, and disagree on the bytes of three
-//! stanzas — all three from captured traffic, none from the hand-written half.
-//! That is the suite working as designed: the format leaves some choices open
-//! (a server JID as a JID or as a dictionary token; a childless node with an
-//! explicit empty body or none at all), both engines pick validly, and the
-//! derivation reads them identically.
+//! Worth being precise about, because it is easy to read more into it. On a
+//! hand-written frame both sides encode from the same source and their bytes
+//! match, which compares the two *encoders*. On a **captured** frame they do
+//! not: `whatsapp-rust` forwards the server's bytes untouched, so a difference
+//! there is between whoever encoded that frame and `zapo` — not between the two
+//! engines.
 //!
-//! The three are named in `KNOWN_ENCODER_DIVERGENCES`, so a fourth is a
-//! deliberate decision rather than a counter going up.
+//! Either way the useful half holds: two different encodings of one stanza
+//! derive the same event. That is the property. What a captured difference does
+//! *not* show is one engine encoding differently from the other.
+//!
+//! Known differences are named in `KNOWN_ENCODER_DIVERGENCES`, so a new one is
+//! a deliberate decision rather than a counter going up.
 //!
 //! # Regenerating
 //!
@@ -195,7 +199,7 @@ fn the_two_engines_derive_the_same_events_from_the_same_traffic() {
     assert!(report.agrees());
 }
 
-/// Stanzas where the two encoders legitimately choose different bytes.
+/// Stanzas whose two frames legitimately differ.
 ///
 /// Named rather than counted, so adding a divergence is a deliberate act with a
 /// reviewed reason and not a number quietly going up.
@@ -215,13 +219,10 @@ const KNOWN_ENCODER_DIVERGENCES: &[(&str, &str)] = &[
 ];
 
 #[test]
-fn the_encoders_differ_only_where_they_are_known_to() {
-    // The hand-written corpus produced identical bytes from both engines, which
-    // made the tolerance for L0 differences look theoretical. Real traffic
-    // settled that: the two encoders do diverge, on choices the format leaves
-    // open, and the derivation reads both the same way.
-    //
-    // Anything not on the list is new, and worth a look before it is added.
+fn frames_differ_only_where_they_are_known_to() {
+    // On the hand-written corpus the bytes match, so this says the two encoders
+    // agree. On captured frames it says less — see the module docs — but the
+    // list is still what keeps a new difference from going unnoticed.
     let ours = whatsapp_rust_envelopes();
     let theirs = zapo_envelopes();
     let names: Vec<_> = corpus().into_iter().map(|(name, _)| name).collect();

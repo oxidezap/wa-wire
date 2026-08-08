@@ -1493,19 +1493,26 @@ Portability is enforced too: the contract builds with no allocator and for
   `Client::run()`. A capture built on `connect` alone watches the server's bytes
   reach the transport and never get decoded — which is exactly the silence
   observed. Switching to `run` captured 67 stanzas immediately.
-- **Real traffic found what the hand-written corpus could not** (D-060). The two
-  encoders produce identical bytes for all 13 written stanzas, which made the
-  suite's tolerance for L0 differences look theoretical. Across 67 captured
-  stanzas they diverge three times, on choices the format genuinely leaves open:
-  - `from="s.whatsapp.net"` — `whatsapp-rust` writes a JID with no user,
-    `zapo` writes the dictionary token (twice);
-  - a childless `<list>` — `whatsapp-rust` writes an explicit empty body,
-    `zapo` omits it.
+- **Captured traffic produced the first L0 differences** — and they measure
+  something narrower than they first appeared to (D-060). Across 67 captured
+  stanzas the frames differ three times: `from="s.whatsapp.net"` encoded as a
+  user-less JID against a dictionary token (twice), and a childless node written
+  with an explicit empty body against none.
 
-  **Every derived event still matches.** This is the property the project exists
-  to guarantee, and it is now measured against two real implementations rather
-  than asserted. The three are named in `KNOWN_ENCODER_DIVERGENCES` so a fourth
-  is a decision rather than a counter moving.
+  The correction: on a **captured** frame `whatsapp-rust` forwards the server's
+  bytes untouched, so the difference is between whoever encoded that frame and
+  `zapo` — *not* between the two engines. On the hand-written corpus, where both
+  sides encode from the same source, their bytes match. So the two engines'
+  encoders have not been shown to differ at all.
+
+  What holds either way, and is the property that matters: **two different
+  encodings of one stanza derive the same event**, now with encodings that
+  really did differ rather than a tolerance nothing exercised.
+- **The captured frames are not committed.** They came from a mock, which does
+  not reproduce the real server, so committing them would buy CI coverage of one
+  mock's encoder while reading as "we test against real traffic". They also
+  carry whatever the server sent. Capture stays an investigation tool; what it
+  finds gets distilled into written fixtures when it can be.
 
 ### rev 15 — 2026-08-07
 
