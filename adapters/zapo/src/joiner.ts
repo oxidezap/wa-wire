@@ -72,7 +72,13 @@ interface Pending {
     readonly childIndices: number[]
     /** How many stanzas have gone by since this one arrived. */
     age: number
+    /** Whether the wait is over, payloads or not. */
+    givenUp: boolean
 }
+
+/** Whether a stanza is finished and only waiting for its turn. */
+const isReady = (pending: Pending): boolean =>
+    pending.givenUp || pending.slots.every((slot) => slot !== undefined)
 
 /**
  * Holds stanzas until their plaintexts arrive, then emits one envelope each.
@@ -91,32 +97,57 @@ export class PlaintextJoiner {
         return this.abandonedCount
     }
 
-    /** How many stanzas are waiting. */
+    /** How many stanzas are waiting on payloads. */
     public get waiting(): number {
+        return this.pending.filter((pending) => !isReady(pending)).length
+    }
+
+    /**
+     * How many are queued: waiting, or merely behind one that is.
+     *
+     * Distinct from {@link waiting} since stanzas leave in arrival order — a
+     * finished one behind an unfinished one is not waiting on anything, and is
+     * not gone either.
+     */
+    public get queued(): number {
         return this.pending.length
     }
 
     /**
      * Take a decoded stanza.
      *
-     * One with `<enc>` children is held for its plaintexts; anything else goes
-     * straight to the sink. Either way this first ages the stanzas already
-     * waiting, emitting any that have waited long enough.
+     * One with `<enc>` children waits for its plaintexts; anything else is
+     * finished on arrival. Either way it takes its place in the queue, and the
+     * queue drains in order.
      *
-     * Returns whether the stanza is being held. A caller that also decides
-     * whether the engine sees the stanza needs to know: a held one is waiting
-     * on payloads only the engine can produce.
+     * Emitting an unheld stanza the moment it arrived would put it ahead of a
+     * held one that came first, and a recording compared position by position
+     * reports that as a divergence in whichever engine happened to be slower.
+     * What leaves is what arrived, in that order.
+     *
+     * Returns whether the stanza is waiting on payloads. A caller that also
+     * decides whether the engine sees the stanza needs to know: a waiting one
+     * depends on payloads only the engine can produce.
      */
     public acceptNode(node: BinaryNode, frame: Uint8Array, sink: StanzaSink): boolean {
-        this.age(sink)
+        // Ages first, so a stanza given up on leaves ahead of the one that
+        // aged it out — which is where the wire put it.
+        this.age()
 
         const pending = begin(node, frame)
-        if (pending === null) {
-            sink({ direction: Direction.Inbound, frameOrigin: FrameOrigin.ReEncoded, frame })
-            return false
-        }
-        this.pending.push(pending)
-        return true
+        const waiting = pending !== null
+        this.pending.push(
+            pending ?? {
+                messageId: '',
+                frame,
+                slots: [],
+                childIndices: [],
+                age: 0,
+                givenUp: false
+            }
+        )
+        this.drain(sink)
+        return waiting
     }
 
     /**
@@ -140,11 +171,7 @@ export class PlaintextJoiner {
             return
         }
         pending.slots[decrypted.encIndex] = decrypted.plaintext
-
-        if (pending.slots.every((slot) => slot !== undefined)) {
-            this.pending.splice(index, 1)
-            emit(pending, sink)
-        }
+        this.drain(sink)
     }
 
     /**
@@ -156,23 +183,45 @@ export class PlaintextJoiner {
     public flush(sink: StanzaSink): void {
         const held = this.pending.splice(0, this.pending.length)
         for (const pending of held) {
-            if (pending.slots.some((slot) => slot === undefined)) {
+            if (!pending.givenUp && pending.slots.some((slot) => slot === undefined)) {
                 this.abandonedCount += 1
             }
             emit(pending, sink)
         }
     }
 
-    /** Age every waiting stanza by one, emitting those that ran out. */
-    private age(sink: StanzaSink): void {
-        for (let i = this.pending.length - 1; i >= 0; i -= 1) {
-            const pending = this.pending[i]!
+    /**
+     * Age everything waiting, marking whatever ran out of patience as done.
+     *
+     * Marked rather than emitted: a stanza given up on still leaves in its own
+     * place in the queue, and {@link drain} is the only thing that emits.
+     */
+    private age(): void {
+        for (const pending of this.pending) {
+            if (isReady(pending)) {
+                continue
+            }
             pending.age += 1
             if (pending.age > this.lookahead) {
-                this.pending.splice(i, 1)
+                pending.givenUp = true
                 this.abandonedCount += 1
-                emit(pending, sink)
             }
+        }
+    }
+
+    /**
+     * Take the finished stanzas off the front of the queue.
+     *
+     * The front, and only the front: a finished stanza behind an unfinished one
+     * waits, because the unfinished one arrived first.
+     */
+    private drain(sink: StanzaSink): void {
+        let at = 0
+        while (at < this.pending.length && isReady(this.pending[at]!)) {
+            at += 1
+        }
+        for (const pending of this.pending.splice(0, at)) {
+            emit(pending, sink)
         }
     }
 }
@@ -210,6 +259,7 @@ function begin(node: BinaryNode, frame: Uint8Array): Pending | null {
         slots: new Array<Uint8Array | undefined>(childIndices.length).fill(undefined),
         childIndices,
         age: 0,
+        givenUp: false
     }
 }
 
@@ -225,10 +275,17 @@ function emit(pending: Pending, sink: StanzaSink): void {
             : { path: [childIndex], status: PlaintextStatus.Ok, payload }
     })
 
-    sink({
-        direction: Direction.Inbound,
-        frameOrigin: FrameOrigin.ReEncoded,
-        frame: pending.frame,
-        plaintexts,
-    })
+    // A stanza with no `<enc>` has no table, rather than an empty one: the
+    // distinction is what tells "nothing was encrypted" from "nothing
+    // decrypted", and a reader should not have to infer which.
+    sink(
+        plaintexts.length === 0
+            ? { direction: Direction.Inbound, frameOrigin: FrameOrigin.ReEncoded, frame: pending.frame }
+            : {
+                  direction: Direction.Inbound,
+                  frameOrigin: FrameOrigin.ReEncoded,
+                  frame: pending.frame,
+                  plaintexts,
+              }
+    )
 }

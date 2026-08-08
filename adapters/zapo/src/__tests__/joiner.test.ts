@@ -258,7 +258,13 @@ describe('giving up', () => {
 })
 
 describe('ordering and shutdown', () => {
-    it('lets stanzas that do not wait pass one that does', () => {
+    it('leaves stanzas in the order they arrived', () => {
+        // A held message holds up the stream behind it, and that is the point.
+        //
+        // Emitting an unheld stanza the moment it arrives puts it ahead of a
+        // held one that came first, and a recording compared position by
+        // position reports the reordering as a divergence in whichever engine
+        // happened to be slower.
         const joiner = new PlaintextJoiner()
         const { stanzas, sink } = collector()
 
@@ -266,12 +272,19 @@ describe('ordering and shutdown', () => {
         joiner.acceptNode({ tag: 'receipt', attrs: {} }, frame(2), sink)
         joiner.acceptNode({ tag: 'notification', attrs: {} }, frame(3), sink)
 
-        assert.equal(stanzas.length, 2, 'both passed the waiting message')
+        assert.equal(stanzas.length, 0, 'the two behind it wait their turn')
+        assert.equal(joiner.waiting, 1, 'only the message waits on anything')
+        assert.equal(joiner.queued, 3)
+
         joiner.acceptPlaintext(
             { messageId: 'M11', encIndex: 0, plaintext: new Uint8Array([1]) },
             sink
         )
-        assert.equal(stanzas.length, 3, 'and it arrives after them')
+        assert.equal(stanzas.length, 3, 'and all three leave at once')
+        assert.deepEqual(
+            stanzas.map((stanza) => stanza.frame),
+            [frame(1), frame(2), frame(3)]
+        )
     })
 
     it('waits on two messages independently', () => {
@@ -282,9 +295,17 @@ describe('ordering and shutdown', () => {
         joiner.acceptNode(message('B', ['msg']), frame(2), sink)
         assert.equal(joiner.waiting, 2)
 
+        // B completes first and still waits: A arrived first and is what the
+        // wire had first. Independent waiting, ordered leaving.
         joiner.acceptPlaintext({ messageId: 'B', encIndex: 0, plaintext: new Uint8Array([2]) }, sink)
-        assert.equal(joiner.waiting, 1, 'only B was released')
-        assert.deepEqual(stanzas[0]?.frame, frame(2))
+        assert.equal(joiner.waiting, 1, 'only A still waits on a payload')
+        assert.equal(stanzas.length, 0, 'B is behind A')
+
+        joiner.acceptPlaintext({ messageId: 'A', encIndex: 0, plaintext: new Uint8Array([1]) }, sink)
+        assert.deepEqual(
+            stanzas.map((stanza) => stanza.frame),
+            [frame(1), frame(2)]
+        )
     })
 
     it('emits what is still waiting on flush', () => {

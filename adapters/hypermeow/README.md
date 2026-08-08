@@ -80,9 +80,13 @@ completes the table and the envelope goes at once. Giving up is measured in
 is the same on every machine, which a duration is not.
 
 The Rust and TypeScript adapters reach the same conclusions from the same
-constraints. The three are deliberately alike: an adapter that decided
+constraints. The four are deliberately alike: an adapter that decided
 differently would produce recordings that differ for reasons the engines are
 not responsible for.
+
+Stanzas also leave in arrival order — a stanza waiting on payloads holds up the
+ones behind it — so a recording's order is the wire's rather than the engine's
+timing.
 
 ### One thing this adapter does not have to do
 

@@ -63,7 +63,7 @@ const DefaultLookahead = 512
 // nothing is inferred. The hook was written against this need.
 type Joiner struct {
 	mu sync.Mutex
-	// Every stanza seen, in the order the receive goroutine saw them.
+	// Every stanza seen, in arrival order.
 	//
 	// A queue rather than a set of pending ones, because emitting an unheld
 	// stanza the moment it arrives reorders it ahead of a held one that came

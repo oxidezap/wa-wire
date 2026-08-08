@@ -310,8 +310,11 @@ describe('the plugin', () => {
         filter(message())
         assert.deepEqual(seen, [], 'held, not dropped')
 
+        // And it does hold up what follows: stanzas leave in the order they
+        // arrived, so a recording's order is the wire's rather than the
+        // engine's timing. See `PlaintextJoiner`.
         filter(receipt())
-        assert.deepEqual(seen, ['receipt'], 'and does not hold up what follows it')
+        assert.deepEqual(seen, [], 'the receipt is behind it')
     })
 })
 

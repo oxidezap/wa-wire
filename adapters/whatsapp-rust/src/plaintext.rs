@@ -90,10 +90,18 @@ struct Pending {
     child_indices: Vec<u16>,
     /// How many stanzas have gone by since this one arrived.
     age: usize,
+    /// Whether the wait is over, payloads or not.
+    given_up: bool,
 }
 
 impl Pending {
+    /// Whether this stanza is finished and only waiting for its turn.
     fn is_complete(&self) -> bool {
+        self.given_up || self.slots.iter().all(Option::is_some)
+    }
+
+    /// Whether every slot was filled, as against given up on.
+    fn is_whole(&self) -> bool {
         self.slots.iter().all(Option::is_some)
     }
 }
@@ -137,25 +145,49 @@ impl PlaintextJoiner {
         self.abandoned
     }
 
-    /// How many frames are waiting.
+    /// How many stanzas are waiting on payloads.
     #[must_use]
     pub fn pending(&self) -> usize {
+        self.pending
+            .iter()
+            .filter(|pending| !pending.is_complete())
+            .count()
+    }
+
+    /// How many are queued: waiting, or merely behind one that is.
+    ///
+    /// Distinct from [`Self::pending`] since stanzas leave in arrival order —
+    /// a finished one behind an unfinished one is not waiting on anything, and
+    /// is not gone either.
+    #[must_use]
+    pub fn queued(&self) -> usize {
         self.pending.len()
     }
 
     /// Take a decoded stanza.
     ///
-    /// A stanza with `<enc>` children is held for its plaintexts; anything else
-    /// goes straight to the sink. Either way this first ages the frames already
-    /// waiting, emitting any that have waited long enough.
+    /// A stanza with `<enc>` children waits for its plaintexts; anything else
+    /// is finished on arrival. Either way it takes its place in the queue, and
+    /// the queue drains in order.
+    ///
+    /// Emitting an unheld stanza the moment it arrived would put it ahead of a
+    /// held one that came first, and a recording compared position by position
+    /// reports that as a divergence in whichever engine happened to be slower.
+    /// What leaves is what arrived, in that order.
     pub fn accept_frame<S: StanzaSink>(&mut self, node: &Arc<OwnedNodeRef>, sink: &mut S) {
-        self.age_pending(sink);
+        // Ages first, so a stanza given up on leaves ahead of the one that
+        // aged it out — which is where the wire put it.
+        self.age_pending();
 
-        let Some(pending) = Self::begin(node) else {
-            sink.accept(RawStanza::inbound(&node.backing_bytes()));
-            return;
-        };
-        self.pending.push(pending);
+        self.pending.push(Self::begin(node).unwrap_or_else(|| Pending {
+            message_id: String::new(),
+            frame: node.backing_bytes(),
+            slots: Vec::new(),
+            child_indices: Vec::new(),
+            age: 0,
+            given_up: false,
+        }));
+        self.drain(sink);
     }
 
     /// Take a plaintext the engine decrypted.
@@ -180,11 +212,7 @@ impl PlaintextJoiner {
             return;
         };
         *slot = Some(decrypted.payload.clone());
-
-        if pending.is_complete() {
-            let pending = self.pending.remove(position);
-            emit(&pending, sink);
-        }
+        self.drain(sink);
     }
 
     /// Emit every frame still waiting, complete or not.
@@ -193,9 +221,24 @@ impl PlaintextJoiner {
     /// anyone will hear about those stanzas.
     pub fn flush<S: StanzaSink>(&mut self, sink: &mut S) {
         for pending in core::mem::take(&mut self.pending) {
-            if !pending.is_complete() {
+            if !pending.is_whole() && !pending.given_up {
                 self.abandoned = self.abandoned.saturating_add(1);
             }
+            emit(&pending, sink);
+        }
+    }
+
+    /// Take the finished stanzas off the front of the queue.
+    ///
+    /// The front, and only the front: a finished stanza behind an unfinished
+    /// one waits, because the unfinished one arrived first.
+    fn drain<S: StanzaSink>(&mut self, sink: &mut S) {
+        let ready = self
+            .pending
+            .iter()
+            .take_while(|pending| pending.is_complete())
+            .count();
+        for pending in self.pending.drain(..ready) {
             emit(&pending, sink);
         }
     }
@@ -232,21 +275,25 @@ impl PlaintextJoiner {
             slots: vec![None; child_indices.len()],
             child_indices,
             age: 0,
+            given_up: false,
         })
     }
 
     /// Age every waiting frame by one stanza, emitting those that ran out.
-    fn age_pending<S: StanzaSink>(&mut self, sink: &mut S) {
+    /// Age everything waiting, marking whatever ran out of patience as done.
+    ///
+    /// Marked rather than emitted: a stanza given up on still leaves in its own
+    /// place in the queue, and `drain` is the only thing that emits.
+    fn age_pending(&mut self) {
         let lookahead = self.lookahead.get();
-        let mut index = 0;
-        while index < self.pending.len() {
-            self.pending[index].age = self.pending[index].age.saturating_add(1);
-            if self.pending[index].age > lookahead {
-                let pending = self.pending.remove(index);
+        for pending in &mut self.pending {
+            if pending.given_up || pending.is_complete() {
+                continue;
+            }
+            pending.age = pending.age.saturating_add(1);
+            if pending.age > lookahead {
+                pending.given_up = true;
                 self.abandoned = self.abandoned.saturating_add(1);
-                emit(&pending, sink);
-            } else {
-                index = index.saturating_add(1);
             }
         }
     }

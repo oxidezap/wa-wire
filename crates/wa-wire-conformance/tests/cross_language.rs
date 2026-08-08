@@ -360,3 +360,44 @@ fn both_languages_name_the_same_capabilities() {
         );
     }
 }
+
+/// Every joiner emits in arrival order, and each says so where it is read.
+///
+/// The four adapters hold a stanza waiting on plaintexts and let the ones
+/// behind it wait too, so a recording's order is the wire's rather than the
+/// engine's timing. Two of them did not: `zapo` and `whatsapp-rust` emitted an
+/// unheld stanza the moment it arrived, putting an ack ahead of a message that
+/// came first, and a comparison by position read that as a divergence in
+/// whichever engine happened to be slower.
+///
+/// Checked by reading the sources, which is crude and is the only thing that
+/// spans four languages without running four engines. What it catches is the
+/// rule being dropped from a joiner during a rewrite — which is how the two
+/// came to disagree in the first place, one having been written before the
+/// other understood the problem.
+#[test]
+fn every_joiner_states_the_ordering_rule() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let joiners = [
+        "adapters/whatsapp-rust/src/plaintext.rs",
+        "adapters/zapo/src/joiner.ts",
+        "adapters/hypermeow/joiner.go",
+        "adapters/baileys/src/joiner.ts",
+    ];
+
+    for joiner in joiners {
+        let path = root.join(joiner);
+        let source = std::fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+
+        assert!(
+            source.contains("arrival order") || source.contains("order they arrived"),
+            "{joiner} does not say it emits in arrival order"
+        );
+        // The mechanism, not only the claim: a queue drained from the front.
+        assert!(
+            source.contains("drain"),
+            "{joiner} names no drain, so nothing takes stanzas off a queue in order"
+        );
+    }
+}

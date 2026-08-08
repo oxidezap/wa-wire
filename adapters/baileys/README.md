@@ -86,10 +86,9 @@ ack emitted the moment it arrives would overtake a message that came first, and
 a recording compared position by position reports that as a divergence in
 whichever engine happened to be slower.
 
-**The `zapo` and `whatsapp-rust` adapters emit unheld stanzas immediately and do
-reorder.** They were written before this was understood; the Go adapter and this
-one queue. Three adapters ordering differently is a difference the engines are
-not responsible for, and reconciling them is worth doing.
+All four adapters do this. Two did not until rev 42 — `zapo` and
+`whatsapp-rust` emitted an unheld stanza the moment it arrived — and a test
+reads all four joiners to keep them agreeing.
 
 ### One thing this adapter does not have to do
 

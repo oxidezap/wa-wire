@@ -384,8 +384,13 @@ fn flushing_an_empty_joiner_does_nothing() {
 // --- ordering ---------------------------------------------------------------
 
 #[test]
-fn stanzas_that_do_not_wait_keep_arriving_while_one_does() {
-    // A held `<message>` must not hold up the stream behind it.
+fn stanzas_leave_in_the_order_they_arrived() {
+    // A held `<message>` holds up the stream behind it, and that is the point.
+    //
+    // Emitting an unheld stanza the moment it arrives puts it ahead of a held
+    // one that came first, and a recording compared position by position
+    // reports the reordering as a divergence in whichever engine happened to
+    // be slower. What leaves is what arrived, in that order.
     let mut joiner = PlaintextJoiner::new();
     let mut sink = Capture::default();
 
@@ -393,9 +398,18 @@ fn stanzas_that_do_not_wait_keep_arriving_while_one_does() {
     joiner.accept_frame(&owned(&NodeBuilder::new("receipt").build()), &mut sink);
     joiner.accept_frame(&owned(&NodeBuilder::new("notification").build()), &mut sink);
 
-    assert_eq!(sink.envelopes.len(), 2, "both passed the waiting message");
+    assert_eq!(sink.envelopes.len(), 0, "the two behind it wait their turn");
+    assert_eq!(joiner.pending(), 1, "only the message is waiting on anything");
+    assert_eq!(joiner.queued(), 3);
+
     joiner.accept_plaintext(&plaintext("M11", 0, b"late but fine"), &mut sink);
-    assert_eq!(sink.envelopes.len(), 3, "and it arrives after them");
+    assert_eq!(sink.envelopes.len(), 3, "and all three leave at once");
+    // The message first: it arrived first.
+    assert_eq!(
+        sink.entries(0),
+        [(vec![0], PlaintextStatus::Ok, b"late but fine".to_vec())]
+    );
+    assert!(sink.entries(1).is_empty(), "the receipt carries no table");
 }
 
 #[test]
@@ -407,17 +421,20 @@ fn two_messages_wait_independently() {
     joiner.accept_frame(&owned(&message_with("B", &["msg"])), &mut sink);
     assert_eq!(joiner.pending(), 2);
 
+    // B completes first and still waits: A arrived first and is what the wire
+    // had first. Independent waiting, ordered leaving.
     joiner.accept_plaintext(&plaintext("B", 0, b"bee"), &mut sink);
-    assert_eq!(joiner.pending(), 1, "only B was released");
-    assert_eq!(
-        sink.entries(0),
-        [(vec![0], PlaintextStatus::Ok, b"bee".to_vec())]
-    );
+    assert_eq!(joiner.pending(), 1, "only A is still waiting on a payload");
+    assert_eq!(sink.envelopes.len(), 0, "B is behind A");
 
     joiner.accept_plaintext(&plaintext("A", 0, b"ay"), &mut sink);
     assert_eq!(
-        sink.entries(1),
+        sink.entries(0),
         [(vec![0], PlaintextStatus::Ok, b"ay".to_vec())]
+    );
+    assert_eq!(
+        sink.entries(1),
+        [(vec![0], PlaintextStatus::Ok, b"bee".to_vec())]
     );
 }
 

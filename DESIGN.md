@@ -9,7 +9,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 41
+> **Last revised:** rev 42
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1981,10 +1981,38 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-123 | The boundary is implemented once per *language*, not once per adapter | Baileys is the second TypeScript engine, and a fourth writing of the format in a language that already has one would be a description nobody checks against the others. `@oxidezap/wa-wire-ts` was extracted out of the `zapo` adapter for it; the Go one stayed separate because Go genuinely cannot use any of it | 41 |
 | D-124 | A shared package holds the vocabulary and no adapter's declaration | The extracted module carried `zapo`'s `INFO` and a `has()` closing over it, which read as "the adapter" while there was one and was wrong the moment there were two. What an adapter *has* lives with the adapter | 41 |
 | D-125 | Baileys reports a plaintext's *child* index, chosen having watched two adapters resolve an `<enc>`-relative one | Both of the earlier engines report which `<enc>` decrypted, counting `<enc>` nodes, and their adapters must work out which child that is — ambiguous the moment a stanza carries anything else, and unresolvable for a fan-out `<message>`, so both give up and emit L0-wire. Designing the hook against a need already understood cost nothing and removed the case | 41 |
+| D-126 | Every joiner emits in arrival order, and a stanza waiting on payloads holds up the ones behind it | Emitting an unheld stanza the moment it arrives puts it ahead of a held one that came first. The comparison aligns by position, so the reordering reads as a divergence in whichever engine happened to be slower — a finding about timing wearing the clothes of a finding about behaviour. Holding the queue costs latency in the adapter and buys a recording whose order is the wire's | 42 |
+| D-127 | `pending` counts what waits on payloads; `queued` counts what has not left | Once stanzas leave in order the two stop being the same number, and a caller asking "is anything outstanding?" means the first while a caller asking "has everything drained?" means the second. One name for both would answer whichever question the reader did not ask | 42 |
 
 ---
 
 ## Changelog
+
+### rev 42 — 2026-08-08
+
+- **The four joiners now agree about ordering** (D-126). `zapo` and
+  `whatsapp-rust` emitted an unheld stanza the moment it arrived, so an ack
+  overtook a message that came first; the Go and Baileys ones queued. All four
+  queue now and drain from the front.
+  - This was reported in rev 41 and not fixed, on the grounds that changing two
+    working adapters is its own change. It is, and this is it.
+  - The cost is real and worth naming: a held message delays every stanza
+    behind it, so an adapter's output is later than it was. What it buys is a
+    recording whose order is the wire's rather than the engine's timing —
+    without which the comparison reports a divergence whenever two engines
+    interleave differently, which is a finding about scheduling dressed as a
+    finding about behaviour.
+- **`pending` and `queued` are separate counts** (D-127), since they stopped
+  being the same number.
+- **A test reads all four joiners and requires each to state the rule** and to
+  have something that drains a queue. Crude, and the only check that spans four
+  languages without running four engines. What it catches is the rule being
+  dropped in a rewrite, which is how the two came to disagree: one was written
+  before the other understood the problem.
+- A smaller thing the change surfaced: `zapo` was emitting `plaintexts: []` for
+  a stanza with no `<enc>` where it used to emit nothing. An empty table and no
+  table are different claims — "nothing decrypted" against "nothing was
+  encrypted" — and a reader should not have to infer which.
 
 ### rev 41 — 2026-08-08
 
