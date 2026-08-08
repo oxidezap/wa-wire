@@ -21,12 +21,21 @@
 
 export {
     Capability,
+    SENDING_INFO,
     UnmetCapabilitiesError,
+    declares,
     has,
     missing,
     require,
     type AdapterInfo,
 } from './capability.js'
+export {
+    NotConnectedError,
+    SendError,
+    createSender,
+    type NodeSender,
+    type StanzaSender as OutboundSender,
+} from './send.js'
 export {
     CONTRACT_VERSION,
     Direction,

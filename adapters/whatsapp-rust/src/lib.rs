@@ -54,7 +54,10 @@
 
 use std::sync::{Arc, Mutex};
 
-use wa_wire_adapter::{AdapterInfo, Capability, CapabilitySet, RawStanza, StanzaSink, Violation};
+use wa_wire_adapter::{
+    AdapterInfo, Capability, CapabilitySet, RawStanza, SendError, SendFuture, StanzaSender,
+    StanzaSink, Violation,
+};
 use whatsapp_rust::plugins::{
     ClientPlugin, PluginCapability, PluginContext, PluginFuture, PluginManifest,
 };
@@ -296,3 +299,77 @@ pub mod takeover;
 
 #[cfg(test)]
 mod tests;
+
+/// Sending stanzas through a `whatsapp-rust` client.
+///
+/// The outbound half of the boundary. Frames go out exactly as they come in —
+/// the buffer a decoder consumes — so a captured envelope can be sent back as it
+/// stands.
+///
+/// ```no_run
+/// use std::sync::Arc;
+/// use wa_wire_adapter::StanzaSender;
+/// use wa_wire_adapter_whatsapp_rust::Sender;
+///
+/// # async fn example(client: Arc<whatsapp_rust::Client>, frame: &[u8]) {
+/// let sender = Sender::new(client);
+/// let _ = sender.send_frame(frame).await;
+/// # }
+/// ```
+pub struct Sender {
+    client: Arc<whatsapp_rust::Client>,
+}
+
+impl Sender {
+    /// Send through `client`.
+    #[must_use]
+    pub const fn new(client: Arc<whatsapp_rust::Client>) -> Self {
+        Self { client }
+    }
+}
+
+/// What this adapter can do when it is also sending.
+///
+/// A separate declaration rather than a flag on [`CAPABILITIES`]: an adapter
+/// built for observation alone genuinely cannot send, and one set covering both
+/// would be false for whichever the consumer actually has.
+pub const SENDING_CAPABILITIES: CapabilitySet = CAPABILITIES.with(Capability::L0Outbound);
+
+/// This adapter's declaration when it is also sending.
+pub const SENDING_INFO: AdapterInfo<'static> = AdapterInfo::new(
+    PLUGIN_ID,
+    ADAPTER_VERSION,
+    ENGINE_VERSION,
+    SENDING_CAPABILITIES,
+);
+
+/// The marshalled stanza a frame came from.
+///
+/// A frame is the decoder's buffer: the marshalled stanza minus its leading
+/// format byte. Putting the byte back is the exact inverse of how the frame was
+/// taken on the way in, which is what lets a captured envelope be sent back
+/// unchanged — record and replay are the same bytes, not two encodings that
+/// happen to agree.
+fn to_marshalled(frame: &[u8]) -> Vec<u8> {
+    let mut marshalled = Vec::with_capacity(frame.len().saturating_add(1));
+    // Zero is what `Encoder::new_vec` writes there.
+    marshalled.push(0);
+    marshalled.extend_from_slice(frame);
+    marshalled
+}
+
+impl StanzaSender for Sender {
+    fn send_frame<'a>(&'a self, frame: &'a [u8]) -> SendFuture<'a> {
+        let marshalled = to_marshalled(frame);
+        Box::pin(async move {
+            self.client
+                .send_raw_bytes(marshalled)
+                .await
+                .map_err(|error| match error {
+                    // The one a consumer can act on without knowing the engine.
+                    whatsapp_rust::ClientError::NotConnected => SendError::NotConnected,
+                    other => SendError::Engine(Box::new(other)),
+                })
+        })
+    }
+}

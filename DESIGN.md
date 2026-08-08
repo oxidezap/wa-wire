@@ -1470,6 +1470,9 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-065 | A spec defect is fixed in the spec, never worked around here | The derivation is generated from whatspec so that it says what WA Web says. Softening a required field locally would make it quietly disagree, which is the failure this project exists to detect | 17 |
 | D-066 | A requirement is refused at install, not reported per stanza | An unmet capability shows up as *missing traffic*, where the evidence of the problem is the thing that is absent. Refusing to start names it while there is still something to name | 20 |
 | D-067 | An unmet requirement names every missing capability, not the first | A caller fixes its setup in one pass rather than one round trip per capability | 20 |
+| D-068 | An outbound frame is the same bytes as an inbound one | Record and replay stop being separate features: a captured envelope can be sent back as it stands. Each adapter converts to whatever its engine wants, so a consumer never learns which | 21 |
+| D-069 | Sending is declared separately from observing | An adapter built to observe genuinely cannot send. One capability set covering both would be false for whichever the consumer actually holds | 21 |
+| D-070 | `l0.outbound` does not imply `l0.request` | Writing to the socket and being handed the correlated answer are different powers; an engine may offer one without the other | 21 |
 
 ---
 

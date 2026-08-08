@@ -69,11 +69,15 @@ extern crate alloc;
 
 pub mod info;
 pub mod path;
+#[cfg(feature = "alloc")]
+pub mod send;
 pub mod sink;
 pub mod stanza;
 
 pub use info::{AdapterInfo, Violation};
 pub use path::{MAX_DEPTH, NodePathBuf, PathTooDeep};
+#[cfg(feature = "alloc")]
+pub use send::{SendError, SendFuture, StanzaSender};
 pub use sink::{CountingSink, NullSink, StanzaSink};
 pub use stanza::{Plaintext, RawStanza};
 

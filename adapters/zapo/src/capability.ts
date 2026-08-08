@@ -68,6 +68,23 @@ export const INFO: AdapterInfo = {
     ],
 }
 
+/**
+ * What this adapter can do when it is also sending.
+ *
+ * A separate declaration rather than a flag on {@link INFO}: an adapter built
+ * for observation alone genuinely cannot send, and one set covering both would
+ * be false for whichever the consumer actually holds.
+ */
+export const SENDING_INFO: AdapterInfo = {
+    ...INFO,
+    capabilities: [...INFO.capabilities, Capability.L0Outbound],
+}
+
+/** Whether `info` declares `capability`. */
+export function declares(info: AdapterInfo, capability: Capability): boolean {
+    return info.capabilities.includes(capability)
+}
+
 /** Whether this adapter declares `capability`. */
 export function has(capability: Capability): boolean {
     return INFO.capabilities.includes(capability)

@@ -411,3 +411,61 @@ fn requiring_nothing_is_the_default_and_always_holds() {
     assert_eq!(plugin.required, CapabilitySet::NONE);
     assert_eq!(INFO.require(CapabilitySet::NONE), Ok(()));
 }
+
+// --- outbound ---------------------------------------------------------------
+
+#[test]
+fn a_frame_round_trips_to_exactly_the_bytes_it_came_from() {
+    // The property replay rests on: what an adapter forwards inbound is what it
+    // can send back outbound, byte for byte. If these two ever diverge, a
+    // recorded session stops being replayable and nothing would say so.
+    for node in [
+        message_node(),
+        NodeBuilder::new("receipt").attr("id", "R1").build(),
+        NodeBuilder::new("iq").bytes(vec![0xAB; 5000]).build(),
+    ] {
+        let marshalled = marshal::marshal(&node).expect("marshals");
+        let frame = frame_of(&node);
+
+        assert_eq!(
+            to_marshalled(&frame),
+            marshalled,
+            "<{}> did not round-trip",
+            node.tag
+        );
+    }
+}
+
+#[test]
+fn an_empty_frame_still_produces_the_format_byte() {
+    // Not a stanza the engine would accept, but the conversion must not lose
+    // the byte that says how to read what follows.
+    assert_eq!(to_marshalled(&[]), vec![0]);
+}
+
+#[test]
+fn sending_is_declared_separately_from_observing() {
+    // An adapter built to observe genuinely cannot send. One capability set
+    // covering both would be false for whichever the consumer actually holds.
+    assert!(!INFO.has(Capability::L0Outbound), "the tap does not send");
+    assert!(SENDING_INFO.has(Capability::L0Outbound));
+
+    // And sending adds to what the tap does rather than replacing it.
+    for capability in CAPABILITIES.iter() {
+        assert!(
+            SENDING_INFO.has(capability),
+            "{capability} was lost when sending was added"
+        );
+    }
+}
+
+#[test]
+fn a_consumer_that_needs_to_send_is_refused_by_the_observing_declaration() {
+    let needs_send = CapabilitySet::NONE.with(Capability::L0Outbound);
+
+    assert!(
+        INFO.require(needs_send).is_err(),
+        "asking a tap to send is refused at setup, not at the first send"
+    );
+    assert_eq!(SENDING_INFO.require(needs_send), Ok(()));
+}
