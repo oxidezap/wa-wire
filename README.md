@@ -11,9 +11,9 @@ never changed.
 `wa-wire` makes the thing they already share — the wire itself — the interface.
 
 > **Status: early implementation.** The design is settled and recorded in
-> [`DESIGN.md`](DESIGN.md), which carries nine accepted RFCs, a decision log, and
-> a per-revision changelog. The v1 scope is L0 + L1; there is no Layer 3 host
-> yet.
+> [`DESIGN.md`](DESIGN.md), which carries ten accepted RFCs, a
+> decision log, and a per-revision changelog. The v1 scope is L0 + L1; there is
+> no Layer 3 host yet.
 
 ## The idea
 
@@ -33,9 +33,21 @@ third:
 - **L1** — typed canonical events, derived from L0-plain.
 
 L0 is normative and L1 is a derived view: nothing may appear in L1 that is not
-derivable from L0-plain. That derivation is a **pure** function — protobuf
-parsing and mapping, no keys and no accumulated state — so it runs host-side,
-once, instead of being reimplemented per engine.
+derivable from L0-plain. That derivation is a **pure** function — no keys and no
+accumulated state — so it runs host-side, once, instead of being reimplemented
+per engine.
+
+**L1 has two halves, and both are generated from whatspec.** The stanza half
+comes from its `incoming` domain, the payload half from the `WAProto.proto` it
+extracts out of the WA Web bundle. `derive_content` reads a decrypted payload
+and reports which kind of message it is and what it says, unwrapping the
+envelopes WhatsApp puts around a message first. What stays hand-written is
+which variants are worth naming and where each keeps its text, because no
+schema says that.
+
+That half is deliberately small. `waE2E.Message` has over a hundred variants and
+this models a dozen; the rest cross as `Unmodelled` carrying their field number,
+which is how the next one gets discovered.
 
 ## What crosses the boundary
 
@@ -55,11 +67,15 @@ is parsed exactly once, host-side, and only if something subscribed to L1.
 | [`wa-wire-contract`](crates/wa-wire-contract) | the normative envelope format and negotiation types |
 | [`wa-wire-codec`](crates/wa-wire-codec) | parser for WhatsApp's binary-node encoding, over pluggable token tables |
 | [`wa-wire-adapter`](crates/wa-wire-adapter) | what an adapter must provide, and the plumbing every Rust adapter shares |
-| [`wa-wire-l1`](crates/wa-wire-l1) | typed canonical events, generated from whatspec's `incoming` domain |
+| [`wa-wire-proto`](crates/wa-wire-proto) | parser for the protobuf wire format, over the payloads the boundary carries |
+| [`wa-wire-l1`](crates/wa-wire-l1) | typed canonical events: the stanza from whatspec, the payload from `waE2E.proto` |
+| [`wa-wire-recording`](crates/wa-wire-recording) | envelopes at rest, with the provenance that decides whether two files may be compared |
 | [`wa-wire-conformance`](crates/wa-wire-conformance) | replays recordings through every engine and requires them to agree |
+| [`wa-wire-gate`](crates/wa-wire-gate) | the command: two recordings in, a verdict out |
 
-All three are `no_std` with no dependencies beyond each other, and none of them
-allocates while reading.
+All of them are `no_std` with no dependencies beyond each other, and none of
+them allocates while reading. `wa-wire-gate` is the exception and says so: it is
+a tool rather than a library, which is why it is a separate crate.
 
 | Adapter | Engine | Modes |
 | --- | --- | --- |

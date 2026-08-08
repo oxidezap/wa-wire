@@ -91,6 +91,9 @@ jobs:
       - name: Regenerate the L1 derivation
         run: python3 tools/generate-l1.py
 
+      - name: Regenerate the payload field numbers
+        run: python3 tools/generate-content.py
+
       - name: Require no change
         run: |
           if ! git diff --quiet; then

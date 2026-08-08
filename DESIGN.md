@@ -1,13 +1,14 @@
 # wa-wire — Design Document
 
-> **Status:** **IMPLEMENTING** — all nine RFCs accepted. Steps 1–6, 9 and 10 of
-> §8 are done; steps 7–8 (Baileys, hypermeow) remain. Two engines are measured
-> agreeing on derived events (rev 15), and both now emit L0-plain — two of the
-> four the definition of done asks for.
+> **Status:** **IMPLEMENTING** — ten RFCs accepted. Steps 1–6 and 9–12 of §8 are
+> done and L1 now derives from both halves of L0-plain; steps 7–8 (Baileys,
+> hypermeow) remain. Two engines are measured agreeing on derived events
+> (rev 15), and both now emit L0-plain — two of the four the definition of done
+> asks for.
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 13
+> **Last revised:** rev 28
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -36,6 +37,8 @@ Confidence markers used throughout:
 - [RFC-007 — Language and repository strategy](#rfc-007--language-and-repository-strategy)
 - [RFC-008 — Boundary wire format](#rfc-008--boundary-wire-format)
 - [RFC-009 — Contract versioning and provenance](#rfc-009--contract-versioning-and-provenance)
+- [RFC-010 — Recording container](#rfc-010--recording-container)
+- [RFC-005 amendment — comparison profiles](#rfc-005-amendment--comparison-profiles)
 - [5. What this unlocks](#5-what-this-unlocks)
 - [6. Risks and honest limitations](#6-risks-and-honest-limitations)
 - [7. Open questions](#7-open-questions)
@@ -229,23 +232,45 @@ hook.
 `whatsapp-rust-bridge`** (`packages/baileys/package.json`, `workspace:^`).
 Convergence at the core layer has already started independently of this project.
 
-### 3.4 `whatsmeow` / `hypermeow` is the only engine needing a patch
+### 3.4 `hypermeow` needs less patching than this document assumed
 
-**[VERIFIED]**
+**[VERIFIED, revised in rev 26]** The estimate below was written against
+upstream `whatsmeow`. The `hypermeow` fork has moved since, and most of what
+this section called for already exists there.
 
-- Node dispatch table is private: `cli.nodeHandlers` (`client.go:118`,
-  populated `client.go:290-305`).
-- Dispatch path: `client.go:844` → `handlerQueue` → `client.go:873`. A tap hook
-  belongs immediately before the enqueue at `:844`. Estimated ~20 lines.
-- L0 out exists only through the explicitly unstable
-  `DangerousInternals().SendNode(ctx, node)` (`internals.go:170`),
-  `SendNodeAndGetData` (`:166`), `HandleFrame` (`:158`), `DispatchEvent` (`:174`).
-- Event surface is `AddEventHandler` (`client.go:769`) — typed events only, no
-  raw node.
-- No plugin system, no drain hook.
+**What is already in the fork:**
 
-Since `hypermeow` is an oxidezap-adjacent fork keeping the `go.mau.fi/whatsmeow`
-module path, the patch lands there first and can be proposed upstream later.
+- `RawNodeHandler` (`client.go:888`, fired inside `handleFrame`) runs for every
+  inbound stanza after Noise decryption and binary decoding, before dispatch.
+  It returns `(modified, drop)`, so it is not only a tap: dropping is
+  **takeover, natively**, with no patch at all.
+- `handleFrame` is the Noise layer's own frame callback (`handshake.go:126`),
+  so the hook sees `<success>` and `<failure>` too. That is
+  `l0.inbound.auth-phase`, which neither existing adapter has *alongside*
+  takeover.
+- `DisabledFeatures.Signal` lets an external system own the Signal session,
+  with `events.UndecryptedMessage` carrying the envelope verbatim.
+- L0 out is still `DangerousInternals().SendNode` (`internals.go:170`).
+
+**What was still missing, and is proposed in
+[polymorfa/hypermeow#5](https://github.com/polymorfa/hypermeow/pull/5):**
+
+- **The frame bytes.** `RawNodeHandler` received the decoded node only, so an
+  adapter had to re-encode. `handleFrame` had the decompressed buffer in scope
+  and let it fall out right after `Unmarshal`; the PR hands it over. This is
+  `l0.zero-copy-frame` for the cost of one argument.
+- **The plaintexts.** Nothing carried the per-`<enc>` plaintext, the same gap
+  `whatsapp-rust` had before #1240. The PR adds `DecryptedPayloadHandler`,
+  firing before the protobuf unmarshal, because a payload that fails to
+  unmarshal was being dropped behind a warning after the ratchet had already
+  advanced.
+
+So the capability shape of a `hypermeow` adapter, with that PR, would be the
+widest of the three: tap, auth phase, takeover, zero-copy, plaintext and
+outbound. Without it, tap and takeover only, L0-wire and re-encoded.
+
+Still absent either way: no plugin system, no drain hook, and the node dispatch
+table stays private (`cli.nodeHandlers`).
 
 ### 3.5 One connection per device — verified in three engines
 
@@ -735,6 +760,15 @@ implementations — the exact problem this project exists to remove. The split:
 no ratchet, no accumulated state. It therefore runs in the host and needs no
 per-language reimplementation.
 
+> **Both halves exist as of rev 27, and both are generated.** The stanza half
+> comes from whatspec's `incoming` domain, the payload half from its
+> `WAProto.proto` (D-093), and provenance carries a digest for each because the
+> two can move apart (D-095). What stays hand-written is the *rules*: which
+> variants are worth naming, what unwrapping means, which field of a variant is
+> its text. None of that is in a schema. The payload half is deliberately
+> partial and total anyway: every variant it does not model crosses by number
+> rather than being dropped.
+
 This resolves the caveat recorded in RFC-001 §L1 ("L1 is not a pure function of
 a single stanza"): it is not pure over **L0-wire**, but it *is* pure over
 **L0-plain**. The state dependency lives entirely on the engine side of the
@@ -1159,6 +1193,292 @@ Chosen over build-script generation:
 
 ---
 
+## RFC-010 — Recording container
+
+**Status:** **ACCEPTED** (rev 23), **implemented** in rev 24
+
+RFC-008 specifies one stanza crossing the boundary. Nothing specifies a
+*sequence* of them at rest, and every use the project has beyond its own test
+suite starts by writing or reading one.
+
+### The position this reverses
+
+A container exists already. `adapters/zapo/scripts/emit-recording.ts:33` writes
+`WAWR`, a `u32` count, then each envelope length-prefixed, and
+`adapters/whatsapp-rust/tests/engine_agreement.rs:146` reads it back by hand.
+Its own documentation explains why it was left unspecified:
+
+> Deliberately trivial. The envelope format is the contract; this is only a way
+> to put several of them in one file, and a reader that needs a spec for the
+> container is a reader spending attention in the wrong place.
+
+That was right while the only writer and the only reader lived in this
+repository and ran in the same CI job. It stops being right the moment a
+recording outlives the process that wrote it, moves between machines, or is
+compared against a recording made by different code. At that point the container
+is carrying claims — *which engine, which spec, which dictionary, which traffic*
+— and a format that cannot state them makes those claims unverifiable rather
+than absent.
+
+### What the ad hoc format cannot express
+
+Each of these is a defect only under the new use, which is why none of them was
+wrong before:
+
+| Gap | Consequence |
+| --- | --- |
+| Big-endian, while RFC-008 is little-endian throughout | Two byte orders in one file, for no reason |
+| Count in the header | The writer must know the total before the first byte, so a ring buffer and a streaming writer are both excluded |
+| No adapter, engine, spec or dictionary identity | A comparison cannot tell whether it is comparing like with like |
+| No artifact class | A sanitized recording and a captured one are indistinguishable |
+| No identity for the traffic that produced it | Two recordings of *different* input read as a regression |
+| Truncation only detected when it lands mid-record | A file cut on a record boundary reads as complete |
+| The reader indexes slices and panics | Every use outside a test needs a reader that reports instead |
+
+### Layout
+
+Little-endian throughout, matching RFC-008 (D-074). Three parts: a header, a
+sequence of records, and a trailer.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `magic` | `u8[4]` | `WAWR`, unchanged — files carrying it already exist |
+| `container_version` | `u16` | this layout; **not** the contract version |
+| `meta_len` | `u32` | bytes of metadata that follow |
+| `meta` | `u8[meta_len]` | TLV, below |
+| `records` | … | until the trailer |
+
+**On the third version number.** RFC-009 separates two axes and warns against
+conflating them, so a third needs justifying. It is not a third axis: the
+container version and the contract version are both *our* boundary, and RFC-009's
+rule is about keeping WhatsApp's protocol off that axis entirely. They are split
+because they move independently — a metadata tag can be added without the
+envelope layout changing, and a recording written today must stay readable when
+it does. Spec provenance remains the other axis, unchanged and per recording.
+
+A **record** is `kind: u8`, `len: u32`, `payload: u8[len]`.
+
+| Kind | Payload |
+| --- | --- |
+| `0x00` Envelope | an RFC-008 envelope, verbatim |
+| `0x01` Mark | `delta_us: u32`, then a UTF-8 label — "stream:error", "reconnect", "fault injected here" |
+| `0xFF` Trailer | `record_count: u32`, then `crc32: u32` over every preceding byte |
+
+Further kinds are additive. A reader skips one it does not know and **counts**
+it; a recording with skipped records is not comparable (D-078), because what was
+skipped might have been load-bearing.
+
+### The trailer detects damage; it does not establish identity
+
+An earlier draft of this RFC put a 32-byte cryptographic digest in the trailer.
+That does not survive contact with the constraints (D-084): every crate here is
+dependency-free and `no_std`, and the TypeScript writer has to run in a browser
+and a worker, so a SHA-256 would have to be hand-written twice — and a
+hand-rolled hash is exactly the kind of code that is subtly wrong in a way tests
+written by its author do not catch.
+
+It would also have claimed more than it delivers. A digest in an unsigned file
+detects accidental damage and nothing else, since anything that can rewrite the
+records can rewrite the digest. **The container is not a tamper-evident
+format**, and CRC-32 says so honestly while being fifteen lines and pinnable
+against published vectors in both languages.
+
+Identity comes from `input_digest` instead, which the container carries as
+opaque bytes and never computes. That keeps identity the responsibility of
+whoever produced the traffic, where the hash function is already chosen.
+
+### Why the count moved to the end
+
+A recorder that must state its length before writing anything cannot be a ring
+buffer, and the flight-recorder use is a ring buffer by definition. Putting the
+count in a trailer also makes truncation detectable in the case that matters:
+a file cut on a record boundary is missing its trailer, which the header form
+cannot express at all.
+
+### A truncated recording is readable
+
+**The most valuable artifact a crash recorder produces is, by definition, the
+one that was interrupted.** So the absence of a trailer is a *state*, not a
+parse error (D-076):
+
+- every complete record before the cut is readable and usable;
+- a partial record at the end is dropped with its bytes, not reported as
+  corruption;
+- the recording is marked truncated, and is `Incomparable` for any gate.
+
+A format that rejected these would fail its most important use while passing
+every test written against well-formed files.
+
+### Metadata, and which of it is load-bearing
+
+TLV: `tag: u16`, `len: u32`, `value`. Unknown tags are skipped, following
+RFC-009's rule that unknown fields are preserved rather than dropped.
+
+Skipping is not always safe, though. Some of these fields are the entire basis
+on which two recordings may be compared, and a reader that silently ignored one
+would produce a confident, wrong verdict. So **the high bit of the tag marks it
+critical** (D-077): a reader that meets a critical tag it does not understand
+may still inspect the recording, and may not call it comparable.
+
+| Tag | Critical | Value |
+| --- | --- | --- |
+| `adapter` | yes | id, version, engine version, contract version, capability set |
+| `provenance` | yes | the whatspec manifest RFC-009 already defines |
+| `dictionary` | yes | identity and digest of the token table the frames were encoded against |
+| `artifact_class` | yes | `captured`, `replayed`, `sanitized` or `synthetic` |
+| `input_digest` | yes | the traffic this recording is a replay *of*; absent for a capture |
+| `transform` | yes | for a sanitized artifact: the transformation's identity and configuration digest |
+| `created_at` | no | wall clock at the first record |
+| `note` | no | free text for a human |
+
+### Comparability is declared, not assumed
+
+`compare` today documents a precondition it cannot check:
+
+> Both recordings must be of the *same* stanzas, in the same order.
+
+For a gate that runs unattended, a precondition in a doc comment is a
+precondition nobody enforces. Two recordings are comparable only when all of
+these hold, and the comparison reports `Incomparable` otherwise (D-078):
+
+- same `input_digest`, and both declare one;
+- same `artifact_class`, and for `sanitized`, the same `transform`;
+- compatible `dictionary` — see below;
+- matching `provenance`, or the L1 half of the comparison is void;
+- neither is truncated;
+- no critical metadata tag and no record kind was skipped.
+
+**A live capture declares no `input_digest`** and is therefore never
+gate-comparable (D-079). This is not a limitation to work around: a capture is a
+session that happened once, so nothing else can have seen the same input. A
+capture is an *input* to the gate, not a result from it.
+
+### The dictionary belongs to the recording
+
+`compare(left, right, table)` takes one `TokenTable` for both sides. That holds
+only while both recordings were encoded against the same dictionary, and the
+whole point of an upgrade gate is that the two sides are different builds —
+which is exactly when the dictionary may have moved, since D-031 already makes
+it a parameter that travels with the WhatsApp client version.
+
+So the table is resolved **per recording**, from its `dictionary` tag (D-082),
+and a comparison whose tables are unavailable is `Incomparable` rather than
+attempted. This matters most for a re-encoded frame: two builds may write
+different token indices for the same value and be semantically identical, which
+is a difference the L0 comparison should attribute to the dictionary rather than
+to an engine.
+
+### Sanitization: the constraint, not the algorithm
+
+The algorithm is out of scope. Two constraints on it are not, because they are
+properties of the format:
+
+**A sanitized frame is necessarily re-encoded.** A JID cannot be replaced inside
+a frame without rewriting the frame, and rewriting it forfeits
+`FrameOrigin::Original` — the property that makes a recording faithful. Nothing
+avoids this, so the format states it instead: sanitization always yields
+`ReEncoded` frames, and an artifact class that says so.
+
+**A sanitizer must preserve the shape of what it replaces, not only its type.**
+A pseudonymous JID with a different digit count changes the packed-nibble
+encoding. The two real bugs this project's conformance run has found so far
+(D-062, D-063) were both encoding-shape bugs, visible only because captured
+traffic contained those shapes. A sanitizer that normalizes them erases exactly
+the class of defect the corpus exists to catch.
+
+### Cross-language
+
+The container is written by one language and read by another for the same reason
+the envelope is, so it inherits the same rule: fixtures written by the TypeScript
+writer and read by the Rust reader, and the reverse, as
+`crates/wa-wire-conformance/tests/cross_language.rs` already does for RFC-008. A
+Go writer follows when the fourth adapter does.
+
+### Deliberately not decided: per-envelope timestamps
+
+A flight recorder wants to answer "what happened in the last thirty seconds",
+which needs a time on every record, and this RFC does not give it one. The
+reasons to wait: a timestamp must never take part in a comparison, since two
+replays of one input differ on it by construction; a sanitizer will want to
+blur or drop it; and four bytes on every record is a real cost to pay before
+any reader needs it.
+
+`Mark` covers the case that motivated the question — "the error happened
+here" — at no cost to a recording that does not use it. A timestamped envelope
+kind is additive, so choosing later costs nothing. This is the part of the RFC
+most likely to move on review, and it is stated rather than left to be noticed.
+
+### Explicitly out of scope
+
+- the sanitization algorithm;
+- protobuf parsing of plaintexts;
+- any performance budget;
+- CLI, report rendering, storage policy, retention.
+
+---
+
+## RFC-005 amendment — comparison profiles
+
+**Status:** **ACCEPTED** (rev 23), **implemented** in rev 24. Amends
+[RFC-005](#rfc-005--conformance).
+
+RFC-005 was written for one question: do two engines agree? The container makes
+a second question mechanical — did this version regress against that one? — and
+the two want opposite answers from the same evidence.
+
+### Two engines and two versions are not the same comparison
+
+| Finding | Two engines | Two versions |
+| --- | --- | --- |
+| frame bytes differ | not a fault: two encodings of one stanza are both valid | a fault: the same encoder changed its output |
+| coverage lost by the candidate | not a fault: how much an adapter observes is a property of the adapter (D-055) | a fault: the same adapter observes less than it did |
+| coverage gained by the candidate | not a fault | an improvement, reported and passing |
+| frame origin degraded | not a fault: adapters differ by design | a fault: the same adapter stopped reaching its own buffer |
+| length, direction, plaintext, L1 | a fault | a fault |
+| provenance, input, class or dictionary mismatch | incomparable | incomparable |
+
+So `Divergence::is_fault()` cannot stay a property of the divergence. The
+comparator's job is to **record facts**; deciding which are faults is the
+profile's (D-080):
+
+```rust
+let report = compare(&baseline, &candidate);
+let verdict = report.evaluate(ComparisonProfile::Regression);
+```
+
+### The verdict is three-valued
+
+`Pass`, `Fail`, `Incomparable`. Today a provenance mismatch is a divergence that
+`agrees()` ignores, which means *"this comparison was between unlike things"*
+renders as *"they agree"* — the worst available default, since it is a green
+result produced by a comparison that never happened. An improvement folds into
+`Pass` and is reported, so the verdict stays decidable.
+
+### Regression is directional
+
+Under `Interop` the two sides are symmetric. Under `Regression` they are not:
+`left` is the baseline and `right` is the candidate, and the direction is what
+separates a regression from an improvement. `Divergence::PlaintextCoverage`
+already carries `only_left` and `only_right` separately, so the format needs
+nothing; the policy reads the fields.
+
+### Two facts the comparator currently suppresses
+
+Both are correct suppressions under `Interop` and both are needed under
+`Regression`, so they must be recorded and left unjudged rather than dropped
+at the source:
+
+- **frame origin changing.** Not compared today, deliberately: it differs by
+  design between an engine that exposes its decode buffer and one that
+  re-encodes, and reporting it per stanza would bury real findings.
+- **a status changing between two non-`Ok` values**, such as `DecryptFailed`
+  becoming `Unobserved`. Invisible today, because only `Ok` entries are
+  compared and coverage counts only `Ok` ones. Between engines it says nothing;
+  between versions it says an adapter stopped knowing why a payload was
+  missing.
+
+---
+
 ## 5. What this unlocks
 
 Being honest about which of these are *real* and which are *speculative*.
@@ -1319,6 +1639,8 @@ No L2. No Layer 3 host.
 2. Four adapters emitting L0-plain: `whatsapp-rust`, `zapo`, `Baileys`,
    `hypermeow`. **Two of four as of rev 19.**
 3. L1 derivation generated from `whatspec`, host-side, single implementation.
+   **Stanza derivation done in rev 11; the payload derivation done in rev 27,
+   written rather than generated because whatspec has no oracle for it.**
 4. Conformance suite (RFC-005) green: identical L0 in → identical L1 out across
    all four engines. **Green for two of them as of rev 15.**
 5. Capability matrix machine-readable and enforced at setup. **Done in rev 20.**
@@ -1347,6 +1669,8 @@ so step 0 is done and implementation can begin.
 | 8 | `hypermeow` adapter + Go hook | fourth engine | hook at `client.go:844`, bytes at `:824`; **MPL-2.0 subdirectory with NOTICE** |
 | ~~9~~ | ~~`whatsapp-rust` takeover patch (D-020)~~ | — | **done in rev 13** — a pre-dispatch interceptor, merged upstream as #1239 |
 | ~~10~~ | ~~`whatsapp-rust` adapter, L0-plain~~ | — | **done in rev 14** — a per-`<enc>` plaintext event merged upstream as #1240, joined to its frame adapter-side |
+| ~~11~~ | ~~`wa-wire-recording` — the RFC-010 container, plus comparison profiles~~ | — | **done in rev 24** — the ad hoc `WAWR` is a contract read by both languages, `is_fault` is a profile, and comparability is declared in the file rather than assumed by the runner |
+| ~~12~~ | ~~`wa-wire-gate` — the command, and a fuzz sweep over every decoder~~ | — | **done in rev 25** — the first thing here anyone can run; three-valued exit codes; every decoder now proves the "reportable, never a panic" claim it makes |
 
 **Step 6 is the milestone that matters.** Everything before it is plumbing;
 step 6 is where "four engines produce identical L1" stops being a claim and
@@ -1475,10 +1799,287 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-070 | `l0.outbound` does not imply `l0.request` | Writing to the socket and being handed the correlated answer are different powers; an engine may offer one without the other | 21 |
 | D-071 | A rejection carries the reply's frame only where the engine hands it over | `whatsapp-rust` parses an error reply and keeps its code and text, not its bytes. Naming the absence lets a consumer check; pretending uniformity would make it find out at runtime | 22 |
 | D-072 | The three declarations are a ladder, each a superset of the last | A consumer raising its requirement from observing to sending to requesting never loses something it already relied on | 22 |
+| D-073 | The recording container is specified, reversing "deliberately trivial" | It was a way to put envelopes in one file while the only reader lived in the same CI job. A recording that outlives its process carries claims about engine, spec, dictionary and traffic, and a format that cannot state them makes those claims unverifiable rather than absent | 23 |
+| D-074 | The container is little-endian, matching RFC-008 | The ad hoc format is big-endian while the envelopes inside it are not. Two byte orders in one file is a defect waiting for the first reader written from the wrong half | 23 |
+| D-075 | The record count lives in a trailer, not the header | A writer that must state its length before the first byte cannot be a ring buffer, and the flight-recorder use is a ring buffer by definition | 23 |
+| D-076 | A recording without its trailer is truncated, not invalid: readable, and not comparable | The most valuable artifact a crash recorder produces is by definition the one that was interrupted. A format that rejected it would fail its most important use while passing every test written against well-formed files | 23 |
+| D-077 | Metadata tags carry a critical bit; an unknown critical tag forbids comparison, not inspection | RFC-009 says unknown fields are preserved rather than dropped, but some of these fields *are* the basis on which two recordings may be compared. Skipping one silently would produce a confident wrong verdict | 23 |
+| D-078 | Comparability is declared in the file, never assumed by the runner | `compare` documents "the same stanzas, in the same order" as a precondition it cannot check. For a gate that runs unattended, a precondition in a doc comment is one nobody enforces | 23 |
+| D-079 | A live capture declares no input digest and is therefore never gate-comparable | A capture is a session that happened once, so nothing else can have seen the same input. It is an input to the gate, not a result from it | 23 |
+| D-080 | `is_fault` becomes a comparison profile: the comparator records facts, the profile judges them | Between two engines a frame difference is two valid encodings; between two versions of one engine it is the encoder changing. The same evidence, opposite verdicts | 23 |
+| D-081 | The comparison verdict is three-valued: pass, fail, incomparable | Today a provenance mismatch is ignored by `agrees()`, so "this comparison was between unlike things" renders as "they agree" — a green result from a comparison that never happened | 23 |
+| D-082 | The token dictionary is resolved per recording, not per comparison | D-031 already makes the table travel with the WhatsApp client version, and an upgrade gate compares exactly the builds where it may have moved. Two builds writing different indices for one value is a dictionary difference, not an engine one | 23 |
+| D-083 | A sanitizer must preserve the encoding shape of what it replaces, not only its type | Both conformance findings so far (D-062, D-063) were encoding-shape bugs, visible only because captured traffic held those shapes. Normalizing them erases the defect class the corpus exists to catch | 23 |
+| D-084 | The trailer carries CRC-32, not a cryptographic digest | A digest in an unsigned file detects accidental damage and nothing more, so SHA-256 would claim tamper-evidence the format does not provide — and would have to be hand-written twice, `no_std` and browser-safe. Identity lives in `input_digest`, which the container carries and never computes | 23 |
+| D-085 | Capabilities travel as their identifier strings, not as the bitset | `CapabilitySet` is a `u8` whose bit assignment is internal to the Rust crate, while `Capability::identifier` is stable and is literally what the TypeScript enum holds. A container read by three languages must not depend on two of them agreeing about bit order | 23 |
+| D-086 | The gate's verdict reaches a pipeline as three distinct exit codes, not two | A CI step that folded "incomparable" into failure sends someone hunting a bug that is not there; one that folded it into success ships on no evidence. The distinction only pays if it survives the process boundary | 25 |
+| D-087 | Dictionary *resolution* is the host's job, not the comparator's | `Comparability::check` cannot know which token tables exist where it runs. The host does, so it reports `UnresolvableDictionary` — and says whether a dictionary was declared or assumed, because an assumption a reader cannot see is one nobody checked | 25 |
+| D-088 | The malformed-input sweep asserts invariants, not just the absence of a panic | A decoder that survives by accepting nonsense has not survived. It also asserts that mutations land on both sides, since a sweep where everything is refused proves only that the first length check works — and can become that silently | 25 |
+| D-089 | The payload reader is its own crate, sibling to the codec | One parses the stanza, the other parses what its `<enc>` children decrypt to. Both are wire formats read from buffers somebody else wrote, and keeping them apart is what lets the fuzz sweep and the allocation counter hold each to the same rule without either knowing the other | 27 |
+| ~~D-090~~ | ~~The payload half of L1 is **written**, not generated~~ | **Reversed by D-093.** The stated reason was false: whatspec does extract the protobuf | 27 |
+| D-093 | **Reverses D-090.** The payload's field numbers are generated from whatspec's `WAProto.proto`, and only the rules stay written | whatspec's `wa-proto` extracts the schema from the bundle's `internalSpec` modules and pins it by SHA-256 in its manifest, so the oracle D-090 said did not exist was there all along. Hand-writing the numbers cost 22 of the 29 wrappers the spec declares | 28 |
+| D-094 | Wrappers are collected from the spec **by type**, never by name | A list of names is a second place to add one and therefore a place to forget one. Collecting every `Message` field whose type is `FutureProofMessage` is what turned seven into twenty-nine | 28 |
+| D-095 | Provenance carries a digest per domain, not one for the build | WhatsApp can renumber a protobuf field without touching how a stanza parses. One digest would call two builds the same spec when only half of it matched | 28 |
+| D-091 | A payload whose first field is unmodelled crosses as `Unmodelled(n)`, never as empty | Without the whole schema, an unknown variant and a metadata field are indistinguishable, so reporting the number seen is the most that can be claimed. Reporting nothing would make a protocol change look like an empty message, which is the one reading that is certainly wrong | 27 |
+| D-092 | Wrappers are unwrapped before the kind is reported, and the depth is reported | A consumer asking what a message said does not mean "it was a device-sent copy of an ephemeral wrapper". The count is kept because a nested payload is a fact worth seeing rather than one to hide | 27 |
 
 ---
 
 ## Changelog
+
+### rev 28 — 2026-08-08
+
+- **D-090 was wrong, and D-093 reverses it.** It claimed the payload half of L1
+  had to be written because whatspec records nothing about the protobuf inside
+  an `<enc>`. It does: `wa-proto` extracts the schema from the WA Web bundle's
+  `internalSpec` modules, emits `WAProto.proto`, and pins it by SHA-256 in the
+  manifest. The oracle was there and this project did not look for it, so the
+  field numbers came from a copy checked into another repository instead.
+- **The cost was 22 of 29 wrappers.** The hand-written list had the seven
+  `FutureProofMessage` envelopes somebody thought of; the spec declares
+  twenty-nine. Poll, status, spoiler, newsletter and bot messages would all have
+  read as unmodelled rather than being unwrapped to the message inside. The
+  generator collects them **by type** now (D-094), so the next one arrives
+  without anyone remembering it.
+- **Provenance gained a second digest** (D-095). The two halves come from two
+  domains and can move apart: WhatsApp can renumber a protobuf field without
+  changing how a stanza parses. One digest would call two builds the same spec
+  when only half of it matched.
+- **Two bugs in the generator itself**, both caught by its own refusals rather
+  than by producing wrong numbers:
+  - The spec nests most of `waE2E` inside `Message`, so a scan that only saw
+    top-level blocks found `Message` and nothing it points at.
+  - Two different `ExtendedTextMessage` types exist under different parents and
+    disagree about what their fields hold, so lookups had to become qualified
+    by path. They happen to agree that `text = 1`, which is exactly the kind of
+    luck a hand-written number relies on.
+  - The generator now checks that the file's braces balance before trusting its
+    own scan, because a block it opened and never closed would misqualify every
+    name after it silently. Two empty one-line messages (`message Signal {}`)
+    were doing precisely that.
+
+### rev 27 — 2026-08-08
+
+- **L1 reads the plaintexts.** Until now the boundary carried decrypted
+  payloads that nothing read: the derivation covered `receipt`, `ack`, `call`
+  and the *shell* of `message`, and message content not at all. The payloads
+  crossed, were compared between engines, and went nowhere.
+- **`wa-wire-proto`**, a protobuf wire-format reader (D-089): `no_std`, no
+  dependencies, borrowing from the payload. Total over the format, including
+  the deprecated groups, because a reader that stopped at one would stop on a
+  payload it could otherwise have handed over whole. It inherits the two
+  disciplines already in place for free: the mutation sweep now covers it, and
+  the allocation counter measures it at zero.
+- **`wa_wire_l1::content`**, written rather than generated (D-090). D-039 says
+  L1 is generated because whatspec records how WhatsApp Web parses a stanza and
+  writing that by hand would be guessing at the spec. That reason does not
+  reach the protobuf inside an `<enc>`: whatspec says nothing about it, so
+  there is no oracle to generate from. The oracle here is `waE2E.proto` and
+  every field number sits next to the line it came from.
+- **Deliberately partial, and total anyway.** `waE2E.Message` has over a
+  hundred variants; this models twelve and answers two questions for every
+  payload: which kind is this, and what does it say. A variant it does not
+  model crosses as `Unmodelled` carrying its field number (D-091), which is how
+  the next one gets found.
+- **Wrappers are unwrapped first** (D-092). A real message often arrives inside
+  `deviceSentMessage` or one of seven `FutureProofMessage` envelopes, and a
+  reader that reported the envelope would answer "what did this say" with "it
+  was a wrapper". The depth is reported rather than hidden.
+- **Two findings from writing the tests**, both mine:
+  - The wrapper list was hand-built and missing one of the seven, which would
+    have made a whole class of message read as unmodelled. Replaced by a
+    predicate, so there is no second list to forget.
+  - An unmodelled field read as `Empty`, indistinguishable from a payload with
+    no fields at all. That is the failure the totality rule exists to prevent,
+    so the reader now reports the number it saw and says plainly that it cannot
+    tell an unknown variant from metadata without the whole schema.
+- **The example consumer reads message content**, which is what makes the claim
+  checkable from outside: it tallies messages by kind and collects their text,
+  and the test drives a real L0-plain envelope through it end to end.
+
+### rev 25 — 2026-08-08
+
+- **The gate is a command.** `wa-wire-gate` takes two recordings and prints a
+  verdict. Nothing in it is new logic; what is new is that any of it can be run.
+  Until now the container, the comparator and the profiles were reachable only
+  from tests, which is the same gap the example consumer closed for the
+  boundary — and that one **found a real bug** the moment it became the first
+  code to use the crates from outside (D-062).
+- **Three exit codes, because a pipeline branches on them** (D-086). `0` pass,
+  `1` fail, `2` incomparable, plus `64` for bad arguments and `66` for a
+  recording that could not be read. A CI step that collapsed `2` into failure
+  would send someone hunting a bug that is not there; one that collapsed it into
+  success would ship on no evidence at all. The distinction only pays if it
+  survives the process boundary, so the exit codes are tested by running the
+  binary rather than the library.
+- **The gate is where dictionary resolution actually happens** (D-087). RFC-010
+  says a comparison whose tables are unavailable is incomparable rather than
+  attempted; `Comparability::check` cannot enforce that, because it does not
+  know what tables exist where it runs. The host does, so
+  `Incomparable::UnresolvableDictionary` is reported by the host, and the report
+  says whether a dictionary was declared or assumed — an assumption a reader
+  cannot see is an assumption nobody checked.
+- **No silent caps.** Long finding lists are trimmed and say what they trimmed,
+  per the same rule that made encoder divergences a named list rather than a
+  counter (D-060).
+- **Every decoder now proves the claim it makes.** Three crates read buffers
+  written elsewhere and all three documented that a malformed one "must be
+  reportable, never a panic". Nothing checked it. `malformed_input.rs` sweeps
+  deterministic mutations across the envelope decoder, the container reader and
+  the frame parser, and asserts more than the absence of a panic: when a decoder
+  *accepts* a mutated buffer, the invariants it advertises still have to hold
+  (D-088).
+- **The sweep refuses to become vacuous.** It asserts that mutations land on
+  both sides — some accepted, some refused — because a sweep where everything is
+  rejected proves only that the first length check works, and it can become that
+  silently after a stricter header. Measured: about a quarter of mutated
+  envelopes still decode, so the accept path is genuinely exercised.
+- **A finding from writing it**: the frame parser already bounds nesting at 64
+  and refuses deeper input with an error that names the limit. The test was
+  written expecting to *discover* whether a 2 000-deep frame would take the
+  stack with it; it found the defence already there, so it now pins both sides
+  of the limit instead — refused past it, fully walkable inside it.
+- **Deterministic rather than coverage-guided**, deliberately: `cargo-fuzz`
+  needs nightly and a crate outside the workspace, so it would run when someone
+  remembered. This runs on every commit with no dependency, and a failure
+  reproduces exactly from the seed in the assertion. Coverage-guided fuzzing is
+  worth adding on top, not instead.
+
+### rev 24 — 2026-08-08
+
+- **Step 11 done: the container is a contract.** `wa-wire-recording` implements
+  RFC-010 in Rust and `adapters/zapo/src/recording.ts` implements it in
+  TypeScript, with fixtures written by one and read by the other — the same
+  arrangement RFC-008 already had, for the same reason. The ad hoc `WAWR` that
+  `engine_agreement.rs` parsed by hand is gone; that test now reads through the
+  contract, and refuses a recording that is truncated, damaged, or carries a
+  critical tag this build cannot interpret.
+- **Two amendments the implementation forced**, both recorded rather than
+  quietly applied:
+  - **CRC-32, not SHA-256** (D-084). The draft put a cryptographic digest in the
+    trailer. Every crate here is dependency-free and `no_std`, and the
+    TypeScript writer has to run in a browser, so it would have been
+    hand-written twice — and it would have claimed tamper-evidence an unsigned
+    file does not have. Identity stays in `input_digest`, which the container
+    carries and never computes.
+  - **Capabilities travel as identifier strings** (D-085). `CapabilitySet` is a
+    `u8` whose bit assignment is internal to one crate; `Capability::identifier`
+    is stable and is literally what the TypeScript enum holds. A format read by
+    three languages must not depend on two of them agreeing about bit order.
+- **A property the tests pinned down**, which the design had not stated: the
+  checksum covers everything *before* the trailer, so it cannot cover the count
+  the trailer carries. Every field has exactly one detector — the body by the
+  checksum, the count by disagreeing with what was found, the checksum by
+  itself — so neither check is redundant and neither is missing.
+- **`is_fault` is a profile now** (D-080), which is the change that turns the
+  conformance suite into a second product. `report.evaluate(profile)` returns
+  `Pass`, `Fail` or `Incomparable`, and the same corpus that passes as interop
+  fails as regression — asserted in `engine_agreement.rs`, because two engines
+  are not two builds of one.
+- **Two facts the comparator used to suppress are now recorded**: frame origin
+  changing, and a status moving between two non-`Ok` values. Both suppressions
+  were right between engines and would have made the regression profile blind.
+  Recording them surfaced a real consequence immediately: the two adapters
+  differ on frame origin for *every* stanza, which the corpus test now states
+  outright rather than having hidden.
+- **Comparability is declared, not assumed** (D-078). `Recording::new` is a
+  caller vouching for both sides; a recording read from a container carries the
+  claim and it is checked. Mixing the two is refused, because half a checked
+  claim leaves the pair unchecked. The corpus test now has both engines compute
+  the same corpus checksum independently, so two recordings of different traffic
+  report `Incomparable` instead of reading as an engine regression.
+- **Coverage**: the workspace is at 96.3% lines, and every file is above 95%
+  except the generated derivation, whose tests are generated with it. Two
+  pre-existing gaps closed on the way past: `wa-wire-adapter/src/send.rs` (72% →
+  99%) and `wa-wire-example-consumer` (82% → 100%), both low because their only
+  exercise lived in the adapter workspace, where this crate's coverage is not
+  measured.
+
+### rev 23 — 2026-08-08
+
+- **RFC-010 proposed: the recording container.** A container already existed —
+  `WAWR`, a count, length-prefixed envelopes — written by a script and read by
+  hand inside one test. Its own comment argued against specifying it, and that
+  argument was right for as long as the writer and the reader were the same CI
+  job. It stops being right when a recording travels: at that point the file is
+  carrying claims about which engine, which spec, which dictionary and which
+  traffic produced it, and a format with nowhere to put them does not make those
+  claims absent, it makes them unverifiable (D-073).
+- **What the ad hoc format cannot express**, each of them a defect only under the
+  new use: big-endian inside a little-endian contract (D-074); a count in the
+  header, which excludes a ring buffer and therefore the entire flight-recorder
+  use (D-075); no adapter, spec, dictionary or artifact class; no identity for
+  the input, so two recordings of *different* traffic read as a regression; and
+  truncation that goes undetected whenever the cut lands on a record boundary.
+- **A truncated recording stays readable** (D-076). The artifact a crash
+  recorder exists to produce is, by definition, the one that was interrupted. A
+  container that rejected it would fail its most important use while passing
+  every test written against well-formed files. Missing trailer means truncated
+  and not comparable, never unparseable.
+- **Comparability moves into the file** (D-078). `compare` documents "the same
+  stanzas, in the same order" as a precondition, and cannot check it. That is
+  fine for a test with both sides in view and useless for a gate running
+  unattended, so the recordings declare it: same input digest, same artifact
+  class, compatible dictionary, matching provenance, neither truncated. A live
+  capture declares no input digest and is therefore never gate-comparable
+  (D-079) — it is an input, not a result.
+- **`is_fault` becomes a profile** (D-080), which is the change that turns the
+  conformance suite into a second product. Between two engines, differing frame
+  bytes are two valid encodings of one stanza; between two versions of one
+  engine, they are the encoder changing under you. Same evidence, opposite
+  verdicts, so the comparator records facts and the profile judges them. The
+  verdict gains a third value (D-081): today a provenance mismatch is ignored by
+  `agrees()`, so "these were unlike things" reports as "they agree" — a green
+  result from a comparison that never ran.
+- **Two facts the comparator suppresses today** have to start being recorded and
+  left unjudged: frame origin changing, and a status moving between two non-`Ok`
+  values. Both suppressions are correct between engines and wrong between
+  versions.
+- **Sanitization gets constraints, not an algorithm.** A sanitized frame is
+  necessarily re-encoded, because a JID cannot be replaced without rewriting the
+  frame — so it forfeits `FrameOrigin::Original` and must say so. And a
+  sanitizer has to preserve the *encoding shape* of what it replaces, not only
+  its type (D-083): both conformance findings so far were encoding-shape bugs,
+  visible only because captured traffic held those shapes.
+
+### rev 22.1 — the review pass
+
+Eleven findings against rev 22, all acted on. Five were defects rather than
+polish:
+
+- **Takeover was killing decryption.** `zapo` decrypts inside the dispatch that
+  takeover suppresses, so every encrypted stanza timed out in the joiner and
+  crossed as `Unobserved`: the mode contradicted D-021, which exists precisely
+  to forbid that. The filter now suppresses everything *except* the stanzas the
+  joiner is holding, which is the smallest carve-out that keeps L0-plain
+  producible.
+- **A lost stanza did not fail the conformance run.** `Divergence::Length` was
+  classified not-a-fault, so two recordings of the same traffic with different
+  counts reported agreement. Length, direction and plaintext are faults now.
+- **The comparison ignored everything but the frame**, including the plaintext
+  table — the entire difference between L0-wire and L0-plain. Payloads both
+  sides call usable must now match; differing *coverage* is reported and is not
+  a fault, because that is a limit on the adapter (D-055) rather than an engine
+  being wrong.
+- **An odd-length path corrupted the envelope.** `NodePath::from_le_bytes`
+  truncated the component *count* but not the bytes, so the encoder wrote
+  `path_len = 1` followed by three bytes and the decoder read the third as the
+  status. It passed the size assertion.
+- **A failed status could carry a payload**, in both languages. Now refused on
+  the way out and on the way in, since each side is the other's only guard.
+
+Also: the plugin subscription was `mem::forget`ed and now lives in the API the
+host holds; the capability gate checks the mode the instance was installed in
+rather than what the adapter can do; `onError` carries the stanza that failed
+instead of a fabricated node; `Buffer` left the send path, which was breaking
+every non-Node runtime; and path dependencies gained versions.
+
+One finding was refused. Making L1 consume the plaintexts would mean adding a
+parameter nothing reads: `wa-wire-l1` is generated from whatspec's `incoming`
+domain, which describes stanza parsing, and the protobuf reader that would use
+a payload is not written. The gap is now stated in the README, in RFC-001's
+sub-layer section and in the definition of done, rather than papered over with
+an unused argument.
 
 ### rev 17 — 2026-08-07
 
