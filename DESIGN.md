@@ -9,7 +9,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 31
+> **Last revised:** rev 32
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1950,10 +1950,51 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-102 | Observing what an engine *sends* is a capability of its own, listed apart from being able to send | An adapter sends; a recording needs to know what left. Until upstream #1260 no engine could tell us, and folding the two into one row would have made the gap invisible — the matrix would have read `✅` for both while half of every session went unrecorded | 31 |
 | D-103 | Where takeover is partial, the matrix says which stanzas are excluded rather than scoring it | `whatsapp-rust` never offers the five tags that settle connection state, and that is the correct design — an engine that handed them over could not stay connected. A bare `✅` would claim more than is true and a bare `❌` would deny something real, so the cell carries the exclusion | 31 |
 | D-104 | An engine claim names its file, and only pins a line where the line is the claim | Three of this document's line references had drifted by rev 31 while every statement they supported was still true, which trains a reader to stop checking. The file is stable enough to find the thing; the line number was decoration that decayed | 31 |
+| D-105 | Observing what an engine sends is its own capability, `l0.outbound.observed` | `l0.outbound` is the ability to send, which every adapter with a `Sender` has and which says nothing about whether the engine reports what left. `AdapterInfo::verify` already gated outbound envelopes on a capability documented as "observe the outbound path" and tested the one for sending, so the distinction existed in the prose before it existed in the code | 32 |
+| D-106 | Outbound stanzas are compared at L0 and never derived | The derivation comes from whatspec's `incoming` domain, which records how WA Web parses what the *server* sends. An outbound `<ack>` satisfies those shapes and means the opposite, so it does not fail to derive — it derives confidently and wrongly, and two engines agreeing on a wrong reading reports as agreement. Deriving them needs the request-side domains, which nothing here generates from | 32 |
+| D-107 | A mixin group's alternatives are tried richest-first, as ordering and not preference | `NewsletterMessageAck`'s required fields are a subset of `NewsletterQuestionResponseAck`'s, so the leaner alternative accepts every stanza the richer one does and trying it first would claim them all. This is D-041 one level down, arrived at from the same evidence | 32 |
+| D-108 | Read budgets are reported but not enforced under coverage instrumentation | `cargo llvm-cov` costs about 4x on the walk it counts, so a ceiling measured against it measures the instrumentation. The recording walk sat inside its ceiling on CI's runner and outside it on a developer's — passing on the margin rather than the merits. `cargo test` still enforces them, and the self-test asserts the exemption rather than being silently disabled by it | 32 |
 
 ---
 
 ## Changelog
+
+### rev 32 — 2026-08-08
+
+- **The vendored spec was refreshed and `UNTYPED_FIELDS` emptied without a line
+  changing here.** Its one entry was an `attrEnum` whatspec declared with no
+  variants; [whatspec#42](https://github.com/oxidezap/whatspec/pull/42) found
+  the cause upstream — the extractor refused a numeric property key, and
+  `{0:"0",1:"1",7:"7"}` is how that enum is written — and recovered 33 more
+  constraints in its other domains on the way. Reporting what a generator could
+  not express, rather than dropping it, is what led there.
+- **A recording can hold both halves of a session** (D-105). The envelope
+  already carried `Direction::Outbound` and the container already took records
+  of both kinds; what was missing was a name for the capability, an adapter that
+  populates it, and a rule for judging it.
+  - The two observation points hand over different shapes. `RawNode` gives the
+    buffer the decoder consumed, which `unpack` has stripped; `SentFrame` gives
+    what went to the Noise encryption, format byte still attached. Forwarding it
+    untouched would write frames every reader misparses by one byte.
+  - **Outbound stanzas are compared at L0 and never derived** (D-106). A test
+    pins that an inbound pair still diverges at L1, so the guard cannot pass by
+    having switched the comparison off.
+  - The gate reports the split per side: a candidate that stopped observing its
+    own sends loses records, and absent records are what a total cannot show.
+- **`UNMODELLED_FIELDS` is empty.** The last four entries were union mixins,
+  which now generate an enum apiece, named after their alternatives so the same
+  group under two shapes becomes one type. Alternatives are tried richest-first
+  (D-107).
+  - Descending into them surfaced a fifth thing: `contentString`, a method the
+    generator had never met because nothing above the mixin used it. Adding the
+    primitive was three lines; finding it took modelling the mixin.
+  - Tests for the alternatives are generated, per D-042. The shape fixtures
+    reach only the leanest alternative by construction — a fixture satisfying a
+    richer one satisfies the leaner one too — so each is built from its own
+    fields, which is also the only thing that exercises the ordering.
+  - One group has an alternative requiring nothing, so it accepts anything the
+    others turn down. The generated test names that rather than asserting the
+    group can report a miss, which it cannot.
 
 ### rev 31 — 2026-08-08
 

@@ -362,3 +362,92 @@ fn an_outbound_stanza_derives_under_the_inbound_grammar() {
     // And it is reported as the inbound event, which is the wrong reading.
     assert!(matches!(derived.expect("derives"), Event::Ack(_)));
 }
+
+// --- mixin groups ------------------------------------------------------------
+
+/// A mixin group's variants are tried richest-first, and the order decides.
+///
+/// `NewsletterMessageAck`'s required fields are a subset of
+/// `NewsletterQuestionResponseAck`'s — the latter also needs
+/// `response_server_id`. So the leaner variant accepts every stanza the richer
+/// one does, and trying it first would claim them all: a question response
+/// would be reported as an ordinary message ack, silently, forever.
+///
+/// This is D-041 one level down. The rule that orders shapes of a tag orders
+/// variants of a mixin for exactly the same reason, and neither is a
+/// preference.
+#[test]
+fn a_mixin_group_picks_the_richest_variant_that_fits() {
+    use wa_wire_l1::generated::NewsletterQuestionResponseAckOrNewsletterMessageAck as Group;
+
+    let with_server_id = Fixture::node("ack")
+        .attr("class", "message")
+        .attr("t", "1")
+        .attr("edit", "1")
+        .attr("response_server_id", "77")
+        .bytes(b"franking")
+        .build();
+    let node = parse(&with_server_id);
+    assert!(
+        matches!(
+            Group::derive(&node).expect("derives"),
+            Group::NewsletterQuestionResponseAck(_)
+        ),
+        "the field only the richer variant requires must select it"
+    );
+
+    // Without it, the same stanza is the leaner variant — not an error.
+    // Everything the richer variant needs except the one field only it
+    // requires — so the difference under test is that field and nothing else.
+    let without = Fixture::node("ack")
+        .attr("class", "message")
+        .attr("t", "1")
+        .attr("edit", "1")
+        .bytes(b"franking")
+        .build();
+    assert!(matches!(
+        Group::derive(&parse(&without)).expect("derives"),
+        Group::NewsletterMessageAck(_)
+    ));
+}
+
+/// A variant guarded by a literal value is selected by that value.
+///
+/// The status mixin's three alternatives differ only in `edit`: `1` is an
+/// edit, `7` a revoke, `8` an admin revoke. Nothing else tells them apart, so
+/// dropping the guard would make all three the first one.
+#[test]
+fn a_guarded_variant_is_selected_by_its_literal() {
+    use wa_wire_l1::generated::StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke as Group;
+
+    for (value, expected) in [
+        ("1", "StatusAckEdit"),
+        ("7", "StatusAckRevoke"),
+        ("8", "StatusAckAdminRevoke"),
+    ] {
+        let stanza = Fixture::node("ack").attr("edit", value).build();
+        let derived = Group::derive(&parse(&stanza)).expect("derives");
+        let name = match derived {
+            Group::StatusAckEdit(_) => "StatusAckEdit",
+            Group::StatusAckRevoke(_) => "StatusAckRevoke",
+            Group::StatusAckAdminRevoke(_) => "StatusAckAdminRevoke",
+            // `#[non_exhaustive]`: a variant added upstream reaches here, and
+            // naming it rather than panicking keeps the failure readable.
+            _ => "an alternative this test predates",
+        };
+        assert_eq!(name, expected, "edit={value}");
+    }
+
+    // A value no variant claims is none of them, rather than the first.
+    let unknown = Fixture::node("ack").attr("edit", "3").build();
+    assert!(Group::maybe_derive(&parse(&unknown)).is_none());
+}
+
+/// Nothing in `UNMODELLED_FIELDS`, and the constant still exists to say so.
+#[test]
+fn the_generator_expressed_every_field() {
+    assert!(
+        UNMODELLED_FIELDS.is_empty(),
+        "still unmodelled: {UNMODELLED_FIELDS:?}"
+    );
+}

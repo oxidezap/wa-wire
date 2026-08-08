@@ -182,6 +182,24 @@ pub fn content_bytes<'a>(node: &NodeRef<'a>) -> Result<&'a [u8], DeriveError> {
         })
 }
 
+/// A node's body read as text.
+///
+/// A [`Value`] rather than a `&str`, for the same reason an attribute is: the
+/// two forms whose text exists nowhere in the buffer — packed digit runs and
+/// JIDs — stay in parts and render on demand, so nothing is allocated to look
+/// at one.
+///
+/// Distinct from [`content_bytes`], which is the `<enc>` case: a raw payload
+/// is bytes that happen not to be text, and reading one as text would render
+/// ciphertext as mojibake rather than failing.
+pub fn content_string<'a>(node: &NodeRef<'a>) -> Result<Value<'a>, DeriveError> {
+    node.content()
+        .as_value()
+        .ok_or(DeriveError::MissingContent {
+            field: Field::Bytes,
+        })
+}
+
 /// A node's body read as an unsigned integer.
 pub fn content_uint(node: &NodeRef<'_>) -> Result<u64, DeriveError> {
     let bytes = content_bytes(node)?;

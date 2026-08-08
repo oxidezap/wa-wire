@@ -215,8 +215,9 @@ and derivation sees one stanza. That list is a design limit and will not shrink.
 `UNTYPED_FIELDS` is **empty**: its one entry was an enum whatspec declared with
 no variants, which
 [oxidezap/whatspec#42](https://github.com/oxidezap/whatspec/pull/42) fixed at
-the source rather than here. `UNMODELLED_FIELDS` is the one that is actually
-work.
+the source rather than here. `UNMODELLED_FIELDS` is the one that was actually work,
+and it is empty: the last four entries were union mixins, which now generate an
+enum apiece.
 
 ## License
 

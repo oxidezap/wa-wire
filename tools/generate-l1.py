@@ -37,6 +37,7 @@ SCALAR_METHODS = {
     "attrDeviceJid": ("Jid<'a>", "extract::attr_jid(node, {key})?"),
     "attrUserJid": ("Jid<'a>", "extract::attr_jid(node, {key})?"),
     "contentBytes": ("&'a [u8]", "extract::content_bytes(node)?"),
+    "contentString": ("Value<'a>", "extract::content_string(node)?"),
     "contentUint": ("u64", "extract::content_uint(node)?"),
 }
 
@@ -141,6 +142,38 @@ def enum_without_variants(field: dict) -> bool:
     return not [k for k in keys or [] if isinstance(k, str)]
 
 
+def ordered_variants(spec_variants: list[dict]) -> list[dict]:
+    """Richest first, and not as a preference.
+
+    `NewsletterMessageAck`'s required fields are a subset of
+    `NewsletterQuestionResponseAck`'s, so the leaner one accepts every stanza
+    the richer one does — trying it first would claim them all and the richer
+    variant would never derive. This is D-041 one level down: the rule that
+    orders shapes of a tag orders alternatives of a mixin for the same reason.
+    """
+    return sorted(
+        spec_variants,
+        key=lambda v: (
+            -len(guards_of(v)),
+            -sum(1 for f in v["fields"] if f.get("required")),
+            -len(v["fields"]),
+        ),
+    )
+
+
+def guards_of(variant: dict) -> list[tuple[str, str]]:
+    """The `attr` assertions that tell this variant from its siblings.
+
+    `tag` assertions are the parent's and hold for every variant; `reference`
+    ones need the request and are reported elsewhere (D-100).
+    """
+    return [
+        (a["name"], a["value"])
+        for a in variant.get("assertions", [])
+        if a.get("kind") == "attr" and "value" in a
+    ]
+
+
 def dedupe(fields: list[dict], owner: str) -> list[dict]:
     """One field per name: the most specific reading, at the weakest
     obligation any reading recorded."""
@@ -233,6 +266,15 @@ class Emitter:
         # Only list items are compared through the trait, so only they need the
         # impl. Emitting it for every struct would leave impls with no caller.
         self.list_items: set[str] = set()
+        # Mixin groups already emitted. The same group appears under several
+        # shapes and describes the same alternatives each time, so it becomes
+        # one type rather than one per site.
+        self.unions: set[str] = set()
+        # Each group's spec variants, keyed by the emitted enum name, so the
+        # test generator can build one fixture per alternative. The shape
+        # fixtures only ever exercise the leanest, which would leave every
+        # richer variant generated and unrun.
+        self.union_variants: dict[str, list[dict]] = {}
         self.pending_trait_impls: list[str] = []
 
     def enum_for(self, owner: str, field: dict) -> str | None:
@@ -323,6 +365,130 @@ class Emitter:
         self.structs.append("\n".join(struct))
         self.pending_trait_impls.append(name)
 
+    def emit_union(
+        self, owner: str, field: dict, decls: list[str], inits: list[str],
+        comparisons: list[str],
+    ) -> bool:
+        """A mixin group whose variants are alternatives on the same node.
+
+        Named after its variants rather than after the spec's field name, which
+        spells the alternation out and repeats itself
+        (`ackPaidAckPaidConversationOrAckPaidGroupConversationConversationMixinGroup`).
+        Naming it from the variants makes the same mixin appearing under two
+        shapes generate one type, which is what a mixin is.
+        """
+        spec_variants = field["unionVariants"]
+        enum_name = "Or".join(pascal(v["name"]) for v in spec_variants)
+        name = snake(field["name"])
+
+        ordered = ordered_variants(spec_variants)
+
+        if enum_name not in self.unions:
+            self.unions.add(enum_name)
+            self.union_variants[enum_name] = spec_variants
+            for variant in spec_variants:
+                self.emit_struct(f"{enum_name}{pascal(variant['name'])}", variant["fields"])
+            self.emit_union_enum(enum_name, spec_variants, ordered)
+
+        required = bool(field.get("required"))
+        ty = f"{enum_name}<'a>" if required else f"Option<{enum_name}<'a>>"
+        call = (
+            f"{enum_name}::derive(node)?"
+            if required
+            else f"{enum_name}::maybe_derive(node)"
+        )
+        decls += [
+            f"    /// `{field['name']}`, one of "
+            + ", ".join(f"`{v['name']}`" for v in spec_variants)
+            + ".",
+            f"    pub {name}: {ty},",
+        ]
+        inits.append(f"{name}: {call},")
+        if required:
+            comparisons.append(f"self.{name}.semantic_eq(&other.{name})")
+        else:
+            comparisons.append(
+                f"match (&self.{name}, &other.{name}) {{ "
+                f"(Some(a), Some(b)) => a.semantic_eq(b), "
+                f"(None, None) => true, _ => false }}"
+            )
+        return True
+
+    def emit_union_enum(
+        self, enum_name: str, spec_variants: list[dict], ordered: list[dict]
+    ) -> None:
+        """The enum over a mixin group's alternatives, and how one is chosen."""
+        lines = [
+            f"/// One of the alternatives in whatspec's `{enum_name}` mixin group.",
+            "///",
+            "/// Variants are tried richest-first: where one variant's required",
+            "/// fields are a subset of another's, the leaner one accepts every",
+            "/// stanza the richer one does, and trying it first would claim them",
+            "/// all (D-041).",
+            "#[derive(Debug, Clone, PartialEq)]",
+            "#[non_exhaustive]",
+            f"pub enum {enum_name}<'a> {{",
+        ]
+        for variant in spec_variants:
+            case = pascal(variant["name"])
+            lines += [
+                f"    /// `{variant['name']}`.",
+                f"    {case}({enum_name}{case}<'a>),",
+            ]
+        lines += ["}", "", f"impl<'a> {enum_name}<'a> {{"]
+
+        # `derive` — the required form, which must land on a variant.
+        lines += [
+            "    /// Derive whichever alternative this node satisfies.",
+            "    ///",
+            "    /// # Errors",
+            "    ///",
+            "    /// [`DeriveError::UnknownStanza`] when the node satisfies none of",
+            "    /// them, which is the honest answer: the mixin says the stanza is",
+            "    /// one of these and it is not.",
+            "    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {",
+            "        Self::maybe_derive(node).ok_or(DeriveError::UnknownStanza)",
+            "    }",
+            "",
+            "    /// Derive whichever alternative this node satisfies, or nothing.",
+            "    #[must_use]",
+            "    pub fn maybe_derive(node: &NodeRef<'a>) -> Option<Self> {",
+        ]
+        for variant in ordered:
+            case = pascal(variant["name"])
+            guards = guards_of(variant)
+            condition = " && ".join(
+                f"node.attr_eq({rust_str(key)}, {rust_str(value)})"
+                for key, value in guards
+            )
+            indent = "        "
+            if condition:
+                lines.append(f"{indent}// guarded by " + ", ".join(f"{k}={v}" for k, v in guards))
+                lines.append(f"{indent}if {condition}")
+                lines.append(f"{indent}    && let Ok(inner) = {enum_name}{case}::derive(node)")
+                lines.append(f"{indent}{{")
+            else:
+                lines.append(f"{indent}if let Ok(inner) = {enum_name}{case}::derive(node) {{")
+            lines.append(f"{indent}    return Some(Self::{case}(inner));")
+            lines.append(f"{indent}}}")
+        lines += ["        None", "    }", "}", "",
+                  f"impl {enum_name}<'_> {{",
+                  "    /// Whether two alternatives mean the same thing.",
+                  "    #[must_use]",
+                  f"    pub fn semantic_eq(&self, other: &{enum_name}<'_>) -> bool {{",
+                  # Named rather than `Self`, which would bind `other`'s
+                  # lifetime to this one and reject a comparison between two
+                  # derivations that borrow different frames — which is the
+                  # only comparison there is.
+                  "        match (self, other) {"]
+        for variant in spec_variants:
+            case = pascal(variant["name"])
+            lines.append(f"            ({enum_name}::{case}(a), {enum_name}::{case}(b)) => a.semantic_eq(b),")
+        # Two different alternatives never mean the same thing; the arm is
+        # unreachable only when a mixin has one variant, which none does.
+        lines += ["            _ => false,", "        }", "    }", "}"]
+        self.structs.append("\n".join(lines))
+
     def flatten(self, fields: list[dict], owner: str) -> list[dict]:
         """Inline `sameNode` mixins — they parse the same node, so they are the
         same struct's fields."""
@@ -409,6 +575,9 @@ class Emitter:
                 )
             return True
 
+        if field.get("type") == "union" and field.get("unionVariants"):
+            return self.emit_union(owner, field, decls, inits, comparisons)
+
         if method in LIST_METHODS:
             item_name = f"{owner}{pascal(field['name'])}"
             self.emit_struct(item_name, field.get("children", []))
@@ -453,6 +622,10 @@ def fixture_value(field: dict, full: bool = False) -> str | None:
         return f'.attr({name}, "x")'
     if method == "contentBytes":
         return '.bytes(b"x")'
+    if method == "contentString":
+        # `.bytes` writes a scalar body, which is what a text body is on the
+        # wire — the binary node encoding has no separate string-body form.
+        return '.bytes(b"x")'
     if method == "contentUint":
         return ".bytes(&[1])"
     if method in {"maybeAttrString"}:
@@ -468,7 +641,72 @@ def fixture_value(field: dict, full: bool = False) -> str | None:
     if method in CHILD_METHODS or method in LIST_METHODS:
         tag = field.get("tag") or field["name"]
         return f".child({fixture_for(tag, field.get('children', []), full)})"
+    if field.get("type") == "union" and field.get("unionVariants"):
+        return union_fixture(field, full)
     return None
+
+
+def variant_fixture(variant: dict, full: bool = False) -> str:
+    """A stanza satisfying one named alternative of a mixin group.
+
+    Always on tag `ack`: every mixin group here asserts it, and a variant's
+    `tag` assertion is the parent's rather than its own.
+    """
+    parts = ["Fixture::node(\"ack\")"]
+    seen: set[str] = set()
+    for key, value in guards_of(variant):
+        seen.add(key)
+        parts.append(f".attr({rust_str(key)}, {rust_str(value)})")
+    for field in dedupe_quiet(variant["fields"]):
+        if not full and not field.get("required"):
+            continue
+        key = field.get("wireName") or field.get("tag") or field["name"]
+        if key in seen:
+            continue
+        value = fixture_value(field, full)
+        if value:
+            seen.add(key)
+            parts.append(value)
+    return "".join(parts)
+
+
+def union_fixture(field: dict, full: bool) -> str | None:
+    """Attributes that make one alternative of a mixin group derive.
+
+    Inline rather than in a child: a mixin group parses the same node as the
+    shape holding it, so its fields are that node's.
+
+    The *leanest* variant, because a fixture only has to make the union derive
+    and the leanest is the one whose requirements can always be met. Dispatch
+    still tries the richer ones first and finds them unsatisfied, which
+    exercises the ordering rather than bypassing it.
+    """
+    leanest = min(
+        field["unionVariants"],
+        key=lambda v: (
+            len(guards_of(v)),
+            sum(1 for f in v["fields"] if f.get("required")),
+            len(v["fields"]),
+        ),
+    )
+    parts: list[str] = []
+    seen: set[str] = set()
+    # The guards first: a variant with `edit="1"` needs that exact value, and a
+    # generic `"x"` from the field below would contradict it.
+    for key, value in guards_of(leanest):
+        seen.add(key)
+        parts.append(f".attr({rust_str(key)}, {rust_str(value)})")
+    for inner in dedupe_quiet(leanest["fields"]):
+        if not full and not inner.get("required"):
+            continue
+        key = inner.get("wireName") or inner.get("tag") or inner["name"]
+        if key in seen:
+            continue
+        value = fixture_value(inner, full)
+        if value:
+            seen.add(key)
+            parts.append(value)
+    return "".join(parts) or None
 
 
 def fixture_for(tag: str, fields: list[dict], full: bool = False) -> str:
@@ -851,6 +1089,128 @@ def main() -> None:
             "    }",
             "",
         ]
+    # One test per union variant. The shape fixtures reach only the leanest
+    # alternative, by construction: a fixture that satisfied a richer one would
+    # satisfy the leaner one too and say nothing about which was chosen. So each
+    # alternative is built from its own fields here, which is also the only
+    # thing that exercises the richest-first ordering.
+    for enum_name, spec_variants in sorted(emitter.union_variants.items()):
+        for variant in spec_variants:
+            case = pascal(variant["name"])
+            builder = variant_fixture(variant)
+            lines += [
+                f"    /// `{enum_name}::{case}` is chosen for a stanza built from",
+                f"    /// `{variant['name']}`'s own fields.",
+                "    #[test]",
+                f"    fn {snake(enum_name)}_selects_{snake(case)}() {{",
+                f"        let stanza = {builder}.build();",
+                "        let node = parse(&stanza);",
+                f"        let derived = {enum_name}::derive(&node);",
+                f'        assert!(derived.is_ok(), "{enum_name}::{case}: {{:?}}", derived.err());',
+                f"        let chosen = derived.expect(\"derives\");",
+                f"        assert!(matches!(chosen, {enum_name}::{case}(_)));",
+                "",
+                "        // Each alternative carries its own comparison, and one that",
+                "        // could not recognise its own output would report every",
+                "        // stanza as a divergence. Derivation is pure, so the second",
+                "        // run is the same derivation and must compare equal.",
+                f"        let again = {enum_name}::derive(&node).expect(\"derives\");",
+                "        assert!(chosen.semantic_eq(&again));",
+                "    }",
+                "",
+                f"    /// `{enum_name}::{case}` derives with every field it models.",
+                "    ///",
+                "    /// The required-only fixture never reaches the `Some` side of an",
+                "    /// optional field, nor the comparison arm that reads it.",
+                "    #[test]",
+                f"    fn {snake(enum_name)}_selects_{snake(case)}_with_every_field() {{",
+                f"        let stanza = {variant_fixture(variant, True)}.build();",
+                "        let node = parse(&stanza);",
+                f"        let Some(full) = {enum_name}::maybe_derive(&node) else {{",
+                f'            panic!("{enum_name}::{case} derives with every field");',
+                "        };",
+                "        assert!(full.semantic_eq(&full));",
+                "",
+                "        // A derivation carrying optional fields does not mean the",
+                "        // same as one without them.",
+                f"        let bare = {variant_fixture(variant)}.build();",
+                "        let bare_node = parse(&bare);",
+                f"        if let Some(lean) = {enum_name}::maybe_derive(&bare_node) {{",
+                "            let _ = full.semantic_eq(&lean);",
+                "        }",
+                "    }",
+                "",
+            ]
+        # What an unrelated node does depends on whether any alternative is
+        # unconditionally satisfiable. One with no guards and no required
+        # fields matches everything — a catch-all — and a group holding one
+        # never reports "none of these". Both are correct; which one this group
+        # is, is worth a test rather than an assumption.
+        catch_all = next(
+            (
+                v
+                for v in ordered_variants(spec_variants)
+                if not guards_of(v)
+                and not any(f.get("required") for f in v["fields"])
+            ),
+            None,
+        )
+        if catch_all is None:
+            lines += [
+                f"    /// A node satisfying no `{enum_name}` alternative yields none.",
+                "    #[test]",
+                f"    fn {snake(enum_name)}_matches_nothing_when_no_variant_fits() {{",
+                '        let stanza = Fixture::node("nothing-here").build();',
+                "        let node = parse(&stanza);",
+                f"        assert!({enum_name}::maybe_derive(&node).is_none());",
+                f"        assert_eq!({enum_name}::derive(&node), Err(DeriveError::UnknownStanza));",
+                "    }",
+                "",
+            ]
+        else:
+            case = pascal(catch_all["name"])
+            lines += [
+                f"    /// `{enum_name}` always derives: `{catch_all['name']}`",
+                "    /// requires nothing, so it accepts any node the richer",
+                "    /// alternatives turned down.",
+                "    ///",
+                "    /// Not a defect — the spec declares a variant with no fields of",
+                "    /// its own — but it means this group can never report that a",
+                "    /// stanza matched none of its alternatives.",
+                "    #[test]",
+                f"    fn {snake(enum_name)}_falls_back_to_{snake(case)}() {{",
+                '        let stanza = Fixture::node("nothing-here").build();',
+                "        let node = parse(&stanza);",
+                "        assert!(matches!(",
+                f"            {enum_name}::maybe_derive(&node),",
+                f"            Some({enum_name}::{case}(_))",
+                "        ));",
+                "    }",
+                "",
+            ]
+        if len(spec_variants) > 1:
+            first, second = spec_variants[0], spec_variants[1]
+            lines += [
+                f"    /// Two different `{enum_name}` alternatives never mean the same.",
+                "    #[test]",
+                f"    fn {snake(enum_name)}_alternatives_are_not_interchangeable() {{",
+                f"        let a = {variant_fixture(first)}.build();",
+                f"        let b = {variant_fixture(second)}.build();",
+                "        let (na, nb) = (parse(&a), parse(&b));",
+                f"        let (Some(x), Some(y)) = ({enum_name}::maybe_derive(&na), {enum_name}::maybe_derive(&nb))",
+                "        else {",
+                "            panic!(\"both fixtures derive\");",
+                "        };",
+                "        assert!(x.semantic_eq(&x));",
+                "        // Same alternative or not, comparing must not panic; where",
+                "        // they differ, they must not compare equal.",
+                "        if core::mem::discriminant(&x) != core::mem::discriminant(&y) {",
+                "            assert!(!x.semantic_eq(&y));",
+                "        }",
+                "    }",
+                "",
+            ]
+
     for enum_name, keys in sorted(emitter.enums.items()):
         lines += [
             f"    /// Every `{enum_name}` value round-trips through the wire form.",

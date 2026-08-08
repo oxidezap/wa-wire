@@ -53,7 +53,7 @@ because it is three different things:
 | --- | --- | --- | --- |
 | `REQUEST_SCOPED_ASSERTIONS` | checks a pure derivation cannot make | 9 | **no** — a design limit |
 | `UNTYPED_FIELDS` | crosses, but below its declared type | 0 | fixed upstream |
-| `UNMODELLED_FIELDS` | not modelled yet | 4 | yes — this is the work |
+| `UNMODELLED_FIELDS` | not modelled yet | 0 | it was the work |
 
 `UNTYPED_FIELDS` emptied without a line changing here. Its one entry was an
 `attrEnum` whatspec declared with no variants — the values lived on sibling
@@ -73,8 +73,23 @@ by construction — and giving the derivation a request would end the purity tha
 lets it run once, host-side. They are emitted as text for the caller that does
 hold the request.
 
-`UNMODELLED_FIELDS` is down to four, all union mixins, which need recursive
-in-struct dispatch.
+### Mixin groups
+
+The last four entries were union mixins: a field whose value is one of several
+named alternatives parsed off the same node. Each becomes an enum, named after
+its variants so that the same group under two shapes generates one type.
+
+Alternatives are tried **richest-first**, and the order decides rather than
+merely tidies. `NewsletterMessageAck`'s required fields are a subset of
+`NewsletterQuestionResponseAck`'s, so the leaner one accepts every stanza the
+richer one does — trying it first would claim them all and the richer variant
+would never derive. That is D-041 one level down, and a hand-written test pins
+it by failing when the order is reversed.
+
+One group has an alternative with no guards and no required fields, so it
+matches anything the others turn down. The generated test says so by name: a
+group with a catch-all can never report that a stanza matched none of its
+alternatives, which is a fact about that group and not a defect.
 
 ## A field is read by its wire name
 

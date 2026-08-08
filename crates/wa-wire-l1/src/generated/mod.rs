@@ -220,6 +220,150 @@ impl ENUMALLNONE {
     }
 }
 
+/// Wire values for `ENUMCBPNBPPMP`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ENUMCBPNBPPMP {
+    /// `CBP`
+    CBP,
+    /// `NBP`
+    NBP,
+    /// `PMP`
+    PMP,
+}
+
+impl ENUMCBPNBPPMP {
+    /// Resolve a wire value, or `None` if this build does not know it.
+    #[must_use]
+    pub fn from_wire(value: Value<'_>) -> Option<Self> {
+        if value.eq_str("CBP") {
+            return Some(Self::CBP);
+        }
+        if value.eq_str("NBP") {
+            return Some(Self::NBP);
+        }
+        if value.eq_str("PMP") {
+            return Some(Self::PMP);
+        }
+        None
+    }
+
+    /// The wire value this variant carries.
+    #[must_use]
+    pub const fn as_wire(self) -> &'static str {
+        match self {
+            Self::CBP => "CBP",
+            Self::NBP => "NBP",
+            Self::PMP => "PMP",
+        }
+    }
+}
+
+/// Wire values for `ENUMDELIVERYNOOPTIMIZATION`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ENUMDELIVERYNOOPTIMIZATION {
+    /// `delivery`
+    Delivery,
+    /// `no_optimization`
+    NoOptimization,
+}
+
+impl ENUMDELIVERYNOOPTIMIZATION {
+    /// Resolve a wire value, or `None` if this build does not know it.
+    #[must_use]
+    pub fn from_wire(value: Value<'_>) -> Option<Self> {
+        if value.eq_str("delivery") {
+            return Some(Self::Delivery);
+        }
+        if value.eq_str("no_optimization") {
+            return Some(Self::NoOptimization);
+        }
+        None
+    }
+
+    /// The wire value this variant carries.
+    #[must_use]
+    pub const fn as_wire(self) -> &'static str {
+        match self {
+            Self::Delivery => "delivery",
+            Self::NoOptimization => "no_optimization",
+        }
+    }
+}
+
+/// Wire values for `ENUMFALSETRUE`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ENUMFALSETRUE {
+    /// `false`
+    False,
+    /// `true`
+    True,
+}
+
+impl ENUMFALSETRUE {
+    /// Resolve a wire value, or `None` if this build does not know it.
+    #[must_use]
+    pub fn from_wire(value: Value<'_>) -> Option<Self> {
+        if value.eq_str("false") {
+            return Some(Self::False);
+        }
+        if value.eq_str("true") {
+            return Some(Self::True);
+        }
+        None
+    }
+
+    /// The wire value this variant carries.
+    #[must_use]
+    pub const fn as_wire(self) -> &'static str {
+        match self {
+            Self::False => "false",
+            Self::True => "true",
+        }
+    }
+}
+
+/// Wire values for `ENUMFREECUSTOMERSERVICEFREEENTRYPOINTREGULAR`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ENUMFREECUSTOMERSERVICEFREEENTRYPOINTREGULAR {
+    /// `free_customer_service`
+    FreeCustomerService,
+    /// `free_entry_point`
+    FreeEntryPoint,
+    /// `regular`
+    Regular,
+}
+
+impl ENUMFREECUSTOMERSERVICEFREEENTRYPOINTREGULAR {
+    /// Resolve a wire value, or `None` if this build does not know it.
+    #[must_use]
+    pub fn from_wire(value: Value<'_>) -> Option<Self> {
+        if value.eq_str("free_customer_service") {
+            return Some(Self::FreeCustomerService);
+        }
+        if value.eq_str("free_entry_point") {
+            return Some(Self::FreeEntryPoint);
+        }
+        if value.eq_str("regular") {
+            return Some(Self::Regular);
+        }
+        None
+    }
+
+    /// The wire value this variant carries.
+    #[must_use]
+    pub const fn as_wire(self) -> &'static str {
+        match self {
+            Self::FreeCustomerService => "free_customer_service",
+            Self::FreeEntryPoint => "free_entry_point",
+            Self::Regular => "regular",
+        }
+    }
+}
+
 /// Wire values for `EVENTTYPES`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -3072,6 +3216,457 @@ impl Ack<'_> {
             })
     }
 }
+/// Derived from whatspec's `AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizDeliveryContext` shape.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizDeliveryContext<'a> {
+    /// `optimizationGoal`, via `attrEnum`.
+    pub optimization_goal: ENUMDELIVERYNOOPTIMIZATION,
+    /// The node this was derived from, for fields the shape does
+    /// not model yet.
+    pub node: NodeRef<'a>,
+}
+
+impl<'a> AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizDeliveryContext<'a> {
+    /// Derive from a node already known to match this shape.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Ok(Self {
+            optimization_goal: extract::attr_enum(
+                node,
+                "optimization_goal",
+                ENUMDELIVERYNOOPTIMIZATION::from_wire,
+            )?,
+            node: *node,
+        })
+    }
+}
+
+impl AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizDeliveryContext<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizDeliveryContext<
+            '_,
+        >,
+    ) -> bool {
+        self.optimization_goal == other.optimization_goal
+    }
+}
+/// Derived from whatspec's `AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferralSourceUrl` shape.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferralSourceUrl<
+    'a,
+> {
+    /// `elementValue`, via `contentString`.
+    pub element_value: Value<'a>,
+    /// The node this was derived from, for fields the shape does
+    /// not model yet.
+    pub node: NodeRef<'a>,
+}
+
+impl<'a>
+    AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferralSourceUrl<'a>
+{
+    /// Derive from a node already known to match this shape.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Ok(Self {
+            element_value: extract::content_string(node)?,
+            node: *node,
+        })
+    }
+}
+
+impl
+    AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferralSourceUrl<'_>
+{
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferralSourceUrl<'_>,
+    ) -> bool {
+        self.element_value.semantic_eq(other.element_value)
+    }
+}
+/// Derived from whatspec's `AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferral` shape.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferral<'a> {
+    /// `sourceType`, via `maybeAttrString`.
+    pub source_type: Option<Value<'a>>,
+    /// `sourceUrl`, via `maybeChild`.
+    pub source_url: Option<alloc::boxed::Box<AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferralSourceUrl<'a>>>,
+    /// The node this was derived from, for fields the shape does
+    /// not model yet.
+    pub node: NodeRef<'a>,
+}
+
+impl<'a> AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferral<'a> {
+    /// Derive from a node already known to match this shape.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Ok(Self {
+            source_type: extract::maybe_attr_string(node, "source_type"),
+            source_url: match extract::maybe_child(node, "source_url") { Some(child) => Some(alloc::boxed::Box::new(AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferralSourceUrl::derive(&child)?)), None => None },
+            node: *node,
+        })
+    }
+}
+
+impl AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferral<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferral<
+            '_,
+        >,
+    ) -> bool {
+        (match (self.source_type, other.source_type) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (&self.source_url, &other.source_url) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        })
+    }
+}
+/// Derived from whatspec's `AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOrigin` shape.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOrigin<'a> {
+    /// `type`, via `attrString`.
+    pub r#type: Value<'a>,
+    /// `referral`, via `maybeChild`.
+    pub referral: Option<
+        alloc::boxed::Box<
+            AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferral<'a>,
+        >,
+    >,
+    /// The node this was derived from, for fields the shape does
+    /// not model yet.
+    pub node: NodeRef<'a>,
+}
+
+impl<'a> AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOrigin<'a> {
+    /// Derive from a node already known to match this shape.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Ok(Self {
+            r#type: extract::attr_string(node, "type")?,
+            referral: match extract::maybe_child(node, "referral") { Some(child) => Some(alloc::boxed::Box::new(AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOriginReferral::derive(&child)?)), None => None },
+            node: *node,
+        })
+    }
+}
+
+impl AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOrigin<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOrigin<'_>,
+    ) -> bool {
+        (self.r#type.semantic_eq(other.r#type))
+            && (match (&self.referral, &other.referral) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+    }
+}
+/// Derived from whatspec's `AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizPricing` shape.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizPricing<'a> {
+    /// `consumerCountryCode`, via `maybeAttrString`.
+    pub consumer_country_code: Option<Value<'a>>,
+    /// `businessCountryCode`, via `maybeAttrString`.
+    pub business_country_code: Option<Value<'a>>,
+    /// `conversationStatus`, via `maybeAttrInt`.
+    pub conversation_status: Option<i64>,
+    /// `latestC2bTimestamp`, via `maybeAttrInt`.
+    pub latest_c2b_timestamp: Option<i64>,
+    /// `analyticsConversationId`, via `maybeAttrString`.
+    pub analytics_conversation_id: Option<Value<'a>>,
+    /// `b2cTimestamp`, via `maybeAttrInt`.
+    pub b2c_timestamp: Option<i64>,
+    /// The node this was derived from, for fields the shape does
+    /// not model yet.
+    pub node: NodeRef<'a>,
+}
+
+impl<'a> AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizPricing<'a> {
+    /// Derive from a node already known to match this shape.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Ok(Self {
+            consumer_country_code: extract::maybe_attr_string(node, "consumer_country_code"),
+            business_country_code: extract::maybe_attr_string(node, "business_country_code"),
+            conversation_status: extract::maybe_attr_int(node, "conversation_status")?,
+            latest_c2b_timestamp: extract::maybe_attr_int(node, "latest_c2b_timestamp")?,
+            analytics_conversation_id: extract::maybe_attr_string(
+                node,
+                "analytics_conversation_id",
+            ),
+            b2c_timestamp: extract::maybe_attr_int(node, "b2c_timestamp")?,
+            node: *node,
+        })
+    }
+}
+
+impl AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizPricing<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizPricing<'_>,
+    ) -> bool {
+        (match (self.consumer_country_code, other.consumer_country_code) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (match (self.business_country_code, other.business_country_code) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }) && (self.conversation_status == other.conversation_status)
+            && (self.latest_c2b_timestamp == other.latest_c2b_timestamp)
+            && (match (
+                self.analytics_conversation_id,
+                other.analytics_conversation_id,
+            ) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.b2c_timestamp == other.b2c_timestamp)
+    }
+}
+/// Derived from whatspec's `AckPaidConversationOrAckPaidGroupConversationAckPaidConversation` shape.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct AckPaidConversationOrAckPaidGroupConversationAckPaidConversation<'a> {
+    /// `bizPaidConvoId`, via `attrString`.
+    pub biz_paid_convo_id: Value<'a>,
+    /// `bizPricingModel`, via `attrEnum`.
+    pub biz_pricing_model: ENUMCBPNBPPMP,
+    /// `bizBillable`, via `attrEnum`.
+    pub biz_billable: ENUMFALSETRUE,
+    /// `bizExpirationTimestamp`, via `maybeAttrInt`.
+    pub biz_expiration_timestamp: Option<i64>,
+    /// `bizPricingCategory`, via `maybeAttrString`.
+    pub biz_pricing_category: Option<Value<'a>>,
+    /// `bizPricingType`, via `maybeAttrEnum`.
+    pub biz_pricing_type: Option<ENUMFREECUSTOMERSERVICEFREEENTRYPOINTREGULAR>,
+    /// `bizDeliveryContext`, via `maybeChild`.
+    pub biz_delivery_context: Option<
+        alloc::boxed::Box<
+            AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizDeliveryContext<'a>,
+        >,
+    >,
+    /// `bizOrigin`, via `maybeChild`.
+    pub biz_origin: Option<
+        alloc::boxed::Box<
+            AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOrigin<'a>,
+        >,
+    >,
+    /// `bizPricing`, via `maybeChild`.
+    pub biz_pricing: Option<
+        alloc::boxed::Box<
+            AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizPricing<'a>,
+        >,
+    >,
+    /// The node this was derived from, for fields the shape does
+    /// not model yet.
+    pub node: NodeRef<'a>,
+}
+
+impl<'a> AckPaidConversationOrAckPaidGroupConversationAckPaidConversation<'a> {
+    /// Derive from a node already known to match this shape.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Ok(Self {
+            biz_paid_convo_id: extract::attr_string(node, "paid_convo_id")?,
+            biz_pricing_model: extract::attr_enum(node, "pricing_model", ENUMCBPNBPPMP::from_wire)?,
+            biz_billable: extract::attr_enum(node, "billable", ENUMFALSETRUE::from_wire)?,
+            biz_expiration_timestamp: extract::maybe_attr_int(node, "expiration_timestamp")?,
+            biz_pricing_category: extract::maybe_attr_string(node, "pricing_category"),
+            biz_pricing_type: extract::maybe_attr_enum(node, "pricing_type", ENUMFREECUSTOMERSERVICEFREEENTRYPOINTREGULAR::from_wire)?,
+            biz_delivery_context: match extract::maybe_child(node, "delivery_context") { Some(child) => Some(alloc::boxed::Box::new(AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizDeliveryContext::derive(&child)?)), None => None },
+            biz_origin: match extract::maybe_child(node, "origin") { Some(child) => Some(alloc::boxed::Box::new(AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizOrigin::derive(&child)?)), None => None },
+            biz_pricing: match extract::maybe_child(node, "pricing") { Some(child) => Some(alloc::boxed::Box::new(AckPaidConversationOrAckPaidGroupConversationAckPaidConversationBizPricing::derive(&child)?)), None => None },
+            node: *node,
+        })
+    }
+}
+
+impl AckPaidConversationOrAckPaidGroupConversationAckPaidConversation<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &AckPaidConversationOrAckPaidGroupConversationAckPaidConversation<'_>,
+    ) -> bool {
+        (self.biz_paid_convo_id.semantic_eq(other.biz_paid_convo_id))
+            && (self.biz_pricing_model == other.biz_pricing_model)
+            && (self.biz_billable == other.biz_billable)
+            && (self.biz_expiration_timestamp == other.biz_expiration_timestamp)
+            && (match (self.biz_pricing_category, other.biz_pricing_category) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (self.biz_pricing_type == other.biz_pricing_type)
+            && (match (&self.biz_delivery_context, &other.biz_delivery_context) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (&self.biz_origin, &other.biz_origin) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+            && (match (&self.biz_pricing, &other.biz_pricing) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
+    }
+}
+/// Derived from whatspec's `AckPaidConversationOrAckPaidGroupConversationAckPaidGroupConversation` shape.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct AckPaidConversationOrAckPaidGroupConversationAckPaidGroupConversation<'a> {
+    /// `bizPricingBusinessCountryCode`, via `maybeAttrString`.
+    pub biz_pricing_business_country_code: Option<Value<'a>>,
+    /// The node this was derived from, for fields the shape does
+    /// not model yet.
+    pub node: NodeRef<'a>,
+}
+
+impl<'a> AckPaidConversationOrAckPaidGroupConversationAckPaidGroupConversation<'a> {
+    /// Derive from a node already known to match this shape.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Ok(Self {
+            biz_pricing_business_country_code: extract::maybe_attr_string(
+                node,
+                "business_country_code",
+            ),
+            node: *node,
+        })
+    }
+}
+
+impl AckPaidConversationOrAckPaidGroupConversationAckPaidGroupConversation<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &AckPaidConversationOrAckPaidGroupConversationAckPaidGroupConversation<'_>,
+    ) -> bool {
+        match (
+            self.biz_pricing_business_country_code,
+            other.biz_pricing_business_country_code,
+        ) {
+            (Some(a), Some(b)) => a.semantic_eq(b),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+}
+/// One of the alternatives in whatspec's `AckPaidConversationOrAckPaidGroupConversation` mixin group.
+///
+/// Variants are tried richest-first: where one variant's required
+/// fields are a subset of another's, the leaner one accepts every
+/// stanza the richer one does, and trying it first would claim them
+/// all (D-041).
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum AckPaidConversationOrAckPaidGroupConversation<'a> {
+    /// `AckPaidConversation`.
+    AckPaidConversation(AckPaidConversationOrAckPaidGroupConversationAckPaidConversation<'a>),
+    /// `AckPaidGroupConversation`.
+    AckPaidGroupConversation(
+        AckPaidConversationOrAckPaidGroupConversationAckPaidGroupConversation<'a>,
+    ),
+}
+
+impl<'a> AckPaidConversationOrAckPaidGroupConversation<'a> {
+    /// Derive whichever alternative this node satisfies.
+    ///
+    /// # Errors
+    ///
+    /// [`DeriveError::UnknownStanza`] when the node satisfies none of
+    /// them, which is the honest answer: the mixin says the stanza is
+    /// one of these and it is not.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Self::maybe_derive(node).ok_or(DeriveError::UnknownStanza)
+    }
+
+    /// Derive whichever alternative this node satisfies, or nothing.
+    #[must_use]
+    pub fn maybe_derive(node: &NodeRef<'a>) -> Option<Self> {
+        if let Ok(inner) =
+            AckPaidConversationOrAckPaidGroupConversationAckPaidConversation::derive(node)
+        {
+            return Some(Self::AckPaidConversation(inner));
+        }
+        if let Ok(inner) =
+            AckPaidConversationOrAckPaidGroupConversationAckPaidGroupConversation::derive(node)
+        {
+            return Some(Self::AckPaidGroupConversation(inner));
+        }
+        None
+    }
+}
+
+impl AckPaidConversationOrAckPaidGroupConversation<'_> {
+    /// Whether two alternatives mean the same thing.
+    #[must_use]
+    pub fn semantic_eq(&self, other: &AckPaidConversationOrAckPaidGroupConversation<'_>) -> bool {
+        match (self, other) {
+            (
+                AckPaidConversationOrAckPaidGroupConversation::AckPaidConversation(a),
+                AckPaidConversationOrAckPaidGroupConversation::AckPaidConversation(b),
+            ) => a.semantic_eq(b),
+            (
+                AckPaidConversationOrAckPaidGroupConversation::AckPaidGroupConversation(a),
+                AckPaidConversationOrAckPaidGroupConversation::AckPaidGroupConversation(b),
+            ) => a.semantic_eq(b),
+            _ => false,
+        }
+    }
+}
 /// Derived from whatspec's `ParseNewsletterResponseNegative` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -3086,6 +3681,9 @@ pub struct ParseNewsletterResponseNegative<'a> {
     pub edit: Value<'a>,
     /// `frankingReportingTagElementValue`, via `contentBytes`.
     pub franking_reporting_tag_element_value: &'a [u8],
+    /// `ackPaidAckPaidConversationOrAckPaidGroupConversationConversationMixinGroup`, one of `AckPaidConversation`, `AckPaidGroupConversation`.
+    pub ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group:
+        Option<AckPaidConversationOrAckPaidGroupConversation<'a>>,
     /// `applicationError`, via `attrInt`.
     pub application_error: i64,
     /// `backoff`, via `attrInt`.
@@ -3104,6 +3702,7 @@ impl<'a> ParseNewsletterResponseNegative<'a> {
             t: extract::attr_int(node, "t")?,
             edit: extract::attr_string(node, "edit")?,
             franking_reporting_tag_element_value: extract::content_bytes(node)?,
+            ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group: AckPaidConversationOrAckPaidGroupConversation::maybe_derive(node),
             application_error: extract::attr_int(node, "application_error")?,
             backoff: extract::attr_int(node, "backoff")?,
             node: *node,
@@ -3123,16 +3722,214 @@ impl ParseNewsletterResponseNegative<'_> {
             && (self.class.semantic_eq(other.class))
             && (self.t == other.t)
             && (self.edit.semantic_eq(other.edit))
-            && (self.franking_reporting_tag_element_value
-                == other.franking_reporting_tag_element_value)
+            && (self.franking_reporting_tag_element_value == other.franking_reporting_tag_element_value)
+            && (match (&self.ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group, &other.ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group) { (Some(a), Some(b)) => a.semantic_eq(b), (None, None) => true, _ => false })
             && (self.application_error == other.application_error)
             && (self.backoff == other.backoff)
+    }
+}
+/// Derived from whatspec's `NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterQuestionResponseAck` shape.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterQuestionResponseAck<'a> {
+    /// `responseServerId`, via `attrString`.
+    pub response_server_id: Value<'a>,
+    /// `class`, via `attrString`.
+    pub class: Value<'a>,
+    /// `t`, via `attrInt`.
+    pub t: i64,
+    /// `edit`, via `attrString`.
+    pub edit: Value<'a>,
+    /// `frankingReportingTagElementValue`, via `contentBytes`.
+    pub franking_reporting_tag_element_value: &'a [u8],
+    /// `ackPaidAckPaidConversationOrAckPaidGroupConversationConversationMixinGroup`, one of `AckPaidConversation`, `AckPaidGroupConversation`.
+    pub ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group:
+        Option<AckPaidConversationOrAckPaidGroupConversation<'a>>,
+    /// The node this was derived from, for fields the shape does
+    /// not model yet.
+    pub node: NodeRef<'a>,
+}
+
+impl<'a> NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterQuestionResponseAck<'a> {
+    /// Derive from a node already known to match this shape.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Ok(Self {
+            response_server_id: extract::attr_string(node, "response_server_id")?,
+            class: extract::attr_string(node, "class")?,
+            t: extract::attr_int(node, "t")?,
+            edit: extract::attr_string(node, "edit")?,
+            franking_reporting_tag_element_value: extract::content_bytes(node)?,
+            ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group: AckPaidConversationOrAckPaidGroupConversation::maybe_derive(node),
+            node: *node,
+        })
+    }
+}
+
+impl NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterQuestionResponseAck<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterQuestionResponseAck<
+            '_,
+        >,
+    ) -> bool {
+        (self.response_server_id.semantic_eq(other.response_server_id))
+            && (self.class.semantic_eq(other.class))
+            && (self.t == other.t)
+            && (self.edit.semantic_eq(other.edit))
+            && (self.franking_reporting_tag_element_value == other.franking_reporting_tag_element_value)
+            && (match (&self.ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group, &other.ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group) { (Some(a), Some(b)) => a.semantic_eq(b), (None, None) => true, _ => false })
+    }
+}
+/// Derived from whatspec's `NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterMessageAck` shape.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterMessageAck<'a> {
+    /// `serverId`, via `maybeAttrInt`.
+    pub server_id: Option<i64>,
+    /// `class`, via `attrString`.
+    pub class: Value<'a>,
+    /// `t`, via `attrInt`.
+    pub t: i64,
+    /// `edit`, via `attrString`.
+    pub edit: Value<'a>,
+    /// `frankingReportingTagElementValue`, via `contentBytes`.
+    pub franking_reporting_tag_element_value: &'a [u8],
+    /// `ackPaidAckPaidConversationOrAckPaidGroupConversationConversationMixinGroup`, one of `AckPaidConversation`, `AckPaidGroupConversation`.
+    pub ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group:
+        Option<AckPaidConversationOrAckPaidGroupConversation<'a>>,
+    /// `rcatElementValue`, via `contentBytes`.
+    pub rcat_element_value: &'a [u8],
+    /// The node this was derived from, for fields the shape does
+    /// not model yet.
+    pub node: NodeRef<'a>,
+}
+
+impl<'a> NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterMessageAck<'a> {
+    /// Derive from a node already known to match this shape.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Ok(Self {
+            server_id: extract::maybe_attr_int(node, "server_id")?,
+            class: extract::attr_string(node, "class")?,
+            t: extract::attr_int(node, "t")?,
+            edit: extract::attr_string(node, "edit")?,
+            franking_reporting_tag_element_value: extract::content_bytes(node)?,
+            ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group: AckPaidConversationOrAckPaidGroupConversation::maybe_derive(node),
+            rcat_element_value: extract::content_bytes(node)?,
+            node: *node,
+        })
+    }
+}
+
+impl NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterMessageAck<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterMessageAck<'_>,
+    ) -> bool {
+        (self.server_id == other.server_id)
+            && (self.class.semantic_eq(other.class))
+            && (self.t == other.t)
+            && (self.edit.semantic_eq(other.edit))
+            && (self.franking_reporting_tag_element_value == other.franking_reporting_tag_element_value)
+            && (match (&self.ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group, &other.ack_paid_ack_paid_conversation_or_ack_paid_group_conversation_conversation_mixin_group) { (Some(a), Some(b)) => a.semantic_eq(b), (None, None) => true, _ => false })
+            && (self.rcat_element_value == other.rcat_element_value)
+    }
+}
+/// One of the alternatives in whatspec's `NewsletterQuestionResponseAckOrNewsletterMessageAck` mixin group.
+///
+/// Variants are tried richest-first: where one variant's required
+/// fields are a subset of another's, the leaner one accepts every
+/// stanza the richer one does, and trying it first would claim them
+/// all (D-041).
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum NewsletterQuestionResponseAckOrNewsletterMessageAck<'a> {
+    /// `NewsletterQuestionResponseAck`.
+    NewsletterQuestionResponseAck(
+        NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterQuestionResponseAck<'a>,
+    ),
+    /// `NewsletterMessageAck`.
+    NewsletterMessageAck(
+        NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterMessageAck<'a>,
+    ),
+}
+
+impl<'a> NewsletterQuestionResponseAckOrNewsletterMessageAck<'a> {
+    /// Derive whichever alternative this node satisfies.
+    ///
+    /// # Errors
+    ///
+    /// [`DeriveError::UnknownStanza`] when the node satisfies none of
+    /// them, which is the honest answer: the mixin says the stanza is
+    /// one of these and it is not.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Self::maybe_derive(node).ok_or(DeriveError::UnknownStanza)
+    }
+
+    /// Derive whichever alternative this node satisfies, or nothing.
+    #[must_use]
+    pub fn maybe_derive(node: &NodeRef<'a>) -> Option<Self> {
+        // guarded by class=message
+        if node.attr_eq("class", "message")
+            && let Ok(inner) = NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterQuestionResponseAck::derive(node)
+        {
+            return Some(Self::NewsletterQuestionResponseAck(inner));
+        }
+        // guarded by class=message
+        if node.attr_eq("class", "message")
+            && let Ok(inner) =
+                NewsletterQuestionResponseAckOrNewsletterMessageAckNewsletterMessageAck::derive(
+                    node,
+                )
+        {
+            return Some(Self::NewsletterMessageAck(inner));
+        }
+        None
+    }
+}
+
+impl NewsletterQuestionResponseAckOrNewsletterMessageAck<'_> {
+    /// Whether two alternatives mean the same thing.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &NewsletterQuestionResponseAckOrNewsletterMessageAck<'_>,
+    ) -> bool {
+        match (self, other) {
+            (
+                NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterQuestionResponseAck(
+                    a,
+                ),
+                NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterQuestionResponseAck(
+                    b,
+                ),
+            ) => a.semantic_eq(b),
+            (
+                NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterMessageAck(a),
+                NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterMessageAck(b),
+            ) => a.semantic_eq(b),
+            _ => false,
+        }
     }
 }
 /// Derived from whatspec's `ParseNewsletterResponseSuccess` shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct ParseNewsletterResponseSuccess<'a> {
+    /// `newsletterQuestionResponseOrNewsletterMessageAckMixinGroup`, one of `NewsletterQuestionResponseAck`, `NewsletterMessageAck`.
+    pub newsletter_question_response_or_newsletter_message_ack_mixin_group:
+        NewsletterQuestionResponseAckOrNewsletterMessageAck<'a>,
     /// The node this was derived from, for fields the shape does
     /// not model yet.
     pub node: NodeRef<'a>,
@@ -3141,7 +3938,11 @@ pub struct ParseNewsletterResponseSuccess<'a> {
 impl<'a> ParseNewsletterResponseSuccess<'a> {
     /// Derive from a node already known to match this shape.
     pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
-        Ok(Self { node: *node })
+        Ok(Self {
+            newsletter_question_response_or_newsletter_message_ack_mixin_group:
+                NewsletterQuestionResponseAckOrNewsletterMessageAck::derive(node)?,
+            node: *node,
+        })
     }
 }
 
@@ -3152,8 +3953,199 @@ impl ParseNewsletterResponseSuccess<'_> {
     /// The originating node is excluded: two engines may encode one
     /// stanza differently and both be right.
     #[must_use]
-    pub fn semantic_eq(&self, _other: &ParseNewsletterResponseSuccess<'_>) -> bool {
-        true
+    pub fn semantic_eq(&self, other: &ParseNewsletterResponseSuccess<'_>) -> bool {
+        self.newsletter_question_response_or_newsletter_message_ack_mixin_group
+            .semantic_eq(&other.newsletter_question_response_or_newsletter_message_ack_mixin_group)
+    }
+}
+/// Derived from whatspec's `StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckEdit` shape.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckEdit<'a> {
+    /// `edit`, via `attrString`.
+    pub edit: Value<'a>,
+    /// The node this was derived from, for fields the shape does
+    /// not model yet.
+    pub node: NodeRef<'a>,
+}
+
+impl<'a> StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckEdit<'a> {
+    /// Derive from a node already known to match this shape.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Ok(Self {
+            edit: extract::attr_string(node, "edit")?,
+            node: *node,
+        })
+    }
+}
+
+impl StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckEdit<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckEdit<'_>,
+    ) -> bool {
+        self.edit.semantic_eq(other.edit)
+    }
+}
+/// Derived from whatspec's `StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckRevoke` shape.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckRevoke<'a> {
+    /// `edit`, via `attrString`.
+    pub edit: Value<'a>,
+    /// The node this was derived from, for fields the shape does
+    /// not model yet.
+    pub node: NodeRef<'a>,
+}
+
+impl<'a> StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckRevoke<'a> {
+    /// Derive from a node already known to match this shape.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Ok(Self {
+            edit: extract::attr_string(node, "edit")?,
+            node: *node,
+        })
+    }
+}
+
+impl StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckRevoke<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckRevoke<'_>,
+    ) -> bool {
+        self.edit.semantic_eq(other.edit)
+    }
+}
+/// Derived from whatspec's `StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckAdminRevoke` shape.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckAdminRevoke<'a> {
+    /// `edit`, via `attrString`.
+    pub edit: Value<'a>,
+    /// The node this was derived from, for fields the shape does
+    /// not model yet.
+    pub node: NodeRef<'a>,
+}
+
+impl<'a> StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckAdminRevoke<'a> {
+    /// Derive from a node already known to match this shape.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Ok(Self {
+            edit: extract::attr_string(node, "edit")?,
+            node: *node,
+        })
+    }
+}
+
+impl StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckAdminRevoke<'_> {
+    /// Whether two derivations mean the same thing, whatever form
+    /// each field arrived in.
+    ///
+    /// The originating node is excluded: two engines may encode one
+    /// stanza differently and both be right.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckAdminRevoke<'_>,
+    ) -> bool {
+        self.edit.semantic_eq(other.edit)
+    }
+}
+/// One of the alternatives in whatspec's `StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke` mixin group.
+///
+/// Variants are tried richest-first: where one variant's required
+/// fields are a subset of another's, the leaner one accepts every
+/// stanza the richer one does, and trying it first would claim them
+/// all (D-041).
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke<'a> {
+    /// `StatusAckEdit`.
+    StatusAckEdit(StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckEdit<'a>),
+    /// `StatusAckRevoke`.
+    StatusAckRevoke(StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckRevoke<'a>),
+    /// `StatusAckAdminRevoke`.
+    StatusAckAdminRevoke(
+        StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckAdminRevoke<'a>,
+    ),
+}
+
+impl<'a> StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke<'a> {
+    /// Derive whichever alternative this node satisfies.
+    ///
+    /// # Errors
+    ///
+    /// [`DeriveError::UnknownStanza`] when the node satisfies none of
+    /// them, which is the honest answer: the mixin says the stanza is
+    /// one of these and it is not.
+    pub fn derive(node: &NodeRef<'a>) -> Result<Self, DeriveError> {
+        Self::maybe_derive(node).ok_or(DeriveError::UnknownStanza)
+    }
+
+    /// Derive whichever alternative this node satisfies, or nothing.
+    #[must_use]
+    pub fn maybe_derive(node: &NodeRef<'a>) -> Option<Self> {
+        // guarded by edit=1
+        if node.attr_eq("edit", "1")
+            && let Ok(inner) =
+                StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckEdit::derive(node)
+        {
+            return Some(Self::StatusAckEdit(inner));
+        }
+        // guarded by edit=7
+        if node.attr_eq("edit", "7")
+            && let Ok(inner) =
+                StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckRevoke::derive(node)
+        {
+            return Some(Self::StatusAckRevoke(inner));
+        }
+        // guarded by edit=8
+        if node.attr_eq("edit", "8")
+            && let Ok(inner) =
+                StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevokeStatusAckAdminRevoke::derive(
+                    node,
+                )
+        {
+            return Some(Self::StatusAckAdminRevoke(inner));
+        }
+        None
+    }
+}
+
+impl StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke<'_> {
+    /// Whether two alternatives mean the same thing.
+    #[must_use]
+    pub fn semantic_eq(
+        &self,
+        other: &StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke<'_>,
+    ) -> bool {
+        match (self, other) {
+            (
+                StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckEdit(a),
+                StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckEdit(b),
+            ) => a.semantic_eq(b),
+            (
+                StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckRevoke(a),
+                StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckRevoke(b),
+            ) => a.semantic_eq(b),
+            (
+                StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckAdminRevoke(a),
+                StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckAdminRevoke(b),
+            ) => a.semantic_eq(b),
+            _ => false,
+        }
     }
 }
 /// Derived from whatspec's `ParsePostNewsletterStatusResponseNegative` shape.
@@ -3166,6 +4158,9 @@ pub struct ParsePostNewsletterStatusResponseNegative<'a> {
     pub class: Value<'a>,
     /// `t`, via `attrInt`.
     pub t: i64,
+    /// `statusAckEditOrRevokeOrAdminRevokeMixinGroup`, one of `StatusAckEdit`, `StatusAckRevoke`, `StatusAckAdminRevoke`.
+    pub status_ack_edit_or_revoke_or_admin_revoke_mixin_group:
+        Option<StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke<'a>>,
     /// `applicationError`, via `attrInt`.
     pub application_error: i64,
     /// `backoff`, via `attrInt`.
@@ -3182,6 +4177,8 @@ impl<'a> ParsePostNewsletterStatusResponseNegative<'a> {
             error: extract::attr_string(node, "error")?,
             class: extract::attr_string(node, "class")?,
             t: extract::attr_int(node, "t")?,
+            status_ack_edit_or_revoke_or_admin_revoke_mixin_group:
+                StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::maybe_derive(node),
             application_error: extract::attr_int(node, "application_error")?,
             backoff: extract::attr_int(node, "backoff")?,
             node: *node,
@@ -3200,6 +4197,14 @@ impl ParsePostNewsletterStatusResponseNegative<'_> {
         (self.error.semantic_eq(other.error))
             && (self.class.semantic_eq(other.class))
             && (self.t == other.t)
+            && (match (
+                &self.status_ack_edit_or_revoke_or_admin_revoke_mixin_group,
+                &other.status_ack_edit_or_revoke_or_admin_revoke_mixin_group,
+            ) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
             && (self.application_error == other.application_error)
             && (self.backoff == other.backoff)
     }
@@ -3214,6 +4219,9 @@ pub struct ParsePostNewsletterStatusResponseSuccess<'a> {
     pub class: Value<'a>,
     /// `t`, via `attrInt`.
     pub t: i64,
+    /// `statusAckEditOrRevokeOrAdminRevokeMixinGroup`, one of `StatusAckEdit`, `StatusAckRevoke`, `StatusAckAdminRevoke`.
+    pub status_ack_edit_or_revoke_or_admin_revoke_mixin_group:
+        Option<StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke<'a>>,
     /// The node this was derived from, for fields the shape does
     /// not model yet.
     pub node: NodeRef<'a>,
@@ -3226,6 +4234,8 @@ impl<'a> ParsePostNewsletterStatusResponseSuccess<'a> {
             server_id: extract::maybe_attr_int(node, "server_id")?,
             class: extract::attr_string(node, "class")?,
             t: extract::attr_int(node, "t")?,
+            status_ack_edit_or_revoke_or_admin_revoke_mixin_group:
+                StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::maybe_derive(node),
             node: *node,
         })
     }
@@ -3242,6 +4252,14 @@ impl ParsePostNewsletterStatusResponseSuccess<'_> {
         (self.server_id == other.server_id)
             && (self.class.semantic_eq(other.class))
             && (self.t == other.t)
+            && (match (
+                &self.status_ack_edit_or_revoke_or_admin_revoke_mixin_group,
+                &other.status_ack_edit_or_revoke_or_admin_revoke_mixin_group,
+            ) {
+                (Some(a), Some(b)) => a.semantic_eq(b),
+                (None, None) => true,
+                _ => false,
+            })
     }
 }
 /// Derived from whatspec's `ParsePublishViewResponseSuccess` shape.
@@ -3637,12 +4655,7 @@ pub const KNOWN_TAGS: [&str; 4] = ["ack", "call", "message", "receipt"];
 /// A derivation that quietly omitted a field would look complete and be
 /// wrong, and no conformance run could tell — every engine would agree on
 /// the same missing field.
-pub const UNMODELLED_FIELDS: [&str; 4] = [
-    "ParseNewsletterResponseNegative.ackPaidAckPaidConversationOrAckPaidGroupConversationConversationMixinGroup: mixin",
-    "ParseNewsletterResponseSuccess.newsletterQuestionResponseOrNewsletterMessageAckMixinGroup: mixin",
-    "ParsePostNewsletterStatusResponseNegative.statusAckEditOrRevokeOrAdminRevokeMixinGroup: mixin",
-    "ParsePostNewsletterStatusResponseSuccess.statusAckEditOrRevokeOrAdminRevokeMixinGroup: mixin",
-];
+pub const UNMODELLED_FIELDS: [&str; 0] = [];
 
 /// Fields the spec types more precisely than this derivation carries.
 ///
@@ -4604,6 +5617,7 @@ mod generated_tests {
             .attr("t", "1")
             .attr("edit", "x")
             .bytes(b"x")
+            .attr("business_country_code", "x")
             .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
@@ -4628,6 +5642,7 @@ mod generated_tests {
             .attr("t", "1")
             .attr("edit", "x")
             .bytes(b"x")
+            .attr("business_country_code", "x")
             .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
@@ -4659,7 +5674,13 @@ mod generated_tests {
     /// `ParseNewsletterResponseSuccess` derives from a stanza carrying its required fields.
     #[test]
     fn parse_newsletter_response_success_derives_from_its_required_fields() {
-        let stanza = Fixture::node("ack").build();
+        let stanza = Fixture::node("ack")
+            .attr("class", "message")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .bytes(b"x")
+            .build();
         let node = parse(&stanza);
         let derived = ParseNewsletterResponseSuccess::derive(&node);
         assert!(
@@ -4677,7 +5698,15 @@ mod generated_tests {
     /// optional field; this one does.
     #[test]
     fn parse_newsletter_response_success_derives_with_every_field_present() {
-        let stanza = Fixture::node("ack").build();
+        let stanza = Fixture::node("ack")
+            .attr("class", "message")
+            .attr("server_id", "1")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .attr("business_country_code", "x")
+            .bytes(b"x")
+            .build();
         let node = parse(&stanza);
         let derived = ParseNewsletterResponseSuccess::derive(&node);
         assert!(
@@ -4693,7 +5722,15 @@ mod generated_tests {
     /// its own output would report every stanza as a divergence.
     #[test]
     fn parse_newsletter_response_success_compares_semantically() {
-        let stanza = Fixture::node("ack").build();
+        let stanza = Fixture::node("ack")
+            .attr("class", "message")
+            .attr("server_id", "1")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .attr("business_country_code", "x")
+            .bytes(b"x")
+            .build();
         let node = parse(&stanza);
         let derived = ParseNewsletterResponseSuccess::derive(&node).expect("derives");
         let again = ParseNewsletterResponseSuccess::derive(&node).expect("derives");
@@ -4701,7 +5738,13 @@ mod generated_tests {
 
         // A stanza missing every optional field is a different
         // derivation of the same shape, unless the shape has none.
-        let bare = Fixture::node("ack").build();
+        let bare = Fixture::node("ack")
+            .attr("class", "message")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .bytes(b"x")
+            .build();
         let bare_node = parse(&bare);
         if let Ok(bare_derived) = ParseNewsletterResponseSuccess::derive(&bare_node) {
             let full_is_bare = derived.semantic_eq(&bare_derived);
@@ -4745,6 +5788,7 @@ mod generated_tests {
             .attr("error", "x")
             .attr("class", "x")
             .attr("t", "1")
+            .attr("edit", "1")
             .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
@@ -4767,6 +5811,7 @@ mod generated_tests {
             .attr("error", "x")
             .attr("class", "x")
             .attr("t", "1")
+            .attr("edit", "1")
             .attr("application_error", "1")
             .attr("backoff", "1")
             .build();
@@ -4824,6 +5869,7 @@ mod generated_tests {
             .attr("server_id", "1")
             .attr("class", "x")
             .attr("t", "1")
+            .attr("edit", "1")
             .build();
         let node = parse(&stanza);
         let derived = ParsePostNewsletterStatusResponseSuccess::derive(&node);
@@ -4844,6 +5890,7 @@ mod generated_tests {
             .attr("server_id", "1")
             .attr("class", "x")
             .attr("t", "1")
+            .attr("edit", "1")
             .build();
         let node = parse(&stanza);
         let derived = ParsePostNewsletterStatusResponseSuccess::derive(&node).expect("derives");
@@ -5046,6 +6093,584 @@ mod generated_tests {
         }
     }
 
+    /// `AckPaidConversationOrAckPaidGroupConversation::AckPaidConversation` is chosen for a stanza built from
+    /// `AckPaidConversation`'s own fields.
+    #[test]
+    fn ack_paid_conversation_or_ack_paid_group_conversation_selects_ack_paid_conversation() {
+        let stanza = Fixture::node("ack")
+            .attr("paid_convo_id", "x")
+            .attr("pricing_model", "CBP")
+            .attr("billable", "false")
+            .build();
+        let node = parse(&stanza);
+        let derived = AckPaidConversationOrAckPaidGroupConversation::derive(&node);
+        assert!(
+            derived.is_ok(),
+            "AckPaidConversationOrAckPaidGroupConversation::AckPaidConversation: {:?}",
+            derived.err()
+        );
+        let chosen = derived.expect("derives");
+        assert!(matches!(
+            chosen,
+            AckPaidConversationOrAckPaidGroupConversation::AckPaidConversation(_)
+        ));
+
+        // Each alternative carries its own comparison, and one that
+        // could not recognise its own output would report every
+        // stanza as a divergence. Derivation is pure, so the second
+        // run is the same derivation and must compare equal.
+        let again = AckPaidConversationOrAckPaidGroupConversation::derive(&node).expect("derives");
+        assert!(chosen.semantic_eq(&again));
+    }
+
+    /// `AckPaidConversationOrAckPaidGroupConversation::AckPaidConversation` derives with every field it models.
+    ///
+    /// The required-only fixture never reaches the `Some` side of an
+    /// optional field, nor the comparison arm that reads it.
+    #[test]
+    fn ack_paid_conversation_or_ack_paid_group_conversation_selects_ack_paid_conversation_with_every_field()
+     {
+        let stanza = Fixture::node("ack")
+            .attr("paid_convo_id", "x")
+            .attr("pricing_model", "CBP")
+            .attr("billable", "false")
+            .attr("expiration_timestamp", "1")
+            .attr("pricing_category", "x")
+            .attr("pricing_type", "free_customer_service")
+            .child(Fixture::node("delivery_context").attr("optimization_goal", "delivery"))
+            .child(
+                Fixture::node("origin").attr("type", "x").child(
+                    Fixture::node("referral")
+                        .attr("source_type", "x")
+                        .child(Fixture::node("source_url").bytes(b"x")),
+                ),
+            )
+            .child(
+                Fixture::node("pricing")
+                    .attr("consumer_country_code", "x")
+                    .attr("business_country_code", "x")
+                    .attr("conversation_status", "1")
+                    .attr("latest_c2b_timestamp", "1")
+                    .attr("analytics_conversation_id", "x")
+                    .attr("b2c_timestamp", "1"),
+            )
+            .build();
+        let node = parse(&stanza);
+        let Some(full) = AckPaidConversationOrAckPaidGroupConversation::maybe_derive(&node) else {
+            panic!(
+                "AckPaidConversationOrAckPaidGroupConversation::AckPaidConversation derives with every field"
+            );
+        };
+        assert!(full.semantic_eq(&full));
+
+        // A derivation carrying optional fields does not mean the
+        // same as one without them.
+        let bare = Fixture::node("ack")
+            .attr("paid_convo_id", "x")
+            .attr("pricing_model", "CBP")
+            .attr("billable", "false")
+            .build();
+        let bare_node = parse(&bare);
+        if let Some(lean) = AckPaidConversationOrAckPaidGroupConversation::maybe_derive(&bare_node)
+        {
+            let _ = full.semantic_eq(&lean);
+        }
+    }
+
+    /// `AckPaidConversationOrAckPaidGroupConversation::AckPaidGroupConversation` is chosen for a stanza built from
+    /// `AckPaidGroupConversation`'s own fields.
+    #[test]
+    fn ack_paid_conversation_or_ack_paid_group_conversation_selects_ack_paid_group_conversation() {
+        let stanza = Fixture::node("ack").build();
+        let node = parse(&stanza);
+        let derived = AckPaidConversationOrAckPaidGroupConversation::derive(&node);
+        assert!(
+            derived.is_ok(),
+            "AckPaidConversationOrAckPaidGroupConversation::AckPaidGroupConversation: {:?}",
+            derived.err()
+        );
+        let chosen = derived.expect("derives");
+        assert!(matches!(
+            chosen,
+            AckPaidConversationOrAckPaidGroupConversation::AckPaidGroupConversation(_)
+        ));
+
+        // Each alternative carries its own comparison, and one that
+        // could not recognise its own output would report every
+        // stanza as a divergence. Derivation is pure, so the second
+        // run is the same derivation and must compare equal.
+        let again = AckPaidConversationOrAckPaidGroupConversation::derive(&node).expect("derives");
+        assert!(chosen.semantic_eq(&again));
+    }
+
+    /// `AckPaidConversationOrAckPaidGroupConversation::AckPaidGroupConversation` derives with every field it models.
+    ///
+    /// The required-only fixture never reaches the `Some` side of an
+    /// optional field, nor the comparison arm that reads it.
+    #[test]
+    fn ack_paid_conversation_or_ack_paid_group_conversation_selects_ack_paid_group_conversation_with_every_field()
+     {
+        let stanza = Fixture::node("ack")
+            .attr("business_country_code", "x")
+            .build();
+        let node = parse(&stanza);
+        let Some(full) = AckPaidConversationOrAckPaidGroupConversation::maybe_derive(&node) else {
+            panic!(
+                "AckPaidConversationOrAckPaidGroupConversation::AckPaidGroupConversation derives with every field"
+            );
+        };
+        assert!(full.semantic_eq(&full));
+
+        // A derivation carrying optional fields does not mean the
+        // same as one without them.
+        let bare = Fixture::node("ack").build();
+        let bare_node = parse(&bare);
+        if let Some(lean) = AckPaidConversationOrAckPaidGroupConversation::maybe_derive(&bare_node)
+        {
+            let _ = full.semantic_eq(&lean);
+        }
+    }
+
+    /// `AckPaidConversationOrAckPaidGroupConversation` always derives: `AckPaidGroupConversation`
+    /// requires nothing, so it accepts any node the richer
+    /// alternatives turned down.
+    ///
+    /// Not a defect — the spec declares a variant with no fields of
+    /// its own — but it means this group can never report that a
+    /// stanza matched none of its alternatives.
+    #[test]
+    fn ack_paid_conversation_or_ack_paid_group_conversation_falls_back_to_ack_paid_group_conversation()
+     {
+        let stanza = Fixture::node("nothing-here").build();
+        let node = parse(&stanza);
+        assert!(matches!(
+            AckPaidConversationOrAckPaidGroupConversation::maybe_derive(&node),
+            Some(AckPaidConversationOrAckPaidGroupConversation::AckPaidGroupConversation(_))
+        ));
+    }
+
+    /// Two different `AckPaidConversationOrAckPaidGroupConversation` alternatives never mean the same.
+    #[test]
+    fn ack_paid_conversation_or_ack_paid_group_conversation_alternatives_are_not_interchangeable() {
+        let a = Fixture::node("ack")
+            .attr("paid_convo_id", "x")
+            .attr("pricing_model", "CBP")
+            .attr("billable", "false")
+            .build();
+        let b = Fixture::node("ack").build();
+        let (na, nb) = (parse(&a), parse(&b));
+        let (Some(x), Some(y)) = (
+            AckPaidConversationOrAckPaidGroupConversation::maybe_derive(&na),
+            AckPaidConversationOrAckPaidGroupConversation::maybe_derive(&nb),
+        ) else {
+            panic!("both fixtures derive");
+        };
+        assert!(x.semantic_eq(&x));
+        // Same alternative or not, comparing must not panic; where
+        // they differ, they must not compare equal.
+        if core::mem::discriminant(&x) != core::mem::discriminant(&y) {
+            assert!(!x.semantic_eq(&y));
+        }
+    }
+
+    /// `NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterQuestionResponseAck` is chosen for a stanza built from
+    /// `NewsletterQuestionResponseAck`'s own fields.
+    #[test]
+    fn newsletter_question_response_ack_or_newsletter_message_ack_selects_newsletter_question_response_ack()
+     {
+        let stanza = Fixture::node("ack")
+            .attr("class", "message")
+            .attr("response_server_id", "x")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .build();
+        let node = parse(&stanza);
+        let derived = NewsletterQuestionResponseAckOrNewsletterMessageAck::derive(&node);
+        assert!(
+            derived.is_ok(),
+            "NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterQuestionResponseAck: {:?}",
+            derived.err()
+        );
+        let chosen = derived.expect("derives");
+        assert!(matches!(
+            chosen,
+            NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterQuestionResponseAck(_)
+        ));
+
+        // Each alternative carries its own comparison, and one that
+        // could not recognise its own output would report every
+        // stanza as a divergence. Derivation is pure, so the second
+        // run is the same derivation and must compare equal.
+        let again =
+            NewsletterQuestionResponseAckOrNewsletterMessageAck::derive(&node).expect("derives");
+        assert!(chosen.semantic_eq(&again));
+    }
+
+    /// `NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterQuestionResponseAck` derives with every field it models.
+    ///
+    /// The required-only fixture never reaches the `Some` side of an
+    /// optional field, nor the comparison arm that reads it.
+    #[test]
+    fn newsletter_question_response_ack_or_newsletter_message_ack_selects_newsletter_question_response_ack_with_every_field()
+     {
+        let stanza = Fixture::node("ack")
+            .attr("class", "message")
+            .attr("response_server_id", "x")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .attr("business_country_code", "x")
+            .build();
+        let node = parse(&stanza);
+        let Some(full) = NewsletterQuestionResponseAckOrNewsletterMessageAck::maybe_derive(&node)
+        else {
+            panic!(
+                "NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterQuestionResponseAck derives with every field"
+            );
+        };
+        assert!(full.semantic_eq(&full));
+
+        // A derivation carrying optional fields does not mean the
+        // same as one without them.
+        let bare = Fixture::node("ack")
+            .attr("class", "message")
+            .attr("response_server_id", "x")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .build();
+        let bare_node = parse(&bare);
+        if let Some(lean) =
+            NewsletterQuestionResponseAckOrNewsletterMessageAck::maybe_derive(&bare_node)
+        {
+            let _ = full.semantic_eq(&lean);
+        }
+    }
+
+    /// `NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterMessageAck` is chosen for a stanza built from
+    /// `NewsletterMessageAck`'s own fields.
+    #[test]
+    fn newsletter_question_response_ack_or_newsletter_message_ack_selects_newsletter_message_ack() {
+        let stanza = Fixture::node("ack")
+            .attr("class", "message")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .bytes(b"x")
+            .build();
+        let node = parse(&stanza);
+        let derived = NewsletterQuestionResponseAckOrNewsletterMessageAck::derive(&node);
+        assert!(
+            derived.is_ok(),
+            "NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterMessageAck: {:?}",
+            derived.err()
+        );
+        let chosen = derived.expect("derives");
+        assert!(matches!(
+            chosen,
+            NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterMessageAck(_)
+        ));
+
+        // Each alternative carries its own comparison, and one that
+        // could not recognise its own output would report every
+        // stanza as a divergence. Derivation is pure, so the second
+        // run is the same derivation and must compare equal.
+        let again =
+            NewsletterQuestionResponseAckOrNewsletterMessageAck::derive(&node).expect("derives");
+        assert!(chosen.semantic_eq(&again));
+    }
+
+    /// `NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterMessageAck` derives with every field it models.
+    ///
+    /// The required-only fixture never reaches the `Some` side of an
+    /// optional field, nor the comparison arm that reads it.
+    #[test]
+    fn newsletter_question_response_ack_or_newsletter_message_ack_selects_newsletter_message_ack_with_every_field()
+     {
+        let stanza = Fixture::node("ack")
+            .attr("class", "message")
+            .attr("server_id", "1")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .attr("business_country_code", "x")
+            .bytes(b"x")
+            .build();
+        let node = parse(&stanza);
+        let Some(full) = NewsletterQuestionResponseAckOrNewsletterMessageAck::maybe_derive(&node)
+        else {
+            panic!(
+                "NewsletterQuestionResponseAckOrNewsletterMessageAck::NewsletterMessageAck derives with every field"
+            );
+        };
+        assert!(full.semantic_eq(&full));
+
+        // A derivation carrying optional fields does not mean the
+        // same as one without them.
+        let bare = Fixture::node("ack")
+            .attr("class", "message")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .bytes(b"x")
+            .build();
+        let bare_node = parse(&bare);
+        if let Some(lean) =
+            NewsletterQuestionResponseAckOrNewsletterMessageAck::maybe_derive(&bare_node)
+        {
+            let _ = full.semantic_eq(&lean);
+        }
+    }
+
+    /// A node satisfying no `NewsletterQuestionResponseAckOrNewsletterMessageAck` alternative yields none.
+    #[test]
+    fn newsletter_question_response_ack_or_newsletter_message_ack_matches_nothing_when_no_variant_fits()
+     {
+        let stanza = Fixture::node("nothing-here").build();
+        let node = parse(&stanza);
+        assert!(NewsletterQuestionResponseAckOrNewsletterMessageAck::maybe_derive(&node).is_none());
+        assert_eq!(
+            NewsletterQuestionResponseAckOrNewsletterMessageAck::derive(&node),
+            Err(DeriveError::UnknownStanza)
+        );
+    }
+
+    /// Two different `NewsletterQuestionResponseAckOrNewsletterMessageAck` alternatives never mean the same.
+    #[test]
+    fn newsletter_question_response_ack_or_newsletter_message_ack_alternatives_are_not_interchangeable()
+     {
+        let a = Fixture::node("ack")
+            .attr("class", "message")
+            .attr("response_server_id", "x")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .build();
+        let b = Fixture::node("ack")
+            .attr("class", "message")
+            .attr("t", "1")
+            .attr("edit", "x")
+            .bytes(b"x")
+            .bytes(b"x")
+            .build();
+        let (na, nb) = (parse(&a), parse(&b));
+        let (Some(x), Some(y)) = (
+            NewsletterQuestionResponseAckOrNewsletterMessageAck::maybe_derive(&na),
+            NewsletterQuestionResponseAckOrNewsletterMessageAck::maybe_derive(&nb),
+        ) else {
+            panic!("both fixtures derive");
+        };
+        assert!(x.semantic_eq(&x));
+        // Same alternative or not, comparing must not panic; where
+        // they differ, they must not compare equal.
+        if core::mem::discriminant(&x) != core::mem::discriminant(&y) {
+            assert!(!x.semantic_eq(&y));
+        }
+    }
+
+    /// `StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckEdit` is chosen for a stanza built from
+    /// `StatusAckEdit`'s own fields.
+    #[test]
+    fn status_ack_edit_or_status_ack_revoke_or_status_ack_admin_revoke_selects_status_ack_edit() {
+        let stanza = Fixture::node("ack").attr("edit", "1").build();
+        let node = parse(&stanza);
+        let derived = StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::derive(&node);
+        assert!(
+            derived.is_ok(),
+            "StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckEdit: {:?}",
+            derived.err()
+        );
+        let chosen = derived.expect("derives");
+        assert!(matches!(
+            chosen,
+            StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckEdit(_)
+        ));
+
+        // Each alternative carries its own comparison, and one that
+        // could not recognise its own output would report every
+        // stanza as a divergence. Derivation is pure, so the second
+        // run is the same derivation and must compare equal.
+        let again =
+            StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::derive(&node).expect("derives");
+        assert!(chosen.semantic_eq(&again));
+    }
+
+    /// `StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckEdit` derives with every field it models.
+    ///
+    /// The required-only fixture never reaches the `Some` side of an
+    /// optional field, nor the comparison arm that reads it.
+    #[test]
+    fn status_ack_edit_or_status_ack_revoke_or_status_ack_admin_revoke_selects_status_ack_edit_with_every_field()
+     {
+        let stanza = Fixture::node("ack").attr("edit", "1").build();
+        let node = parse(&stanza);
+        let Some(full) = StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::maybe_derive(&node)
+        else {
+            panic!(
+                "StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckEdit derives with every field"
+            );
+        };
+        assert!(full.semantic_eq(&full));
+
+        // A derivation carrying optional fields does not mean the
+        // same as one without them.
+        let bare = Fixture::node("ack").attr("edit", "1").build();
+        let bare_node = parse(&bare);
+        if let Some(lean) =
+            StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::maybe_derive(&bare_node)
+        {
+            let _ = full.semantic_eq(&lean);
+        }
+    }
+
+    /// `StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckRevoke` is chosen for a stanza built from
+    /// `StatusAckRevoke`'s own fields.
+    #[test]
+    fn status_ack_edit_or_status_ack_revoke_or_status_ack_admin_revoke_selects_status_ack_revoke() {
+        let stanza = Fixture::node("ack").attr("edit", "7").build();
+        let node = parse(&stanza);
+        let derived = StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::derive(&node);
+        assert!(
+            derived.is_ok(),
+            "StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckRevoke: {:?}",
+            derived.err()
+        );
+        let chosen = derived.expect("derives");
+        assert!(matches!(
+            chosen,
+            StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckRevoke(_)
+        ));
+
+        // Each alternative carries its own comparison, and one that
+        // could not recognise its own output would report every
+        // stanza as a divergence. Derivation is pure, so the second
+        // run is the same derivation and must compare equal.
+        let again =
+            StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::derive(&node).expect("derives");
+        assert!(chosen.semantic_eq(&again));
+    }
+
+    /// `StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckRevoke` derives with every field it models.
+    ///
+    /// The required-only fixture never reaches the `Some` side of an
+    /// optional field, nor the comparison arm that reads it.
+    #[test]
+    fn status_ack_edit_or_status_ack_revoke_or_status_ack_admin_revoke_selects_status_ack_revoke_with_every_field()
+     {
+        let stanza = Fixture::node("ack").attr("edit", "7").build();
+        let node = parse(&stanza);
+        let Some(full) = StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::maybe_derive(&node)
+        else {
+            panic!(
+                "StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckRevoke derives with every field"
+            );
+        };
+        assert!(full.semantic_eq(&full));
+
+        // A derivation carrying optional fields does not mean the
+        // same as one without them.
+        let bare = Fixture::node("ack").attr("edit", "7").build();
+        let bare_node = parse(&bare);
+        if let Some(lean) =
+            StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::maybe_derive(&bare_node)
+        {
+            let _ = full.semantic_eq(&lean);
+        }
+    }
+
+    /// `StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckAdminRevoke` is chosen for a stanza built from
+    /// `StatusAckAdminRevoke`'s own fields.
+    #[test]
+    fn status_ack_edit_or_status_ack_revoke_or_status_ack_admin_revoke_selects_status_ack_admin_revoke()
+     {
+        let stanza = Fixture::node("ack").attr("edit", "8").build();
+        let node = parse(&stanza);
+        let derived = StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::derive(&node);
+        assert!(
+            derived.is_ok(),
+            "StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckAdminRevoke: {:?}",
+            derived.err()
+        );
+        let chosen = derived.expect("derives");
+        assert!(matches!(
+            chosen,
+            StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckAdminRevoke(_)
+        ));
+
+        // Each alternative carries its own comparison, and one that
+        // could not recognise its own output would report every
+        // stanza as a divergence. Derivation is pure, so the second
+        // run is the same derivation and must compare equal.
+        let again =
+            StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::derive(&node).expect("derives");
+        assert!(chosen.semantic_eq(&again));
+    }
+
+    /// `StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckAdminRevoke` derives with every field it models.
+    ///
+    /// The required-only fixture never reaches the `Some` side of an
+    /// optional field, nor the comparison arm that reads it.
+    #[test]
+    fn status_ack_edit_or_status_ack_revoke_or_status_ack_admin_revoke_selects_status_ack_admin_revoke_with_every_field()
+     {
+        let stanza = Fixture::node("ack").attr("edit", "8").build();
+        let node = parse(&stanza);
+        let Some(full) = StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::maybe_derive(&node)
+        else {
+            panic!(
+                "StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::StatusAckAdminRevoke derives with every field"
+            );
+        };
+        assert!(full.semantic_eq(&full));
+
+        // A derivation carrying optional fields does not mean the
+        // same as one without them.
+        let bare = Fixture::node("ack").attr("edit", "8").build();
+        let bare_node = parse(&bare);
+        if let Some(lean) =
+            StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::maybe_derive(&bare_node)
+        {
+            let _ = full.semantic_eq(&lean);
+        }
+    }
+
+    /// A node satisfying no `StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke` alternative yields none.
+    #[test]
+    fn status_ack_edit_or_status_ack_revoke_or_status_ack_admin_revoke_matches_nothing_when_no_variant_fits()
+     {
+        let stanza = Fixture::node("nothing-here").build();
+        let node = parse(&stanza);
+        assert!(
+            StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::maybe_derive(&node).is_none()
+        );
+        assert_eq!(
+            StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::derive(&node),
+            Err(DeriveError::UnknownStanza)
+        );
+    }
+
+    /// Two different `StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke` alternatives never mean the same.
+    #[test]
+    fn status_ack_edit_or_status_ack_revoke_or_status_ack_admin_revoke_alternatives_are_not_interchangeable()
+     {
+        let a = Fixture::node("ack").attr("edit", "1").build();
+        let b = Fixture::node("ack").attr("edit", "7").build();
+        let (na, nb) = (parse(&a), parse(&b));
+        let (Some(x), Some(y)) = (
+            StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::maybe_derive(&na),
+            StatusAckEditOrStatusAckRevokeOrStatusAckAdminRevoke::maybe_derive(&nb),
+        ) else {
+            panic!("both fixtures derive");
+        };
+        assert!(x.semantic_eq(&x));
+        // Same alternative or not, comparing must not panic; where
+        // they differ, they must not compare equal.
+        if core::mem::discriminant(&x) != core::mem::discriminant(&y) {
+            assert!(!x.semantic_eq(&y));
+        }
+    }
+
     /// Every `ALLNONE` value round-trips through the wire form.
     #[test]
     fn allnone_round_trips() {
@@ -5137,6 +6762,96 @@ mod generated_tests {
         let stanza = Fixture::node("n").attr("v", "not-a-variant").build();
         let node = parse(&stanza);
         assert_eq!(ENUMALLNONE::from_wire(node.attr("v").expect("attr")), None);
+    }
+
+    /// Every `ENUMCBPNBPPMP` value round-trips through the wire form.
+    #[test]
+    fn enumcbpnbppmp_round_trips() {
+        #[allow(clippy::single_element_loop)]
+        for variant in [ENUMCBPNBPPMP::CBP, ENUMCBPNBPPMP::NBP, ENUMCBPNBPPMP::PMP] {
+            let wire = variant.as_wire();
+            assert!(!wire.is_empty());
+            let stanza = Fixture::node("n").attr("v", wire).build();
+            let node = parse(&stanza);
+            let value = node.attr("v").expect("the attribute");
+            assert_eq!(ENUMCBPNBPPMP::from_wire(value), Some(variant));
+        }
+        let stanza = Fixture::node("n").attr("v", "not-a-variant").build();
+        let node = parse(&stanza);
+        assert_eq!(
+            ENUMCBPNBPPMP::from_wire(node.attr("v").expect("attr")),
+            None
+        );
+    }
+
+    /// Every `ENUMDELIVERYNOOPTIMIZATION` value round-trips through the wire form.
+    #[test]
+    fn enumdeliverynooptimization_round_trips() {
+        #[allow(clippy::single_element_loop)]
+        for variant in [
+            ENUMDELIVERYNOOPTIMIZATION::Delivery,
+            ENUMDELIVERYNOOPTIMIZATION::NoOptimization,
+        ] {
+            let wire = variant.as_wire();
+            assert!(!wire.is_empty());
+            let stanza = Fixture::node("n").attr("v", wire).build();
+            let node = parse(&stanza);
+            let value = node.attr("v").expect("the attribute");
+            assert_eq!(ENUMDELIVERYNOOPTIMIZATION::from_wire(value), Some(variant));
+        }
+        let stanza = Fixture::node("n").attr("v", "not-a-variant").build();
+        let node = parse(&stanza);
+        assert_eq!(
+            ENUMDELIVERYNOOPTIMIZATION::from_wire(node.attr("v").expect("attr")),
+            None
+        );
+    }
+
+    /// Every `ENUMFALSETRUE` value round-trips through the wire form.
+    #[test]
+    fn enumfalsetrue_round_trips() {
+        #[allow(clippy::single_element_loop)]
+        for variant in [ENUMFALSETRUE::False, ENUMFALSETRUE::True] {
+            let wire = variant.as_wire();
+            assert!(!wire.is_empty());
+            let stanza = Fixture::node("n").attr("v", wire).build();
+            let node = parse(&stanza);
+            let value = node.attr("v").expect("the attribute");
+            assert_eq!(ENUMFALSETRUE::from_wire(value), Some(variant));
+        }
+        let stanza = Fixture::node("n").attr("v", "not-a-variant").build();
+        let node = parse(&stanza);
+        assert_eq!(
+            ENUMFALSETRUE::from_wire(node.attr("v").expect("attr")),
+            None
+        );
+    }
+
+    /// Every `ENUMFREECUSTOMERSERVICEFREEENTRYPOINTREGULAR` value round-trips through the wire form.
+    #[test]
+    fn enumfreecustomerservicefreeentrypointregular_round_trips() {
+        #[allow(clippy::single_element_loop)]
+        for variant in [
+            ENUMFREECUSTOMERSERVICEFREEENTRYPOINTREGULAR::FreeCustomerService,
+            ENUMFREECUSTOMERSERVICEFREEENTRYPOINTREGULAR::FreeEntryPoint,
+            ENUMFREECUSTOMERSERVICEFREEENTRYPOINTREGULAR::Regular,
+        ] {
+            let wire = variant.as_wire();
+            assert!(!wire.is_empty());
+            let stanza = Fixture::node("n").attr("v", wire).build();
+            let node = parse(&stanza);
+            let value = node.attr("v").expect("the attribute");
+            assert_eq!(
+                ENUMFREECUSTOMERSERVICEFREEENTRYPOINTREGULAR::from_wire(value),
+                Some(variant)
+            );
+        }
+        let stanza = Fixture::node("n").attr("v", "not-a-variant").build();
+        let node = parse(&stanza);
+        assert_eq!(
+            ENUMFREECUSTOMERSERVICEFREEENTRYPOINTREGULAR::from_wire(node.attr("v").expect("attr")),
+            None
+        );
     }
 
     /// Every `EVENTTYPES` value round-trips through the wire form.
