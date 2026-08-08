@@ -21,12 +21,13 @@ let event = derive(&parse(&stanza)).expect("derives");
 assert_eq!(event.tag(), "receipt");
 ```
 
-## Two halves, both generated
+## Three parts, all generated
 
-| Half | Source | Generator |
+| Part | Source | Generator |
 | --- | --- | --- |
-| stanza | whatspec's `incoming` domain | `tools/generate-l1.py` |
+| inbound stanza | whatspec's `incoming` domain | `tools/generate-l1.py` |
 | payload | whatspec's `WAProto.proto` | `tools/generate-content.py` |
+| outbound stanza | whatspec's `stanza` and `iq` domains | `tools/generate-outgoing.py` |
 
 The `incoming` domain records how WhatsApp Web itself parses each stanza, so the
 generator emits *structure* — which extraction primitive to call, in what order,
@@ -108,3 +109,39 @@ Two engines disagreeing on L1 raises one question first: did they derive from
 the same spec? `Provenance` carries a digest **per domain**, because WhatsApp
 can renumber a protobuf field without touching how a stanza parses, and one
 digest would call two builds the same spec when only half of it matched.
+
+## What the client sends
+
+`derive_outgoing` is a separate derivation, not the same one pointed the other
+way. An outbound stanza wears the same tags as an inbound one and means the
+opposite — an `<ack>` arriving is the server acknowledging our send, an `<ack>`
+leaving is us acknowledging a delivery — so reading one with the inbound grammar
+does not fail. It answers confidently and wrongly, which two engines can agree
+on.
+
+The sources describe **builders**: an attribute carries a `kind` saying how the
+sender produces it (`const`, `dynamic`, a JID flavour) where `incoming` names
+the accessor a reader calls. Read backwards a builder is still a shape — a
+`const` is a value that must be there, everything else is a field the `required`
+flag decides.
+
+### The flavour of a JID is part of the shape
+
+Three pairs of shapes differ in nothing else: an `<ack class="notification">`
+addressed to a device is an identity change and to a user a device
+notification; one spam report names a group and another a user. Reading all of
+them as "a JID" makes one shape out of two and lets either claim the other's
+stanzas, so `attr_user_jid`, `attr_device_jid` and `attr_group_jid` are
+distinct. `g.us` is entry 45 of the token dictionary, not this crate's guess.
+
+### Four shapes no stanza can derive as
+
+`UNREACHABLE_OUTGOING` names them, with the shape that claims their stanzas
+instead. Each differs from an earlier shape in nothing a reader can see:
+whatspec separates an attribute the caller supplies (`string`) from one the
+builder computes (`dynamic`), which is a fact about the builder rather than
+about the stanza, and an extra optional attribute discriminates nothing.
+
+Named rather than reordered around — reordering moves the problem to the other
+shape — and worked out by the generator, which simulates its own dispatch over
+each shape's fixture rather than being told.

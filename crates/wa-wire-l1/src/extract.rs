@@ -182,6 +182,48 @@ pub fn content_bytes<'a>(node: &NodeRef<'a>) -> Result<&'a [u8], DeriveError> {
         })
 }
 
+/// A JID attribute that must name a device.
+///
+/// whatspec distinguishes a `device_jid` from a `user_jid`, and two outbound
+/// builders differ in nothing else: an `<ack class="notification">` addressed
+/// to a device is an identity change, addressed to a user it is a device
+/// notification. Reading both as "a JID" makes them the same shape and lets
+/// either claim the other's stanza.
+///
+/// A device JID carries a non-zero device part; a user JID does not.
+pub fn attr_device_jid<'a>(node: &NodeRef<'a>, key: &'static str) -> Result<Jid<'a>, DeriveError> {
+    let jid = attr_jid(node, key)?;
+    if jid.device() == 0 {
+        return Err(DeriveError::NotAJid { key });
+    }
+    Ok(jid)
+}
+
+/// A JID attribute that must name a group.
+///
+/// Two outbound spam reports differ only here — one reports a group, the other
+/// a newsletter — and reading both as "a JID" makes them one shape.
+///
+/// `g.us` is the protocol's own name for the group server: it is entry 45 of
+/// the single-byte token dictionary and a value in whatspec's enum catalogue,
+/// so this is the wire's fact rather than this crate's guess.
+pub fn attr_group_jid<'a>(node: &NodeRef<'a>, key: &'static str) -> Result<Jid<'a>, DeriveError> {
+    let jid = attr_jid(node, key)?;
+    if jid.server() != "g.us" {
+        return Err(DeriveError::NotAJid { key });
+    }
+    Ok(jid)
+}
+
+/// A JID attribute that must name a user rather than one of their devices.
+pub fn attr_user_jid<'a>(node: &NodeRef<'a>, key: &'static str) -> Result<Jid<'a>, DeriveError> {
+    let jid = attr_jid(node, key)?;
+    if jid.device() != 0 || jid.server() == "g.us" {
+        return Err(DeriveError::NotAJid { key });
+    }
+    Ok(jid)
+}
+
 /// A node's body read as text.
 ///
 /// A [`Value`] rather than a `&str`, for the same reason an attribute is: the

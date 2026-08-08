@@ -94,6 +94,9 @@ jobs:
       - name: Regenerate the payload field numbers
         run: python3 tools/generate-content.py
 
+      - name: Regenerate the outgoing derivation
+        run: python3 tools/generate-outgoing.py
+
       - name: Require no change
         run: |
           if ! git diff --quiet; then

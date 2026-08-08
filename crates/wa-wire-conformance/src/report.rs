@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 
 use wa_wire_codec::{Parser, TokenTable};
 use wa_wire_contract::{Direction, EnvelopeRef, FrameOrigin, NodePath, PlaintextEntry};
-use wa_wire_l1::{DeriveError, Event, derive};
+use wa_wire_l1::{DeriveError, Event, OutgoingEvent, derive, derive_outgoing};
 
 use crate::comparability;
 use crate::divergence::Divergence;
@@ -202,30 +202,25 @@ pub fn compare<'a>(left: &Recording<'a>, right: &Recording<'a>, tables: Tables<'
 
         compare_envelopes(&mut report, index, a, b);
 
-        // Outbound stanzas are compared at L0 and never derived.
+        // The direction picks the grammar, and picking wrong is worse than
+        // not deriving at all: an outbound `<ack>` satisfies the inbound
+        // shapes and means the opposite — the server acknowledging our send
+        // versus us acknowledging a delivery — so it would derive confidently
+        // and wrongly, and two engines agreeing on a wrong reading reports as
+        // agreement.
         //
-        // The derivation comes from whatspec's `incoming` domain, which records
-        // how WA Web parses what the *server* sends. An outbound stanza is a
-        // different grammar wearing the same tags: an `<ack>` inbound is the
-        // server acknowledging our send, an `<ack>` outbound is us
-        // acknowledging a delivery. Nothing in `derive` is told which way a
-        // stanza travelled, so an outbound one does not fail to derive — it
-        // derives confidently and wrongly, and two engines agreeing on a wrong
-        // reading would report as agreement.
-        //
-        // Deriving these needs whatspec's request-side domains, which nothing
-        // here generates from yet. Until then the bytes are the claim.
-        if a.flags().direction == Direction::Inbound {
-            compare_derivations(
-                &mut report,
-                (&left_parser, &right_parser),
-                index,
-                left,
-                right,
-                a,
-                b,
-            );
-        }
+        // A pair whose envelopes disagree on direction is already a
+        // `Divergence::Direction` above; here the left one decides, since
+        // there is no third answer to give.
+        compare_derivations(
+            &mut report,
+            (&left_parser, &right_parser),
+            index,
+            left,
+            right,
+            a,
+            b,
+        );
     }
 
     report
@@ -346,7 +341,32 @@ fn compare_derivations<'a>(
         return;
     };
 
-    match (derive(&left_node), derive(&right_node)) {
+    match a.flags().direction {
+        Direction::Inbound => {
+            compare_derived(report, index, derive(&left_node), derive(&right_node));
+        }
+        Direction::Outbound => compare_derived(
+            report,
+            index,
+            derive_outgoing(&left_node),
+            derive_outgoing(&right_node),
+        ),
+    }
+}
+
+/// What two engines derived from one stanza, judged.
+///
+/// Generic over the derivation so that the rule lives in one place: inbound and
+/// outbound read different grammars and produce different types, and writing
+/// the comparison twice is how the two would drift apart on what counts as a
+/// finding.
+fn compare_derived<T: Derived>(
+    report: &mut Report<'_>,
+    index: usize,
+    left: Result<T, DeriveError>,
+    right: Result<T, DeriveError>,
+) {
+    match (left, right) {
         (Ok(a), Ok(b)) => {
             if !a.semantic_eq(&b) {
                 report.push(Divergence::Derivation {
@@ -363,6 +383,34 @@ fn compare_derivations<'a>(
             left: a.err(),
             right: b.err(),
         }),
+    }
+}
+
+/// A derived event, whichever direction it travelled.
+///
+/// Private: the two derivations are separate public types on purpose, and a
+/// shared trait in `wa-wire-l1` would invite a caller to write code that does
+/// not know which way a stanza went — which is the one thing it must know.
+trait Derived {
+    fn tag(&self) -> &'static str;
+    fn semantic_eq(&self, other: &Self) -> bool;
+}
+
+impl Derived for Event<'_> {
+    fn tag(&self) -> &'static str {
+        Event::tag(self)
+    }
+    fn semantic_eq(&self, other: &Self) -> bool {
+        Event::semantic_eq(self, other)
+    }
+}
+
+impl Derived for OutgoingEvent<'_> {
+    fn tag(&self) -> &'static str {
+        OutgoingEvent::tag(self)
+    }
+    fn semantic_eq(&self, other: &Self) -> bool {
+        OutgoingEvent::semantic_eq(self, other)
     }
 }
 

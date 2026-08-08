@@ -23,12 +23,16 @@ const LIST_EMPTY: u8 = 0;
 const BINARY_8: u8 = 252;
 const BINARY_32: u8 = 254;
 const JID_PAIR: u8 = 250;
+const JID_USER: u8 = 247;
 const NIBBLE_8: u8 = 255;
 
 /// Servers a fixture JID can name. Slot 0 is the `LIST_EMPTY` placeholder, as
 /// in every real table.
-static FIXTURE_SINGLE: [&str; 4] = ["", "s.whatsapp.net", "lid", "read"];
+static FIXTURE_SINGLE: [&str; 5] = ["", "s.whatsapp.net", "lid", "read", "g.us"];
 const SERVER_PN_TAG: u8 = 1;
+/// The group server, which is a token in the real dictionary too — entry 45 —
+/// so a group JID is not a fixture-only shape.
+const SERVER_GROUP_TAG: u8 = 4;
 
 /// The byte a token is written as, if this tiny table carries it.
 fn token_byte(value: &str) -> Option<u8> {
@@ -128,6 +132,37 @@ impl FixtureBuilder {
         let mut encoded = alloc::vec![JID_PAIR];
         encoded.extend_from_slice(&binary(user.as_bytes()));
         encoded.push(SERVER_PN_TAG);
+        self.attrs.push((binary(key.as_bytes()), encoded));
+        self
+    }
+
+    /// Add a JID attribute naming a group.
+    ///
+    /// The server is what makes it one, and `g.us` is the protocol's own name
+    /// for it rather than this crate's.
+    #[must_use]
+    pub fn group_jid_attr(mut self, key: &str, user: &str) -> Self {
+        // The server of a pair JID is a token, not a string — the wire format
+        // gives no other way to write it.
+        let mut encoded = alloc::vec![JID_PAIR];
+        encoded.extend_from_slice(&binary(user.as_bytes()));
+        encoded.push(SERVER_GROUP_TAG);
+        self.attrs.push((binary(key.as_bytes()), encoded));
+        self
+    }
+
+    /// Add a JID attribute naming one of a user's devices.
+    ///
+    /// Distinct from [`Self::jid_attr`], which builds a `user@server` pair with
+    /// no device part. whatspec keeps the two flavours apart and two outbound
+    /// builders differ in nothing else, so a fixture that could only build the
+    /// pair could not tell them apart either.
+    #[must_use]
+    pub fn device_jid_attr(mut self, key: &str, user: &str, device: u8) -> Self {
+        // `JID_USER` is domain type, then device, then the user part — the
+        // order the parser reads them in.
+        let mut encoded = alloc::vec![JID_USER, SERVER_PN_TAG, device];
+        encoded.extend_from_slice(&binary(user.as_bytes()));
         self.attrs.push((binary(key.as_bytes()), encoded));
         self
     }
@@ -402,6 +437,12 @@ mod tests {
             Some("read"),
             "an enum value, so a fixture can write one as a token"
         );
-        assert_eq!(FIXTURE_TABLE.single_byte(4), None);
+        assert_eq!(
+            FIXTURE_TABLE.single_byte(SERVER_GROUP_TAG),
+            Some("g.us"),
+            "the group server, so a fixture can build a group JID — which is \
+             what tells a group report from a newsletter one"
+        );
+        assert_eq!(FIXTURE_TABLE.single_byte(5), None);
     }
 }

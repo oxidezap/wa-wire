@@ -68,6 +68,12 @@ pub mod content;
 pub mod error;
 pub mod extract;
 pub mod generated;
+
+// Declared here rather than from `generated/mod.rs`, which a different
+// generator emits and would drop the line on its next run — the same reason
+// `content::field` is declared where it is.
+#[path = "generated/outgoing.rs"]
+pub mod outgoing;
 pub mod provenance;
 pub mod semantic;
 
@@ -76,4 +82,7 @@ pub mod testing;
 
 pub use error::{DeriveError, Field};
 pub use generated::{Event, KNOWN_TAGS, PROVENANCE, UNMODELLED_FIELDS, derive};
+pub use outgoing::{
+    OUTGOING_TAGS, OutgoingEvent, UNMODELLED_OUTGOING, UNREACHABLE_OUTGOING, derive_outgoing,
+};
 pub use provenance::Provenance;

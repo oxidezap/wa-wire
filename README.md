@@ -37,9 +37,17 @@ derivable from L0-plain. That derivation is a **pure** function — no keys and 
 accumulated state — so it runs host-side, once, instead of being reimplemented
 per engine.
 
-**L1 has two halves, and both are generated from whatspec.** The stanza half
-comes from its `incoming` domain, the payload half from the `WAProto.proto` it
-extracts out of the WA Web bundle. `derive_content` reads a decrypted payload
+**L1 is generated from whatspec, in three parts.** The inbound stanza comes
+from its `incoming` domain, the payload from the `WAProto.proto` it extracts out
+of the WA Web bundle, and the *outbound* stanza from its `stanza` and `iq`
+domains — which describe builders rather than parsers, and are a separate
+derivation for that reason.
+
+An outbound stanza wears the same tags as an inbound one and means the opposite:
+an `<ack>` arriving is the server acknowledging our send, an `<ack>` leaving is
+us acknowledging a delivery. Reading one with the other grammar does not fail,
+it answers confidently and wrongly — so the direction picks the grammar, and a
+recording says which way each stanza went. `derive_content` reads a decrypted payload
 and reports which kind of message it is and what it says, unwrapping the
 envelopes WhatsApp puts around a message first. What stays hand-written is
 which variants are worth naming and where each keeps its text, because no
@@ -91,11 +99,9 @@ Both emit L0-plain. What they cover differs, and the
 stated rather than discovered: only the Rust one reaches its engine's own buffer
 and the auth phase, only the TypeScript one reports when handlers have drained.
 
-Neither reports **what the session sent**. A recording therefore holds the
-inbound half of a conversation and nothing the client replied. That was a limit
-of every engine until `whatsapp-rust` gained `Event::SentFrame`; it is now a
-decision waiting to be taken, since the contract's eight capabilities do not
-name it.
+Only the Rust one reports **what the session sent**, through
+`l0.outbound.observed`. A recording from either of the others holds the inbound
+half of a conversation and nothing the client replied.
 
 Adapters live outside the main workspace: each drags in a whole engine, and the
 contract and codec stay dependency-free on purpose.
@@ -199,8 +205,9 @@ diff rather than a build artifact. CI regenerates and requires no change:
 
 ```console
 python3 tools/generate-tokens.py    # the token dictionaries
-python3 tools/generate-l1.py        # the stanza half of L1, from whatspec
-python3 tools/generate-content.py   # the payload half, from WAProto.proto
+python3 tools/generate-l1.py        # inbound stanzas, from whatspec's `incoming`
+python3 tools/generate-content.py   # payloads, from WAProto.proto
+python3 tools/generate-outgoing.py  # outbound stanzas, from `stanza` and `iq`
 ```
 
 They print what they could **not** express rather than dropping it silently. A

@@ -750,75 +750,74 @@ fn faults_are_a_subset_of_divergences() {
 
 // --- direction ---------------------------------------------------------------
 
-/// An outbound stanza is compared at L0 and never derived.
+/// An outbound stanza is derived with the outbound grammar.
 ///
-/// The derivation is generated from whatspec's `incoming` domain: it describes
-/// how WA Web parses what the *server* sends. An outbound `<ack>` satisfies
-/// those same shapes and means something else — inbound it is the server
-/// acknowledging our send, outbound it is us acknowledging a delivery — so
-/// deriving one produces a confident wrong answer rather than an error.
-///
-/// Two engines agreeing on a wrong reading would be reported as agreement,
-/// which is the failure this guards against.
+/// Two receipts a client sends, differing in a field the shape models. Derived
+/// as outbound they are two derivations of one shape and must differ; derived
+/// as inbound they would be two *different* inbound shapes, which is a reading
+/// of a stanza nobody received.
 #[test]
-fn an_outbound_stanza_is_not_derived() {
-    // Same tag both sides, and bodies that would derive to *different* events
-    // if either were derived: different `type` picks a different shape.
+fn an_outbound_stanza_is_derived_with_the_outbound_grammar() {
     let a = outbound_envelope(
-        Fixture::node("receipt")
+        Fixture::node("ack")
             .attr("id", "AAAA1111")
-            .jid_attr("from", "5511999998888")
-            .attr("type", "read"),
+            .attr("class", "receipt")
+            .attr("to", "5511999998888"),
     );
     let b = outbound_envelope(
-        Fixture::node("receipt")
+        Fixture::node("ack")
             .attr("id", "AAAA1111")
-            .jid_attr("from", "5511999998888")
-            .attr("type", "played"),
+            .attr("class", "receipt")
+            .attr("to", "5511999997777"),
     );
     let (la, rb): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
-    let left = recording("left", &la);
-    let right = recording("right", &rb);
-
-    let report = compare(&left, &right, Tables::shared(FIXTURE_TABLE));
-    let found: Vec<_> = report.divergences().collect();
-    assert!(
-        !found.iter().any(|d| matches!(d.layer(), Layer::L1)),
-        "no L1 finding may come from an outbound stanza: {found:?}"
+    let report = compare(
+        &recording("left", &la),
+        &recording("right", &rb),
+        Tables::shared(FIXTURE_TABLE),
     );
-    // The bytes still differ, and that is reported — at L0, where it belongs.
-    assert!(
-        found.iter().any(|d| matches!(d, Divergence::Frame { .. })),
-        "the frame difference is still a finding: {found:?}"
-    );
-}
-
-/// The same two stanzas *inbound* do produce an L1 finding.
-///
-/// Without this, the test above would pass just as well if the comparison had
-/// stopped working altogether.
-#[test]
-fn the_same_two_stanzas_inbound_do_diverge_at_l1() {
-    let a = envelope(
-        Fixture::node("receipt")
-            .attr("id", "AAAA1111")
-            .jid_attr("from", "5511999998888")
-            .attr("type", "read"),
-    );
-    let b = envelope(
-        Fixture::node("receipt")
-            .attr("id", "AAAA1111")
-            .jid_attr("from", "5511999998888")
-            .attr("type", "played"),
-    );
-    let (la, rb): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
-    let left = recording("left", &la);
-    let right = recording("right", &rb);
-
-    let report = compare(&left, &right, Tables::shared(FIXTURE_TABLE));
     let found: Vec<_> = report.divergences().collect();
     assert!(
         found.iter().any(|d| matches!(d.layer(), Layer::L1)),
-        "inbound, this pair is an L1 divergence: {found:?}"
+        "a modelled field differing is an L1 finding: {found:?}"
     );
+}
+
+/// The outbound grammar knows tags the inbound one does not.
+///
+/// `<iq>` never arrives as a shape the `incoming` domain models, and a client
+/// sends them constantly. Deriving one is only possible on the outbound side,
+/// which is the clearest evidence the two grammars are not interchangeable.
+#[test]
+fn an_outbound_iq_derives_where_an_inbound_reading_has_nothing() {
+    let iq = outbound_envelope(
+        Fixture::node("iq")
+            .attr("xmlns", "abt")
+            .attr("type", "get")
+            .attr("to", "s.whatsapp.net")
+            .attr("id", "1")
+            .child(Fixture::node("props").attr("protocol", "1")),
+    );
+    let (la, rb): ([&[u8]; 1], [&[u8]; 1]) = ([&iq], [&iq]);
+    let report = compare(
+        &recording("left", &la),
+        &recording("right", &rb),
+        Tables::shared(FIXTURE_TABLE),
+    );
+    let found: Vec<_> = report.divergences().collect();
+    assert!(
+        !found.iter().any(|d| matches!(d.layer(), Layer::L1)),
+        "one stanza derived twice agrees with itself: {found:?}"
+    );
+
+    // And the same bytes read as inbound derive to nothing at all.
+    let node = wa_wire_codec::Parser::new(FIXTURE_TABLE)
+        .parse(
+            wa_wire_contract::EnvelopeRef::decode(&iq)
+                .expect("decodes")
+                .frame(),
+        )
+        .expect("parses");
+    assert!(wa_wire_l1::derive(&node).is_err());
+    assert!(wa_wire_l1::derive_outgoing(&node).is_ok());
 }

@@ -9,7 +9,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 32
+> **Last revised:** rev 33
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1951,13 +1951,61 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-103 | Where takeover is partial, the matrix says which stanzas are excluded rather than scoring it | `whatsapp-rust` never offers the five tags that settle connection state, and that is the correct design — an engine that handed them over could not stay connected. A bare `✅` would claim more than is true and a bare `❌` would deny something real, so the cell carries the exclusion | 31 |
 | D-104 | An engine claim names its file, and only pins a line where the line is the claim | Three of this document's line references had drifted by rev 31 while every statement they supported was still true, which trains a reader to stop checking. The file is stable enough to find the thing; the line number was decoration that decayed | 31 |
 | D-105 | Observing what an engine sends is its own capability, `l0.outbound.observed` | `l0.outbound` is the ability to send, which every adapter with a `Sender` has and which says nothing about whether the engine reports what left. `AdapterInfo::verify` already gated outbound envelopes on a capability documented as "observe the outbound path" and tested the one for sending, so the distinction existed in the prose before it existed in the code | 32 |
-| D-106 | Outbound stanzas are compared at L0 and never derived | The derivation comes from whatspec's `incoming` domain, which records how WA Web parses what the *server* sends. An outbound `<ack>` satisfies those shapes and means the opposite, so it does not fail to derive — it derives confidently and wrongly, and two engines agreeing on a wrong reading reports as agreement. Deriving them needs the request-side domains, which nothing here generates from | 32 |
+| ~~D-106~~ | ~~Outbound stanzas are compared at L0 and never derived~~ | The derivation comes from whatspec's `incoming` domain, which records how WA Web parses what the *server* sends. An outbound `<ack>` satisfies those shapes and means the opposite, so it does not fail to derive — it derives confidently and wrongly, and two engines agreeing on a wrong reading reports as agreement. Deriving them needs the request-side domains, which nothing here generates from | 32 |
 | D-107 | A mixin group's alternatives are tried richest-first, as ordering and not preference | `NewsletterMessageAck`'s required fields are a subset of `NewsletterQuestionResponseAck`'s, so the leaner alternative accepts every stanza the richer one does and trying it first would claim them all. This is D-041 one level down, arrived at from the same evidence | 32 |
 | D-108 | Read budgets are reported but not enforced under coverage instrumentation | `cargo llvm-cov` costs about 4x on the walk it counts, so a ceiling measured against it measures the instrumentation. The recording walk sat inside its ceiling on CI's runner and outside it on a developer's — passing on the margin rather than the merits. `cargo test` still enforces them, and the self-test asserts the exemption rather than being silently disabled by it | 32 |
+| D-109 | **Reverses D-106.** Outbound stanzas are derived, from a second generator over whatspec's `stanza` and `iq` domains | D-106 said the request-side domains were not consumed and left the bytes as the claim. `stanza/index.json` is 179 records every one of which is `direction: outgoing`, and `iq`'s `request` half describes 137 more. The gap was that nothing here read them, not that nothing described them | 33 |
+| D-110 | The outbound derivation is a separate generator, not a flag on the existing one | The two domains answer different questions. `incoming` records how WA Web *parses*, naming the accessor a reader calls; `stanza` and `iq` record how it *builds*, naming how the sender produces each value. Read backwards a builder is still a shape, but the vocabularies do not meet, and one generator serving both would be two generators sharing a file | 33 |
+| D-111 | A JID's flavour is enforced, not collapsed into "a JID" | Two `<ack class="notification">` builders differ in nothing but `to` being a device JID in one and a user JID in the other, and two spam reports in nothing but a group JID against a user JID. Reading all three as one type made one shape out of two and let either claim the other's stanzas | 33 |
+| D-112 | Shapes the dispatch can never reach are named, not reordered around | Four differ from an earlier shape in nothing a reader can see: whatspec separates an attribute the caller supplies from one the builder computes, which is a fact about the builder and not about the stanza, and an extra optional attribute discriminates nothing. Reordering moves the problem to the other shape; the generator detects the shadowing itself and emits the pair | 33 |
 
 ---
 
 ## Changelog
+
+### rev 33 — 2026-08-08
+
+- **D-106 is reversed, one revision after it was written.** It said outbound
+  stanzas could not be derived because whatspec's request-side domains were not
+  consumed by any generator here. True, and the wrong conclusion to draw: the
+  domains describe 210 outbound shapes between them, and not reading a
+  description is not the same as not having one.
+  - `stanza/index.json` is 179 records, every one `direction: outgoing` —
+    acks, receipts, messages, presence, the high-volume traffic. `iq`'s
+    `request` half describes 137 more once duplicates are folded.
+  - `srvreq` looked like the third source and is not: those are stanzas the
+    *server* initiates and the client answers, which is more inbound traffic
+    wearing a name that suggests otherwise.
+- **A second generator, deliberately** (D-110). `tools/generate-outgoing.py`
+  reads builders where `generate-l1.py` reads parsers, and the two vocabularies
+  do not meet: a builder's attribute says how the sender *produces* the value —
+  `const`, `dynamic`, `generated_id` — where a parser's says which accessor a
+  reader calls.
+- **Four things the work found, none of which were the thing it set out to do:**
+  - A `const` on a *child* is a discriminator dispatch cannot see, because
+    dispatch guards on the stanza's own attributes. Two `abt get` requests
+    differ only in what their `<props>` child pins, and the shape that ignored
+    the pin claimed the other's stanzas. Child structs enforce their own pins;
+    top-level ones do not, because there dispatch has already tested them and
+    the check would be five hundred branches only a bug could reach (D-030).
+  - **JID flavours were collapsed** (D-111). Three pairs of shapes differ in
+    nothing else. `attr_user_jid`, `attr_device_jid` and `attr_group_jid` now
+    hold them apart — a device JID carries a device part, a group JID lives on
+    `g.us`, which is entry 45 of the token dictionary rather than this crate's
+    guess.
+  - **Ordering had to become tree-aware.** `SetReadReceiptJob` is
+    `SetPrivacyJob` with `category/@name` pinned two levels down, and a
+    specificity that counted only the top level saw two shapes with one child
+    each and picked the wrong one.
+  - **Four shapes can never be derived as themselves** (D-112), and the
+    generator works that out rather than being told. It simulates its own
+    dispatch over each shape's fixture and reports which earlier shape claims
+    it.
+- **The generated tests are table-driven, and that is a coverage decision
+  rather than a style one.** An assertion's failure path is a region a passing
+  test never enters, so 210 tests carrying a formatted message each contribute
+  some 550 regions reachable only by breaking the build. Three loops over one
+  table have three.
 
 ### rev 32 — 2026-08-08
 

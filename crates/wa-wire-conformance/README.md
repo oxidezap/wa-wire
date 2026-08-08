@@ -22,6 +22,17 @@ Reporting every L0 difference would bury the L1 ones, and L1 is where
 correctness lives. So the comparator records both and separates *context* from
 *faults*.
 
+## The direction picks the grammar
+
+An outbound stanza is derived with the outbound derivation and an inbound one
+with the inbound derivation, and picking wrong is worse than not deriving at
+all. The two grammars accept the same tags and disagree about what they mean, so
+a stanza read the wrong way does not fail — it produces a confident wrong
+answer, and two engines agreeing on a wrong reading reports as agreement.
+
+A pair whose envelopes disagree on direction is a finding in its own right, and
+it is raised before either is derived.
+
 ## One body of evidence, two questions
 
 | Profile | Asks | A frame difference is |

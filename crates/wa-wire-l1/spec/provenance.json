@@ -1,6 +1,8 @@
 {
   "generatorVersion": "0.1.0",
   "incomingDigest": "sha256:18c955020acfc3ea86bedb4186aac951ccafdf26ede0b05554926a3157d7749e",
+  "iqDigest": "sha256:99f10a56c71bbeb1d1827aed51b1c7927aab943c48de5349dc5ff5668fb65103",
+  "outgoingDigest": "sha256:e96e069cfbc555c2109ea13fb6963595d062e2554b6cbbe5df4232d530e2dd0a",
   "protoDigest": "sha256:021d53059e7b35d8553c97c09567da8d6aba7278c7f2510242eab686bff3647a",
   "schemaVersion": "2.0.0",
   "whatsappVersion": "2.3000.1044659339"
