@@ -27,7 +27,7 @@ pub const PROVENANCE: Provenance<'static> = Provenance {
     whatsapp_version: "2.3000.1044659339",
     schema_version: "2.0.0",
     generator_version: "0.1.0",
-    incoming_digest: "sha256:90adc75ead28f23a6bd801ced35f30f87f8aa72414433dcb7a2f379ec3666649",
+    incoming_digest: "sha256:feaaaa76d0925423d24405ee08e9c140e30729d853c044bf4e1d8c4da4900cc6",
 };
 
 /// Wire values for `ALLNONE`.
@@ -838,8 +838,6 @@ pub struct IncomingMsgParserMeta<'a> {
     pub origin: Option<STANZAMSGORIGIN>,
     /// `appdata`, via `maybeAttrEnum`.
     pub appdata: Option<APPDATA>,
-    /// `content`, via `attrString`.
-    pub content: Value<'a>,
     /// `thread_msg_id`, via `maybeAttrString`.
     pub thread_msg_id: Option<Value<'a>>,
     /// `thread_msg_sender_jid`, via `attrJidWithType`.
@@ -885,7 +883,6 @@ impl<'a> IncomingMsgParserMeta<'a> {
             status_mentioned: extract::maybe_attr_string(node, "status_mentioned"),
             origin: extract::maybe_attr_enum(node, "origin", STANZAMSGORIGIN::from_wire)?,
             appdata: extract::maybe_attr_enum(node, "appdata", APPDATA::from_wire)?,
-            content: extract::attr_string(node, "content")?,
             thread_msg_id: extract::maybe_attr_string(node, "thread_msg_id"),
             thread_msg_sender_jid: extract::maybe_attr_jid(node, "thread_msg_sender_jid")?,
             target_id: extract::maybe_attr_string(node, "target_id"),
@@ -928,7 +925,6 @@ impl IncomingMsgParserMeta<'_> {
             })
             && (self.origin == other.origin)
             && (self.appdata == other.appdata)
-            && (self.content.semantic_eq(other.content))
             && (match (self.thread_msg_id, other.thread_msg_id) {
                 (Some(a), Some(b)) => a.semantic_eq(b),
                 (None, None) => true,
@@ -2976,8 +2972,6 @@ pub struct Ack<'a> {
     pub class: Value<'a>,
     /// `type`, via `maybeAttrString`.
     pub r#type: Option<Value<'a>>,
-    /// `content`, via `attrJidWithType`.
-    pub content: Jid<'a>,
     /// `participant`, via `attrDeviceJid`.
     pub participant: Option<Jid<'a>>,
     /// `recipient`, via `attrUserJid`.
@@ -2995,7 +2989,6 @@ impl<'a> Ack<'a> {
             t: extract::maybe_attr_string(node, "t"),
             class: extract::attr_string(node, "class")?,
             r#type: extract::maybe_attr_string(node, "type"),
-            content: extract::attr_jid(node, "content")?,
             participant: extract::maybe_attr_jid(node, "participant")?,
             recipient: extract::maybe_attr_jid(node, "recipient")?,
             node: *node,
@@ -3023,7 +3016,6 @@ impl Ack<'_> {
                 (None, None) => true,
                 _ => false,
             })
-            && (self.content.semantic_eq(other.content))
             && (match (self.participant, other.participant) {
                 (Some(a), Some(b)) => a.semantic_eq(b),
                 (None, None) => true,
@@ -3538,11 +3530,11 @@ pub fn derive<'a>(node: &NodeRef<'a>) -> Result<Event<'a>, DeriveError> {
         {
             return Ok(Event::ParsePublishViewResponseSuccess(inner));
         }
-        if let Ok(inner) = Ack::derive(node) {
-            return Ok(Event::Ack(inner));
-        }
         if let Ok(inner) = SendMsgAckSyncParser::derive(node) {
             return Ok(Event::SendMsgAckSyncParser(inner));
+        }
+        if let Ok(inner) = Ack::derive(node) {
+            return Ok(Event::Ack(inner));
         }
         if let Ok(inner) = ParseNewsletterResponseSuccess::derive(node) {
             return Ok(Event::ParseNewsletterResponseSuccess(inner));
@@ -3678,7 +3670,6 @@ mod generated_tests {
                     .attr("status_mentioned", "x")
                     .attr("origin", "ctwa")
                     .attr("appdata", "default")
-                    .attr("content", "x")
                     .attr("thread_msg_id", "x")
                     .jid_attr("thread_msg_sender_jid", "u")
                     .attr("target_id", "x")
@@ -3764,7 +3755,6 @@ mod generated_tests {
                     .attr("status_mentioned", "x")
                     .attr("origin", "ctwa")
                     .attr("appdata", "default")
-                    .attr("content", "x")
                     .attr("thread_msg_id", "x")
                     .jid_attr("thread_msg_sender_jid", "u")
                     .attr("target_id", "x")
@@ -4450,7 +4440,6 @@ mod generated_tests {
         let stanza = Fixture::node("ack")
             .attr("id", "x")
             .attr("class", "x")
-            .jid_attr("content", "u")
             .build();
         let node = parse(&stanza);
         let derived = Ack::derive(&node);
@@ -4470,7 +4459,6 @@ mod generated_tests {
             .attr("t", "x")
             .attr("class", "x")
             .attr("type", "x")
-            .jid_attr("content", "u")
             .jid_attr("participant", "u")
             .jid_attr("recipient", "u")
             .build();
@@ -4490,7 +4478,6 @@ mod generated_tests {
             .attr("t", "x")
             .attr("class", "x")
             .attr("type", "x")
-            .jid_attr("content", "u")
             .jid_attr("participant", "u")
             .jid_attr("recipient", "u")
             .build();
@@ -4504,7 +4491,6 @@ mod generated_tests {
         let bare = Fixture::node("ack")
             .attr("id", "x")
             .attr("class", "x")
-            .jid_attr("content", "u")
             .build();
         let bare_node = parse(&bare);
         if let Ok(bare_derived) = Ack::derive(&bare_node) {

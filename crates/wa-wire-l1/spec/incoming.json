@@ -1,8 +1,12 @@
 {
+  "schemaVersion": "2.0.0",
+  "waVersion": "2.3000.1044659339",
   "incoming": [
     {
+      "tag": "message",
       "module": "WAWebHandleMsgParser",
       "shape": {
+        "parserName": "incomingMsgParser",
         "assertions": [
           {
             "kind": "tag",
@@ -11,19 +15,28 @@
         ],
         "fields": [
           {
-            "children": [],
             "method": "maybeChild",
             "name": "plaintext",
+            "type": "string",
             "required": false,
             "tag": "plaintext",
-            "type": "string"
+            "children": []
           },
           {
+            "method": "mapChildrenWithTag",
+            "name": "enc",
+            "type": "string",
+            "required": true,
+            "tag": "enc",
             "children": [
               {
+                "method": "attrEnumValues",
+                "name": "type",
+                "type": "enum",
+                "required": true,
                 "enumRef": {
-                  "module": "WAWebBackendJobs.flow",
                   "name": "CiphertextType",
+                  "module": "WAWebBackendJobs.flow",
                   "variants": [
                     {
                       "name": "Skmsg",
@@ -42,148 +55,143 @@
                       "value": "msmsg"
                     }
                   ]
-                },
-                "method": "attrEnumValues",
-                "name": "type",
-                "required": true,
-                "type": "enum"
+                }
               },
               {
                 "method": "maybeAttrString",
                 "name": "mediatype",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "contentBytes",
                 "name": "content",
-                "required": true,
-                "type": "bytes"
+                "type": "bytes",
+                "required": true
               },
               {
                 "method": "maybeAttrInt",
                 "name": "count",
-                "required": false,
-                "type": "integer"
+                "type": "integer",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "decrypt-fail",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "state",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "session_type",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               }
             ],
-            "method": "mapChildrenWithTag",
-            "name": "enc",
-            "repeats": true,
-            "required": true,
-            "tag": "enc",
-            "type": "string"
+            "repeats": true
           },
           {
+            "method": "maybeChild",
+            "name": "device-identity",
+            "type": "string",
+            "required": false,
+            "tag": "device-identity",
             "children": [
               {
                 "method": "contentBytes",
                 "name": "content",
-                "required": true,
-                "type": "bytes"
+                "type": "bytes",
+                "required": true
               }
             ],
-            "contentType": "bytes",
-            "method": "maybeChild",
-            "name": "device-identity",
-            "required": false,
-            "tag": "device-identity",
-            "type": "string"
+            "contentType": "bytes"
           },
           {
+            "method": "maybeChild",
+            "name": "bot",
+            "type": "string",
+            "required": false,
+            "tag": "bot",
             "children": [
               {
                 "method": "maybeAttrString",
                 "name": "sender_timestamp_ms",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "edit_target_id",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "edit",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "attrString",
                 "name": "biz_bot",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "type",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               }
-            ],
-            "method": "maybeChild",
-            "name": "bot",
-            "required": false,
-            "tag": "bot",
-            "type": "string"
+            ]
           },
           {
             "method": "attrJidWithType",
             "name": "from",
-            "required": true,
-            "type": "jid_typed"
+            "type": "jid_typed",
+            "required": true
           },
           {
             "method": "attrDeviceJid",
             "name": "participant",
-            "required": false,
-            "type": "device_jid"
+            "type": "device_jid",
+            "required": false
           },
           {
+            "method": "maybeChild",
+            "name": "unavailable",
+            "type": "string",
+            "required": false,
+            "tag": "unavailable",
             "children": [
               {
                 "method": "maybeAttrString",
                 "name": "hosted",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "type",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               }
-            ],
-            "method": "maybeChild",
-            "name": "unavailable",
-            "required": false,
-            "tag": "unavailable",
-            "type": "string"
+            ]
           },
           {
+            "method": "attrEnum",
+            "name": "type",
+            "type": "enum",
+            "required": true,
             "enumRef": {
-              "module": "WAWebHandleMsgCommon",
               "name": "STANZA_MSG_TYPES",
+              "module": "WAWebHandleMsgCommon",
               "variants": [
                 {
                   "name": "text",
@@ -214,18 +222,23 @@
                   "value": "event"
                 }
               ]
-            },
-            "method": "attrEnum",
-            "name": "type",
-            "required": true,
-            "type": "enum"
+            }
           },
           {
+            "method": "maybeChild",
+            "name": "meta",
+            "type": "string",
+            "required": false,
+            "tag": "meta",
             "children": [
               {
+                "method": "attrEnumOrNullIfUnknown",
+                "name": "polltype",
+                "type": "enum",
+                "required": true,
                 "enumRef": {
-                  "module": "WAWebHandleMsgCommon",
                   "name": "POLL_TYPES",
+                  "module": "WAWebHandleMsgCommon",
                   "variants": [
                     {
                       "name": "creation",
@@ -248,38 +261,38 @@
                       "value": "edit"
                     }
                   ]
-                },
-                "method": "attrEnumOrNullIfUnknown",
-                "name": "polltype",
-                "required": true,
-                "type": "enum"
+                }
               },
               {
                 "method": "maybeAttrString",
                 "name": "status_mentioned",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
+                "method": "maybeAttrEnum",
+                "name": "origin",
+                "type": "enum",
+                "required": false,
                 "enumRef": {
-                  "module": "WAWebHandleMsgCommon",
                   "name": "STANZA_MSG_ORIGIN",
+                  "module": "WAWebHandleMsgCommon",
                   "variants": [
                     {
                       "name": "ctwa",
                       "value": "ctwa"
                     }
                   ]
-                },
-                "method": "maybeAttrEnum",
-                "name": "origin",
-                "required": false,
-                "type": "enum"
+                }
               },
               {
+                "method": "maybeAttrEnum",
+                "name": "appdata",
+                "type": "enum",
+                "required": false,
                 "enumRef": {
-                  "module": "WAWebHandleMsgCommon",
                   "name": "APPDATA",
+                  "module": "WAWebHandleMsgCommon",
                   "variants": [
                     {
                       "name": "default",
@@ -294,70 +307,64 @@
                       "value": "group_history"
                     }
                   ]
-                },
-                "method": "maybeAttrEnum",
-                "name": "appdata",
-                "required": false,
-                "type": "enum"
-              },
-              {
-                "method": "attrString",
-                "name": "content",
-                "required": true,
-                "type": "string"
+                }
               },
               {
                 "method": "attrString",
                 "name": "thread_msg_id",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "attrJidWithType",
                 "name": "thread_msg_sender_jid",
-                "required": false,
-                "type": "jid_typed"
+                "type": "jid_typed",
+                "required": false
               },
               {
                 "method": "attrString",
                 "name": "target_id",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "attrJidWithType",
                 "name": "target_sender_jid",
-                "required": false,
-                "type": "jid_typed"
+                "type": "jid_typed",
+                "required": false
               },
               {
                 "method": "attrJidWithType",
                 "name": "target_chat_jid",
-                "required": false,
-                "type": "jid_typed"
+                "type": "jid_typed",
+                "required": false
               },
               {
                 "method": "attrJidWithType",
                 "name": "target_chat_jid_lid",
-                "required": false,
-                "type": "jid_typed"
+                "type": "jid_typed",
+                "required": false
               },
               {
                 "method": "attrJidWithType",
                 "name": "from",
-                "required": false,
-                "type": "jid_typed"
+                "type": "jid_typed",
+                "required": false
               },
               {
                 "method": "attrString",
                 "name": "capi",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
+                "method": "attrEnum",
+                "name": "event_type",
+                "type": "enum",
+                "required": false,
                 "enumRef": {
-                  "module": "WAWebHandleMsgCommon",
                   "name": "EVENT_TYPES",
+                  "module": "WAWebHandleMsgCommon",
                   "variants": [
                     {
                       "name": "creation",
@@ -372,110 +379,105 @@
                       "value": "edit"
                     }
                   ]
-                },
-                "method": "attrEnum",
-                "name": "event_type",
-                "required": false,
-                "type": "enum"
+                }
               },
               {
                 "method": "attrString",
                 "name": "context_source",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "attrString",
                 "name": "read",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "is_group_status",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "session_scope",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "type",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrInt",
                 "name": "st",
-                "required": false,
-                "type": "integer"
+                "type": "integer",
+                "required": false
               },
               {
+                "method": "maybeChild",
+                "name": "key",
+                "type": "string",
+                "required": false,
+                "tag": "key",
                 "children": [
                   {
                     "method": "maybeAttrString",
                     "name": "rkid",
-                    "required": false,
-                    "type": "string"
+                    "type": "string",
+                    "required": false
                   },
                   {
                     "method": "contentBytes",
                     "name": "content",
-                    "required": true,
-                    "type": "bytes"
+                    "type": "bytes",
+                    "required": true
                   }
                 ],
-                "contentType": "bytes",
-                "method": "maybeChild",
-                "name": "key",
-                "required": false,
-                "tag": "key",
-                "type": "string"
+                "contentType": "bytes"
               }
-            ],
-            "method": "maybeChild",
-            "name": "meta",
-            "required": false,
-            "tag": "meta",
-            "type": "string"
+            ]
           },
           {
             "method": "attrString",
             "name": "t",
-            "required": true,
-            "type": "string"
+            "type": "string",
+            "required": true
           },
           {
+            "method": "maybeChild",
+            "name": "verified_name",
+            "type": "string",
+            "required": false,
+            "tag": "verified_name",
             "children": [
               {
                 "method": "contentBytes",
                 "name": "content",
-                "required": true,
-                "type": "bytes"
+                "type": "bytes",
+                "required": true
               }
-            ],
-            "method": "maybeChild",
-            "name": "verified_name",
-            "required": false,
-            "tag": "verified_name",
-            "type": "string"
+            ]
           },
           {
-            "children": [],
             "method": "child",
             "name": "verified_name",
+            "type": "string",
             "required": false,
             "tag": "verified_name",
-            "type": "string"
+            "children": []
           },
           {
+            "method": "maybeAttrEnum",
+            "name": "verified_level",
+            "type": "enum",
+            "required": false,
             "enumRef": {
-              "module": "WAWebHandleMsgCommon",
               "name": "MSG_VERIFIED_LEVEL",
+              "module": "WAWebHandleMsgCommon",
               "variants": [
                 {
                   "name": "high",
@@ -490,181 +492,177 @@
                   "value": "unknown"
                 }
               ]
-            },
-            "method": "maybeAttrEnum",
-            "name": "verified_level",
-            "required": false,
-            "type": "enum"
+            }
           },
           {
             "method": "attrInt",
             "name": "verified_name",
-            "required": false,
-            "type": "integer"
+            "type": "integer",
+            "required": false
           },
           {
+            "method": "maybeChild",
+            "name": "biz",
+            "type": "string",
+            "required": false,
+            "tag": "biz",
             "children": [
               {
                 "method": "maybeAttrInt",
                 "name": "actual_actors",
-                "required": false,
-                "type": "integer"
+                "type": "integer",
+                "required": false
               },
               {
                 "method": "maybeAttrInt",
                 "name": "host_storage",
-                "required": false,
-                "type": "integer"
+                "type": "integer",
+                "required": false
               },
               {
                 "method": "maybeAttrInt",
                 "name": "privacy_mode_ts",
-                "required": false,
-                "type": "integer"
+                "type": "integer",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "native_flow_name",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "campaign_id",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               }
-            ],
-            "method": "maybeChild",
-            "name": "biz",
-            "required": false,
-            "tag": "biz",
-            "type": "string"
+            ]
           },
           {
-            "children": [],
             "method": "child",
             "name": "pay",
+            "type": "string",
             "required": false,
             "tag": "pay",
-            "type": "string"
+            "children": []
           },
           {
-            "children": [],
             "method": "child",
             "name": "transaction",
+            "type": "string",
             "required": false,
             "tag": "transaction",
-            "type": "string"
+            "children": []
           },
           {
             "method": "attrJidWithType",
             "name": "participant",
-            "required": false,
-            "type": "jid_typed"
+            "type": "jid_typed",
+            "required": false
           },
           {
             "method": "attrString",
             "name": "recipient",
-            "required": true,
-            "type": "string"
+            "type": "string",
+            "required": true
           },
           {
             "method": "attrInt",
             "name": "t",
-            "required": true,
-            "type": "integer"
+            "type": "integer",
+            "required": true
           },
           {
+            "method": "maybeChild",
+            "name": "hsm",
+            "type": "string",
+            "required": false,
+            "tag": "hsm",
             "children": [
               {
                 "method": "maybeAttrString",
                 "name": "tag",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "category",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               }
-            ],
-            "method": "maybeChild",
-            "name": "hsm",
-            "required": false,
-            "tag": "hsm",
-            "type": "string"
+            ]
           },
           {
+            "method": "maybeChild",
+            "name": "reporting",
+            "type": "string",
+            "required": false,
+            "tag": "reporting",
             "children": [
               {
+                "method": "maybeChild",
+                "name": "reporting_token",
+                "type": "string",
+                "required": false,
+                "tag": "reporting_token",
                 "children": [
                   {
                     "method": "contentBytes",
                     "name": "content",
-                    "required": true,
-                    "type": "bytes"
+                    "type": "bytes",
+                    "required": true
                   },
                   {
                     "method": "attrInt",
                     "name": "v",
-                    "required": true,
-                    "type": "integer"
+                    "type": "integer",
+                    "required": true
                   }
                 ],
-                "contentType": "bytes",
-                "method": "maybeChild",
-                "name": "reporting_token",
-                "required": false,
-                "tag": "reporting_token",
-                "type": "string"
+                "contentType": "bytes"
               },
               {
+                "method": "maybeChild",
+                "name": "reporting_tag",
+                "type": "string",
+                "required": false,
+                "tag": "reporting_tag",
                 "children": [
                   {
                     "method": "contentBytes",
                     "name": "content",
-                    "required": true,
-                    "type": "bytes"
+                    "type": "bytes",
+                    "required": true
                   }
                 ],
-                "contentType": "bytes",
-                "method": "maybeChild",
-                "name": "reporting_tag",
-                "required": false,
-                "tag": "reporting_tag",
-                "type": "string"
+                "contentType": "bytes"
               }
-            ],
-            "method": "maybeChild",
-            "name": "reporting",
-            "required": false,
-            "tag": "reporting",
-            "type": "string"
+            ]
           },
           {
             "method": "attrTime",
             "name": "t",
-            "required": true,
-            "type": "integer"
+            "type": "integer",
+            "required": true
           },
           {
-            "children": [],
             "method": "maybeChild",
             "name": "rcat",
+            "type": "string",
             "required": false,
             "tag": "rcat",
-            "type": "string"
+            "children": []
           }
-        ],
-        "parserName": "incomingMsgParser"
-      },
-      "tag": "message"
+        ]
+      }
     },
     {
+      "tag": "message",
       "module": "WAWebHandleMsgParser",
       "shape": {
+        "parserName": "incomingMsgParserForAckOnly",
         "assertions": [
           {
             "kind": "tag",
@@ -673,9 +671,13 @@
         ],
         "fields": [
           {
+            "method": "attrEnum",
+            "name": "type",
+            "type": "enum",
+            "required": true,
             "enumRef": {
-              "module": "WAWebHandleMsgCommon",
               "name": "STANZA_MSG_TYPES",
+              "module": "WAWebHandleMsgCommon",
               "variants": [
                 {
                   "name": "text",
@@ -706,83 +708,79 @@
                   "value": "event"
                 }
               ]
-            },
-            "method": "attrEnum",
-            "name": "type",
-            "required": true,
-            "type": "enum"
+            }
           },
           {
             "method": "attrString",
             "name": "offline",
-            "required": true,
-            "type": "string"
+            "type": "string",
+            "required": true
           },
           {
+            "method": "maybeChild",
+            "name": "bot",
+            "type": "string",
+            "required": false,
+            "tag": "bot",
             "children": [
               {
                 "method": "maybeAttrString",
                 "name": "sender_timestamp_ms",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "edit_target_id",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "edit",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "attrString",
                 "name": "biz_bot",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "maybeAttrString",
                 "name": "type",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               }
-            ],
-            "method": "maybeChild",
-            "name": "bot",
-            "required": false,
-            "tag": "bot",
-            "type": "string"
+            ]
           },
           {
             "method": "attrString",
             "name": "id",
-            "required": true,
-            "type": "string"
+            "type": "string",
+            "required": true
           },
           {
             "method": "attrJidWithType",
             "name": "from",
-            "required": true,
-            "type": "jid_typed"
+            "type": "jid_typed",
+            "required": true
           },
           {
             "method": "attrDeviceJid",
             "name": "participant",
-            "required": false,
-            "type": "device_jid"
+            "type": "device_jid",
+            "required": false
           }
-        ],
-        "parserName": "incomingMsgParserForAckOnly"
-      },
-      "tag": "message"
+        ]
+      }
     },
     {
+      "tag": "receipt",
       "module": "WAWebHandleVoipCallReceipt",
       "shape": {
+        "parserName": "callReceiptParser",
         "assertions": [
           {
             "kind": "tag",
@@ -791,55 +789,55 @@
         ],
         "fields": [
           {
-            "children": [],
             "method": "maybeChild",
             "name": "offer",
+            "type": "string",
             "required": false,
             "tag": "offer",
-            "type": "string"
+            "children": []
           },
           {
-            "children": [],
             "method": "maybeChild",
             "name": "accept",
+            "type": "string",
             "required": false,
             "tag": "accept",
-            "type": "string"
+            "children": []
           },
           {
-            "children": [],
             "method": "maybeChild",
             "name": "reject",
+            "type": "string",
             "required": false,
             "tag": "reject",
-            "type": "string"
+            "children": []
           },
           {
             "method": "attrString",
             "name": "id",
-            "required": true,
-            "type": "string"
+            "type": "string",
+            "required": true
           },
           {
             "method": "maybeAttrString",
             "name": "type",
-            "required": false,
-            "type": "string"
+            "type": "string",
+            "required": false
           },
           {
             "method": "attrJidWithType",
             "name": "from",
-            "required": true,
-            "type": "jid_typed"
+            "type": "jid_typed",
+            "required": true
           }
-        ],
-        "parserName": "callReceiptParser"
-      },
-      "tag": "receipt"
+        ]
+      }
     },
     {
+      "tag": "receipt",
       "module": "WAWebHandleMsgReceiptParser",
       "shape": {
+        "parserName": "incomingMsgReceiptParser",
         "assertions": [
           {
             "kind": "tag",
@@ -850,22 +848,26 @@
           {
             "method": "attrString",
             "name": "id",
-            "required": true,
-            "type": "string"
+            "type": "string",
+            "required": true
           },
           {
             "method": "attrJidWithType",
             "name": "from",
-            "required": true,
-            "type": "jid_typed"
+            "type": "jid_typed",
+            "required": true
           },
           {
             "method": "maybeAttrString",
             "name": "offline",
-            "required": false,
-            "type": "string"
+            "type": "string",
+            "required": false
           },
           {
+            "method": "maybeAttrEnum",
+            "name": "type",
+            "type": "enum",
+            "required": false,
             "enumKeys": [
               "delivery",
               "read",
@@ -876,56 +878,66 @@
               "read-self",
               "played-self",
               "peer_msg"
-            ],
-            "method": "maybeAttrEnum",
-            "name": "type",
-            "required": false,
-            "type": "enum"
+            ]
           },
           {
+            "method": "maybeChild",
+            "name": "error",
+            "type": "string",
+            "required": false,
+            "tag": "error",
             "children": [
               {
                 "method": "attrString",
                 "name": "reason",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
                 "method": "attrString",
                 "name": "type",
-                "required": true,
-                "type": "string"
+                "type": "string",
+                "required": true
               }
-            ],
-            "method": "maybeChild",
-            "name": "error",
-            "required": false,
-            "tag": "error",
-            "type": "string"
+            ]
           },
           {
+            "method": "maybeChild",
+            "name": "participants",
+            "type": "string",
+            "required": false,
+            "tag": "participants",
             "children": [
               {
+                "method": "forEachChildWithTag",
+                "name": "user",
+                "type": "string",
+                "required": false,
+                "tag": "user",
                 "children": [
                   {
                     "method": "attrDeviceJid",
                     "name": "jid",
-                    "required": true,
-                    "type": "device_jid"
+                    "type": "device_jid",
+                    "required": true
                   },
                   {
                     "method": "attrTime",
                     "name": "t",
-                    "required": true,
-                    "type": "integer"
+                    "type": "integer",
+                    "required": true
                   },
                   {
                     "method": "maybeAttrString",
                     "name": "type",
-                    "required": false,
-                    "type": "string"
+                    "type": "string",
+                    "required": false
                   },
                   {
+                    "method": "maybeAttrEnum",
+                    "name": "type",
+                    "type": "enum",
+                    "required": false,
                     "enumKeys": [
                       "delivery",
                       "read",
@@ -936,187 +948,173 @@
                       "read-self",
                       "played-self",
                       "peer_msg"
-                    ],
-                    "method": "maybeAttrEnum",
-                    "name": "type",
-                    "required": false,
-                    "type": "enum"
+                    ]
                   },
                   {
                     "method": "attrUserJid",
                     "name": "participant_pn",
-                    "required": false,
-                    "type": "user_jid"
+                    "type": "user_jid",
+                    "required": false
                   },
                   {
                     "method": "maybeAttrString",
                     "name": "participant_username",
-                    "required": false,
-                    "type": "string"
+                    "type": "string",
+                    "required": false
                   }
                 ],
-                "method": "forEachChildWithTag",
-                "name": "user",
-                "repeats": true,
-                "required": false,
-                "tag": "user",
-                "type": "string"
+                "repeats": true
               },
               {
                 "method": "attrString",
                 "name": "message_id",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               },
               {
+                "method": "mapChildrenWithTag",
+                "name": "user",
+                "type": "string",
+                "required": false,
+                "tag": "user",
                 "children": [
                   {
                     "method": "attrDeviceJid",
                     "name": "jid",
-                    "required": true,
-                    "type": "device_jid"
+                    "type": "device_jid",
+                    "required": true
                   },
                   {
                     "method": "attrTime",
                     "name": "t",
-                    "required": true,
-                    "type": "integer"
+                    "type": "integer",
+                    "required": true
                   },
                   {
                     "method": "attrUserJid",
                     "name": "participant_pn",
-                    "required": false,
-                    "type": "user_jid"
+                    "type": "user_jid",
+                    "required": false
                   },
                   {
                     "method": "maybeAttrString",
                     "name": "participant_username",
-                    "required": false,
-                    "type": "string"
+                    "type": "string",
+                    "required": false
                   }
                 ],
-                "method": "mapChildrenWithTag",
-                "name": "user",
-                "repeats": true,
-                "required": false,
-                "tag": "user",
-                "type": "string"
+                "repeats": true
               },
               {
                 "method": "attrString",
                 "name": "key",
-                "required": false,
-                "type": "string"
+                "type": "string",
+                "required": false
               }
-            ],
-            "method": "maybeChild",
-            "name": "participants",
-            "required": false,
-            "tag": "participants",
-            "type": "string"
+            ]
           },
           {
             "method": "attrDeviceJid",
             "name": "participant",
-            "required": false,
-            "type": "device_jid"
+            "type": "device_jid",
+            "required": false
           },
           {
             "method": "attrUserJid",
             "name": "recipient",
-            "required": false,
-            "type": "user_jid"
+            "type": "user_jid",
+            "required": false
           },
           {
+            "method": "child",
+            "name": "list",
+            "type": "string",
+            "required": false,
+            "tag": "list",
             "children": [
               {
+                "method": "mapChildrenWithTag",
+                "name": "item",
+                "type": "string",
+                "required": false,
+                "tag": "item",
                 "children": [
                   {
                     "method": "attrString",
                     "name": "server_id",
-                    "required": false,
-                    "type": "string"
+                    "type": "string",
+                    "required": false
                   },
                   {
                     "method": "attrString",
                     "name": "id",
-                    "required": false,
-                    "type": "string"
+                    "type": "string",
+                    "required": false
                   }
                 ],
-                "method": "mapChildrenWithTag",
-                "name": "item",
-                "repeats": true,
-                "required": false,
-                "tag": "item",
-                "type": "string"
+                "repeats": true
               }
-            ],
-            "method": "child",
-            "name": "list",
-            "required": false,
-            "tag": "list",
-            "type": "string"
+            ]
           },
           {
+            "method": "child",
+            "name": "biz",
+            "type": "string",
+            "required": false,
+            "tag": "biz",
             "children": [
               {
                 "method": "maybeAttrInt",
                 "name": "actual_actors",
-                "required": false,
-                "type": "integer"
+                "type": "integer",
+                "required": false
               },
               {
                 "method": "maybeAttrInt",
                 "name": "host_storage",
-                "required": false,
-                "type": "integer"
+                "type": "integer",
+                "required": false
               },
               {
                 "method": "maybeAttrInt",
                 "name": "privacy_mode_ts",
-                "required": false,
-                "type": "integer"
+                "type": "integer",
+                "required": false
               }
-            ],
-            "method": "child",
-            "name": "biz",
-            "required": false,
-            "tag": "biz",
-            "type": "string"
+            ]
           },
           {
             "method": "attrString",
             "name": "is_lid",
-            "required": false,
-            "type": "string"
+            "type": "string",
+            "required": false
           },
           {
             "method": "attrUserJid",
             "name": "participant_pn",
-            "required": false,
-            "type": "user_jid"
+            "type": "user_jid",
+            "required": false
           },
           {
             "method": "maybeAttrString",
             "name": "participant_username",
-            "required": false,
-            "type": "string"
+            "type": "string",
+            "required": false
           },
           {
             "method": "attrTime",
             "name": "t",
-            "required": false,
-            "type": "integer"
+            "type": "integer",
+            "required": false
           }
-        ],
-        "parserName": "incomingMsgReceiptParser"
-      },
-      "tag": "receipt"
+        ]
+      }
     },
     {
+      "tag": "receipt",
       "module": "WAWebRetryRequestParser",
       "shape": {
+        "parserName": "retryRequestParser",
         "assertions": [
           {
             "kind": "tag",
@@ -1127,213 +1125,213 @@
           {
             "method": "attrString",
             "name": "type",
-            "required": true,
-            "type": "string"
+            "type": "string",
+            "required": true
           },
           {
             "method": "attrJidWithType",
             "name": "from",
-            "required": true,
-            "type": "jid_typed"
+            "type": "jid_typed",
+            "required": true
           },
           {
             "method": "attrDeviceJid",
             "name": "participant",
-            "required": false,
-            "type": "device_jid"
+            "type": "device_jid",
+            "required": false
           },
           {
             "method": "attrString",
             "name": "is_lid",
-            "required": false,
-            "type": "string"
+            "type": "string",
+            "required": false
           },
           {
             "method": "attrDeviceJid",
             "name": "recipient",
-            "required": false,
-            "type": "device_jid"
+            "type": "device_jid",
+            "required": false
           },
           {
+            "method": "child",
+            "name": "retry",
+            "type": "string",
+            "required": true,
+            "tag": "retry",
             "children": [
               {
                 "method": "attrString",
                 "name": "id",
-                "required": true,
-                "type": "string"
+                "type": "string",
+                "required": true
               },
               {
                 "method": "maybeAttrInt",
                 "name": "count",
-                "required": false,
-                "type": "integer"
+                "type": "integer",
+                "required": false
               }
-            ],
-            "method": "child",
-            "name": "retry",
-            "required": true,
-            "tag": "retry",
-            "type": "string"
+            ]
           },
           {
-            "children": [
-              {
-                "children": [
-                  {
-                    "byteLength": 32,
-                    "method": "contentBytes",
-                    "name": "content",
-                    "required": true,
-                    "type": "bytes"
-                  }
-                ],
-                "method": "child",
-                "name": "identity",
-                "required": true,
-                "tag": "identity",
-                "type": "string"
-              },
-              {
-                "children": [
-                  {
-                    "children": [
-                      {
-                        "byteLength": 3,
-                        "method": "contentUint",
-                        "name": "content",
-                        "required": true,
-                        "type": "integer"
-                      }
-                    ],
-                    "method": "child",
-                    "name": "id",
-                    "required": true,
-                    "tag": "id",
-                    "type": "string"
-                  },
-                  {
-                    "children": [
-                      {
-                        "byteLength": 32,
-                        "method": "contentBytes",
-                        "name": "content",
-                        "required": true,
-                        "type": "bytes"
-                      }
-                    ],
-                    "method": "child",
-                    "name": "value",
-                    "required": true,
-                    "tag": "value",
-                    "type": "string"
-                  },
-                  {
-                    "children": [
-                      {
-                        "byteLength": 64,
-                        "method": "contentBytes",
-                        "name": "content",
-                        "required": true,
-                        "type": "bytes"
-                      }
-                    ],
-                    "method": "child",
-                    "name": "signature",
-                    "required": true,
-                    "tag": "signature",
-                    "type": "string"
-                  }
-                ],
-                "method": "child",
-                "name": "skey",
-                "required": true,
-                "tag": "skey",
-                "type": "string"
-              },
-              {
-                "children": [
-                  {
-                    "children": [
-                      {
-                        "byteLength": 3,
-                        "method": "contentUint",
-                        "name": "content",
-                        "required": true,
-                        "type": "integer"
-                      }
-                    ],
-                    "method": "child",
-                    "name": "id",
-                    "required": true,
-                    "tag": "id",
-                    "type": "string"
-                  },
-                  {
-                    "children": [
-                      {
-                        "byteLength": 32,
-                        "method": "contentBytes",
-                        "name": "content",
-                        "required": true,
-                        "type": "bytes"
-                      }
-                    ],
-                    "method": "child",
-                    "name": "value",
-                    "required": true,
-                    "tag": "value",
-                    "type": "string"
-                  }
-                ],
-                "method": "maybeChild",
-                "name": "key",
-                "required": false,
-                "tag": "key",
-                "type": "string"
-              }
-            ],
             "method": "maybeChild",
             "name": "keys",
+            "type": "string",
             "required": false,
             "tag": "keys",
-            "type": "string"
+            "children": [
+              {
+                "method": "child",
+                "name": "identity",
+                "type": "string",
+                "required": true,
+                "tag": "identity",
+                "children": [
+                  {
+                    "method": "contentBytes",
+                    "name": "content",
+                    "type": "bytes",
+                    "required": true,
+                    "byteLength": 32
+                  }
+                ]
+              },
+              {
+                "method": "child",
+                "name": "skey",
+                "type": "string",
+                "required": true,
+                "tag": "skey",
+                "children": [
+                  {
+                    "method": "child",
+                    "name": "id",
+                    "type": "string",
+                    "required": true,
+                    "tag": "id",
+                    "children": [
+                      {
+                        "method": "contentUint",
+                        "name": "content",
+                        "type": "integer",
+                        "required": true,
+                        "byteLength": 3
+                      }
+                    ]
+                  },
+                  {
+                    "method": "child",
+                    "name": "value",
+                    "type": "string",
+                    "required": true,
+                    "tag": "value",
+                    "children": [
+                      {
+                        "method": "contentBytes",
+                        "name": "content",
+                        "type": "bytes",
+                        "required": true,
+                        "byteLength": 32
+                      }
+                    ]
+                  },
+                  {
+                    "method": "child",
+                    "name": "signature",
+                    "type": "string",
+                    "required": true,
+                    "tag": "signature",
+                    "children": [
+                      {
+                        "method": "contentBytes",
+                        "name": "content",
+                        "type": "bytes",
+                        "required": true,
+                        "byteLength": 64
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "method": "maybeChild",
+                "name": "key",
+                "type": "string",
+                "required": false,
+                "tag": "key",
+                "children": [
+                  {
+                    "method": "child",
+                    "name": "id",
+                    "type": "string",
+                    "required": true,
+                    "tag": "id",
+                    "children": [
+                      {
+                        "method": "contentUint",
+                        "name": "content",
+                        "type": "integer",
+                        "required": true,
+                        "byteLength": 3
+                      }
+                    ]
+                  },
+                  {
+                    "method": "child",
+                    "name": "value",
+                    "type": "string",
+                    "required": true,
+                    "tag": "value",
+                    "children": [
+                      {
+                        "method": "contentBytes",
+                        "name": "content",
+                        "type": "bytes",
+                        "required": true,
+                        "byteLength": 32
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
           },
           {
             "method": "attrString",
             "name": "id",
-            "required": true,
-            "type": "string"
+            "type": "string",
+            "required": true
           },
           {
             "method": "attrTime",
             "name": "t",
-            "required": true,
-            "type": "integer"
+            "type": "integer",
+            "required": true
           },
           {
-            "children": [
-              {
-                "byteLength": 4,
-                "method": "contentUint",
-                "name": "content",
-                "required": true,
-                "type": "integer"
-              }
-            ],
             "method": "child",
             "name": "registration",
+            "type": "string",
             "required": true,
             "tag": "registration",
-            "type": "string"
+            "children": [
+              {
+                "method": "contentUint",
+                "name": "content",
+                "type": "integer",
+                "required": true,
+                "byteLength": 4
+              }
+            ]
           }
-        ],
-        "parserName": "retryRequestParser"
-      },
-      "tag": "receipt"
+        ]
+      }
     },
     {
+      "tag": "call",
       "module": "WAWebHandleVoipOfferNotice",
       "shape": {
+        "parserName": "callOfferNoticeParser",
         "assertions": [
           {
             "kind": "tag",
@@ -1344,62 +1342,62 @@
           {
             "method": "attrString",
             "name": "id",
-            "required": true,
-            "type": "string"
+            "type": "string",
+            "required": true
           },
           {
             "method": "attrJidWithType",
             "name": "from",
-            "required": true,
-            "type": "jid_typed"
+            "type": "jid_typed",
+            "required": true
           },
           {
+            "method": "child",
+            "name": "offer_notice",
+            "type": "string",
+            "required": true,
+            "tag": "offer_notice",
             "children": [
               {
                 "method": "attrDeviceJid",
                 "name": "call-creator",
-                "required": true,
-                "type": "device_jid"
+                "type": "device_jid",
+                "required": true
               },
               {
                 "method": "attrString",
                 "name": "call-id",
-                "required": true,
-                "type": "string"
+                "type": "string",
+                "required": true
               },
               {
                 "method": "attrString",
                 "name": "type",
-                "required": true,
-                "type": "string"
+                "type": "string",
+                "required": true
               },
               {
                 "method": "attrString",
                 "name": "media",
-                "required": true,
-                "type": "string"
+                "type": "string",
+                "required": true
               }
-            ],
-            "method": "child",
-            "name": "offer_notice",
-            "required": true,
-            "tag": "offer_notice",
-            "type": "string"
+            ]
           },
           {
             "method": "attrTime",
             "name": "t",
-            "required": true,
-            "type": "integer"
+            "type": "integer",
+            "required": true
           }
-        ],
-        "parserName": "callOfferNoticeParser"
-      },
-      "tag": "call"
+        ]
+      }
     },
     {
+      "tag": "call",
       "module": "WAWebVoipCallOfferStanzaParser",
       "shape": {
+        "parserName": "callOfferPlaceholder",
         "assertions": [
           {
             "kind": "tag",
@@ -1410,17 +1408,17 @@
           {
             "method": "maybeAttrTime",
             "name": "t",
-            "required": false,
-            "type": "integer"
+            "type": "integer",
+            "required": false
           }
-        ],
-        "parserName": "callOfferPlaceholder"
-      },
-      "tag": "call"
+        ]
+      }
     },
     {
+      "tag": "call",
       "module": "WAWebHandleVoipCall",
       "shape": {
+        "parserName": "callParser",
         "assertions": [
           {
             "kind": "tag",
@@ -1431,53 +1429,53 @@
           {
             "method": "attrJidWithType",
             "name": "from",
-            "required": true,
-            "type": "jid_typed"
+            "type": "jid_typed",
+            "required": true
           },
           {
             "method": "attrJidWithType",
             "name": "sender_lid",
-            "required": false,
-            "type": "jid_typed"
+            "type": "jid_typed",
+            "required": false
           },
           {
             "method": "maybeAttrString",
             "name": "platform",
-            "required": false,
-            "type": "string"
+            "type": "string",
+            "required": false
           },
           {
             "method": "maybeAttrString",
             "name": "version",
-            "required": false,
-            "type": "string"
+            "type": "string",
+            "required": false
           },
           {
             "method": "maybeAttrTime",
             "name": "t",
-            "required": false,
-            "type": "integer"
+            "type": "integer",
+            "required": false
           },
           {
             "method": "maybeAttrTime",
             "name": "e",
-            "required": false,
-            "type": "integer"
+            "type": "integer",
+            "required": false
           },
           {
             "method": "attrString",
             "name": "id",
-            "required": true,
-            "type": "string"
+            "type": "string",
+            "required": true
           }
-        ],
-        "parserName": "callParser"
-      },
-      "tag": "call"
+        ]
+      }
     },
     {
+      "tag": "ack",
       "module": "WAAckParser",
       "shape": {
+        "parserName": "ack",
         "assertions": [
           {
             "kind": "tag",
@@ -1488,53 +1486,47 @@
           {
             "method": "attrString",
             "name": "id",
-            "required": true,
-            "type": "string"
+            "type": "string",
+            "required": true
           },
           {
             "method": "maybeAttrString",
             "name": "t",
-            "required": false,
-            "type": "string"
+            "type": "string",
+            "required": false
           },
           {
             "method": "attrString",
             "name": "class",
-            "required": true,
-            "type": "string"
+            "type": "string",
+            "required": true
           },
           {
             "method": "maybeAttrString",
             "name": "type",
-            "required": false,
-            "type": "string"
-          },
-          {
-            "method": "attrJidWithType",
-            "name": "content",
-            "required": true,
-            "type": "jid_typed"
+            "type": "string",
+            "required": false
           },
           {
             "method": "attrDeviceJid",
             "name": "participant",
-            "required": false,
-            "type": "device_jid"
+            "type": "device_jid",
+            "required": false
           },
           {
             "method": "attrUserJid",
             "name": "recipient",
-            "required": false,
-            "type": "user_jid"
+            "type": "user_jid",
+            "required": false
           }
-        ],
-        "parserName": "ack"
-      },
-      "tag": "ack"
+        ]
+      }
     },
     {
+      "tag": "ack",
       "module": "WASmaxInMessagePublishNewsletterResponseNegative",
       "shape": {
+        "parserName": "parseNewsletterResponseNegative",
         "assertions": [
           {
             "kind": "tag",
@@ -1564,159 +1556,159 @@
           {
             "method": "attrString",
             "name": "error",
-            "required": true,
+            "wireName": "error",
             "type": "string",
-            "wireName": "error"
+            "required": true
           },
           {
-            "literalValue": "message",
             "method": "attrString",
             "name": "class",
-            "required": true,
+            "wireName": "class",
             "type": "string",
-            "wireName": "class"
+            "required": true,
+            "literalValue": "message"
           },
           {
             "method": "attrInt",
             "name": "t",
-            "required": true,
+            "wireName": "t",
             "type": "integer",
-            "wireName": "t"
+            "required": true
           },
           {
-            "children": [
-              {
-                "literalValue": "1",
-                "method": "attrString",
-                "name": "edit",
-                "required": true,
-                "type": "string",
-                "wireName": "edit"
-              }
-            ],
             "method": "",
             "name": "ackMessageEditMixin",
+            "type": "string",
             "required": false,
-            "sameNode": true,
-            "type": "string"
-          },
-          {
             "children": [
               {
-                "literalValue": "3",
                 "method": "attrString",
                 "name": "edit",
-                "required": true,
+                "wireName": "edit",
                 "type": "string",
-                "wireName": "edit"
+                "required": true,
+                "literalValue": "1"
               }
             ],
+            "sameNode": true
+          },
+          {
             "method": "",
             "name": "ackAdminEditMixin",
+            "type": "string",
             "required": false,
-            "sameNode": true,
-            "type": "string"
-          },
-          {
             "children": [
               {
-                "literalValue": "2",
                 "method": "attrString",
                 "name": "edit",
-                "required": true,
+                "wireName": "edit",
                 "type": "string",
-                "wireName": "edit"
+                "required": true,
+                "literalValue": "3"
               }
             ],
+            "sameNode": true
+          },
+          {
             "method": "",
             "name": "ackMessagePinMixin",
+            "type": "string",
             "required": false,
-            "sameNode": true,
-            "type": "string"
-          },
-          {
             "children": [
               {
-                "literalValue": "8",
                 "method": "attrString",
                 "name": "edit",
-                "required": true,
+                "wireName": "edit",
                 "type": "string",
-                "wireName": "edit"
+                "required": true,
+                "literalValue": "2"
               }
             ],
+            "sameNode": true
+          },
+          {
             "method": "",
             "name": "ackAdminRevokeMixin",
+            "type": "string",
             "required": false,
-            "sameNode": true,
-            "type": "string"
-          },
-          {
             "children": [
               {
-                "literalValue": "7",
                 "method": "attrString",
                 "name": "edit",
-                "required": true,
+                "wireName": "edit",
                 "type": "string",
-                "wireName": "edit"
+                "required": true,
+                "literalValue": "8"
               }
             ],
-            "method": "",
-            "name": "ackRevokeMixin",
-            "required": false,
-            "sameNode": true,
-            "type": "string"
+            "sameNode": true
           },
           {
+            "method": "",
+            "name": "ackRevokeMixin",
+            "type": "string",
+            "required": false,
             "children": [
               {
-                "byteMax": 128,
-                "byteMin": 9,
+                "method": "attrString",
+                "name": "edit",
+                "wireName": "edit",
+                "type": "string",
+                "required": true,
+                "literalValue": "7"
+              }
+            ],
+            "sameNode": true
+          },
+          {
+            "method": "",
+            "name": "serverFrankingTagMixin",
+            "type": "string",
+            "required": false,
+            "children": [
+              {
                 "method": "contentBytes",
                 "name": "frankingReportingTagElementValue",
+                "type": "bytes",
                 "required": true,
+                "byteMin": 9,
+                "byteMax": 128,
                 "sourcePath": [
                   "franking",
                   "reporting_tag"
-                ],
-                "type": "bytes"
+                ]
               }
             ],
-            "method": "",
-            "name": "serverFrankingTagMixin",
-            "required": false,
-            "sameNode": true,
-            "type": "string"
+            "sameNode": true
           },
           {
             "method": "",
             "name": "ackPaidAckPaidConversationOrAckPaidGroupConversationConversationMixinGroup",
-            "required": false,
             "type": "union",
+            "required": false,
             "unionVariants": [
               {
-                "assertions": [
-                  {
-                    "kind": "tag",
-                    "name": "ack"
-                  }
-                ],
+                "name": "AckPaidConversation",
                 "fields": [
                   {
                     "method": "attrString",
                     "name": "bizPaidConvoId",
+                    "wireName": "paid_convo_id",
+                    "type": "string",
                     "required": true,
                     "sourcePath": [
                       "biz"
-                    ],
-                    "type": "string",
-                    "wireName": "paid_convo_id"
+                    ]
                   },
                   {
+                    "method": "attrEnum",
+                    "name": "bizPricingModel",
+                    "wireName": "pricing_model",
+                    "type": "enum",
+                    "required": true,
                     "enumRef": {
-                      "module": "WASmaxInMessagePublishEnums",
                       "name": "ENUM_CBP_NBP_PMP",
+                      "module": "WASmaxInMessagePublishEnums",
                       "variants": [
                         {
                           "name": "CBP",
@@ -1732,19 +1724,19 @@
                         }
                       ]
                     },
-                    "method": "attrEnum",
-                    "name": "bizPricingModel",
-                    "required": true,
                     "sourcePath": [
                       "biz"
-                    ],
-                    "type": "enum",
-                    "wireName": "pricing_model"
+                    ]
                   },
                   {
+                    "method": "attrEnum",
+                    "name": "bizBillable",
+                    "wireName": "billable",
+                    "type": "enum",
+                    "required": true,
                     "enumRef": {
-                      "module": "WASmaxInMessagePublishEnums",
                       "name": "ENUM_FALSE_TRUE",
+                      "module": "WASmaxInMessagePublishEnums",
                       "variants": [
                         {
                           "name": "false",
@@ -1756,39 +1748,39 @@
                         }
                       ]
                     },
-                    "method": "attrEnum",
-                    "name": "bizBillable",
-                    "required": true,
                     "sourcePath": [
                       "biz"
-                    ],
-                    "type": "enum",
-                    "wireName": "billable"
+                    ]
                   },
                   {
                     "method": "maybeAttrInt",
                     "name": "bizExpirationTimestamp",
+                    "wireName": "expiration_timestamp",
+                    "type": "integer",
                     "required": false,
                     "sourcePath": [
                       "biz"
-                    ],
-                    "type": "integer",
-                    "wireName": "expiration_timestamp"
+                    ]
                   },
                   {
                     "method": "maybeAttrString",
                     "name": "bizPricingCategory",
+                    "wireName": "pricing_category",
+                    "type": "string",
                     "required": false,
                     "sourcePath": [
                       "biz"
-                    ],
-                    "type": "string",
-                    "wireName": "pricing_category"
+                    ]
                   },
                   {
+                    "method": "maybeAttrEnum",
+                    "name": "bizPricingType",
+                    "wireName": "pricing_type",
+                    "type": "enum",
+                    "required": false,
                     "enumRef": {
-                      "module": "WASmaxInMessagePublishEnums",
                       "name": "ENUM_FREECUSTOMERSERVICE_FREEENTRYPOINT_REGULAR",
+                      "module": "WASmaxInMessagePublishEnums",
                       "variants": [
                         {
                           "name": "free_customer_service",
@@ -1804,21 +1796,26 @@
                         }
                       ]
                     },
-                    "method": "maybeAttrEnum",
-                    "name": "bizPricingType",
-                    "required": false,
                     "sourcePath": [
                       "biz"
-                    ],
-                    "type": "enum",
-                    "wireName": "pricing_type"
+                    ]
                   },
                   {
+                    "method": "child",
+                    "name": "bizDeliveryContext",
+                    "type": "string",
+                    "required": false,
+                    "tag": "delivery_context",
                     "children": [
                       {
+                        "method": "attrEnum",
+                        "name": "optimizationGoal",
+                        "wireName": "optimization_goal",
+                        "type": "enum",
+                        "required": true,
                         "enumRef": {
-                          "module": "WASmaxInMessagePublishEnums",
                           "name": "ENUM_DELIVERY_NOOPTIMIZATION",
+                          "module": "WASmaxInMessagePublishEnums",
                           "variants": [
                             {
                               "name": "delivery",
@@ -1829,201 +1826,196 @@
                               "value": "no_optimization"
                             }
                           ]
-                        },
-                        "method": "attrEnum",
-                        "name": "optimizationGoal",
-                        "required": true,
-                        "type": "enum",
-                        "wireName": "optimization_goal"
+                        }
                       }
                     ],
-                    "method": "child",
-                    "name": "bizDeliveryContext",
                     "repeats": false,
-                    "required": false,
                     "sourcePath": [
                       "biz"
-                    ],
-                    "tag": "delivery_context",
-                    "type": "string"
+                    ]
                   },
                   {
+                    "method": "child",
+                    "name": "bizOrigin",
+                    "type": "string",
+                    "required": false,
+                    "tag": "origin",
                     "children": [
                       {
                         "method": "attrString",
                         "name": "type",
-                        "required": true,
+                        "wireName": "type",
                         "type": "string",
-                        "wireName": "type"
+                        "required": true
                       },
                       {
+                        "method": "child",
+                        "name": "referral",
+                        "type": "string",
+                        "required": false,
+                        "tag": "referral",
                         "children": [
                           {
                             "method": "maybeAttrString",
                             "name": "sourceType",
-                            "required": false,
+                            "wireName": "source_type",
                             "type": "string",
-                            "wireName": "source_type"
+                            "required": false
                           },
                           {
+                            "method": "child",
+                            "name": "sourceUrl",
+                            "type": "string",
+                            "required": false,
+                            "tag": "source_url",
                             "children": [
                               {
                                 "method": "contentString",
                                 "name": "elementValue",
-                                "required": true,
-                                "type": "string"
+                                "type": "string",
+                                "required": true
                               }
                             ],
-                            "method": "child",
-                            "name": "sourceUrl",
-                            "repeats": false,
-                            "required": false,
-                            "tag": "source_url",
-                            "type": "string"
+                            "repeats": false
                           }
                         ],
-                        "method": "child",
-                        "name": "referral",
-                        "repeats": false,
-                        "required": false,
-                        "tag": "referral",
-                        "type": "string"
+                        "repeats": false
                       }
                     ],
-                    "method": "child",
-                    "name": "bizOrigin",
                     "repeats": false,
-                    "required": false,
                     "sourcePath": [
                       "biz"
-                    ],
-                    "tag": "origin",
-                    "type": "string"
+                    ]
                   },
                   {
+                    "method": "child",
+                    "name": "bizPricing",
+                    "type": "string",
+                    "required": false,
+                    "tag": "pricing",
                     "children": [
                       {
                         "method": "maybeAttrString",
                         "name": "consumerCountryCode",
-                        "required": false,
+                        "wireName": "consumer_country_code",
                         "type": "string",
-                        "wireName": "consumer_country_code"
+                        "required": false
                       },
                       {
                         "method": "maybeAttrString",
                         "name": "businessCountryCode",
-                        "required": false,
+                        "wireName": "business_country_code",
                         "type": "string",
-                        "wireName": "business_country_code"
+                        "required": false
                       },
                       {
                         "method": "maybeAttrInt",
                         "name": "conversationStatus",
-                        "required": false,
+                        "wireName": "conversation_status",
                         "type": "integer",
-                        "wireName": "conversation_status"
+                        "required": false
                       },
                       {
                         "method": "maybeAttrInt",
                         "name": "latestC2bTimestamp",
-                        "required": false,
+                        "wireName": "latest_c2b_timestamp",
                         "type": "integer",
-                        "wireName": "latest_c2b_timestamp"
+                        "required": false
                       },
                       {
                         "method": "maybeAttrString",
                         "name": "analyticsConversationId",
-                        "required": false,
+                        "wireName": "analytics_conversation_id",
                         "type": "string",
-                        "wireName": "analytics_conversation_id"
+                        "required": false
                       },
                       {
                         "method": "maybeAttrInt",
                         "name": "b2cTimestamp",
-                        "required": false,
+                        "wireName": "b2c_timestamp",
                         "type": "integer",
-                        "wireName": "b2c_timestamp"
+                        "required": false
                       }
                     ],
-                    "method": "child",
-                    "name": "bizPricing",
                     "repeats": false,
-                    "required": false,
                     "sourcePath": [
                       "biz"
-                    ],
-                    "tag": "pricing",
-                    "type": "string"
+                    ]
                   }
                 ],
-                "name": "AckPaidConversation"
-              },
-              {
                 "assertions": [
                   {
                     "kind": "tag",
                     "name": "ack"
                   }
-                ],
+                ]
+              },
+              {
+                "name": "AckPaidGroupConversation",
                 "fields": [
                   {
                     "method": "maybeAttrString",
                     "name": "bizPricingBusinessCountryCode",
+                    "wireName": "business_country_code",
+                    "type": "string",
                     "required": false,
                     "sourcePath": [
                       "biz",
                       "pricing"
-                    ],
-                    "type": "string",
-                    "wireName": "business_country_code"
+                    ]
                   }
                 ],
-                "name": "AckPaidGroupConversation"
+                "assertions": [
+                  {
+                    "kind": "tag",
+                    "name": "ack"
+                  }
+                ]
               }
             ]
           },
           {
+            "method": "",
+            "name": "applicationNegativeAckMixin",
+            "type": "string",
+            "required": false,
             "children": [
               {
                 "method": "attrInt",
                 "name": "applicationError",
-                "required": true,
+                "wireName": "application_error",
                 "type": "integer",
-                "wireName": "application_error"
+                "required": true
               }
             ],
-            "method": "",
-            "name": "applicationNegativeAckMixin",
-            "required": false,
-            "sameNode": true,
-            "type": "string"
+            "sameNode": true
           },
           {
-            "children": [
-              {
-                "intMax": 86400,
-                "intMin": 0,
-                "method": "attrInt",
-                "name": "backoff",
-                "required": true,
-                "type": "integer",
-                "wireName": "backoff"
-              }
-            ],
             "method": "",
             "name": "messageNackRetryAttributesMixin",
+            "type": "string",
             "required": false,
-            "sameNode": true,
-            "type": "string"
+            "children": [
+              {
+                "method": "attrInt",
+                "name": "backoff",
+                "wireName": "backoff",
+                "type": "integer",
+                "required": true,
+                "intMin": 0,
+                "intMax": 86400
+              }
+            ],
+            "sameNode": true
           }
-        ],
-        "parserName": "parseNewsletterResponseNegative"
-      },
-      "tag": "ack"
+        ]
+      }
     },
     {
+      "tag": "ack",
       "module": "WASmaxInMessagePublishNewsletterResponseSuccess",
       "shape": {
+        "parserName": "parseNewsletterResponseSuccess",
         "assertions": [
           {
             "kind": "tag",
@@ -2034,192 +2026,168 @@
           {
             "method": "",
             "name": "newsletterQuestionResponseOrNewsletterMessageAckMixinGroup",
-            "required": true,
             "type": "union",
+            "required": true,
             "unionVariants": [
               {
-                "assertions": [
-                  {
-                    "kind": "tag",
-                    "name": "ack"
-                  },
-                  {
-                    "kind": "reference",
-                    "name": "from",
-                    "referencePath": [
-                      "to"
-                    ]
-                  },
-                  {
-                    "kind": "attr",
-                    "name": "class",
-                    "value": "message"
-                  },
-                  {
-                    "kind": "reference",
-                    "name": "id",
-                    "referencePath": [
-                      "id"
-                    ]
-                  }
-                ],
+                "name": "NewsletterQuestionResponseAck",
                 "fields": [
                   {
                     "method": "attrString",
                     "name": "responseServerId",
-                    "required": true,
+                    "wireName": "response_server_id",
                     "type": "string",
-                    "wireName": "response_server_id"
+                    "required": true
                   },
                   {
-                    "literalValue": "message",
                     "method": "attrString",
                     "name": "class",
-                    "required": true,
+                    "wireName": "class",
                     "type": "string",
-                    "wireName": "class"
+                    "required": true,
+                    "literalValue": "message"
                   },
                   {
                     "method": "attrInt",
                     "name": "t",
-                    "required": true,
+                    "wireName": "t",
                     "type": "integer",
-                    "wireName": "t"
+                    "required": true
                   },
                   {
-                    "children": [
-                      {
-                        "literalValue": "1",
-                        "method": "attrString",
-                        "name": "edit",
-                        "required": true,
-                        "type": "string",
-                        "wireName": "edit"
-                      }
-                    ],
                     "method": "",
                     "name": "ackMessageEditMixin",
+                    "type": "string",
                     "required": false,
-                    "sameNode": true,
-                    "type": "string"
-                  },
-                  {
                     "children": [
                       {
-                        "literalValue": "3",
                         "method": "attrString",
                         "name": "edit",
-                        "required": true,
+                        "wireName": "edit",
                         "type": "string",
-                        "wireName": "edit"
+                        "required": true,
+                        "literalValue": "1"
                       }
                     ],
+                    "sameNode": true
+                  },
+                  {
                     "method": "",
                     "name": "ackAdminEditMixin",
+                    "type": "string",
                     "required": false,
-                    "sameNode": true,
-                    "type": "string"
-                  },
-                  {
                     "children": [
                       {
-                        "literalValue": "2",
                         "method": "attrString",
                         "name": "edit",
-                        "required": true,
+                        "wireName": "edit",
                         "type": "string",
-                        "wireName": "edit"
+                        "required": true,
+                        "literalValue": "3"
                       }
                     ],
+                    "sameNode": true
+                  },
+                  {
                     "method": "",
                     "name": "ackMessagePinMixin",
+                    "type": "string",
                     "required": false,
-                    "sameNode": true,
-                    "type": "string"
-                  },
-                  {
                     "children": [
                       {
-                        "literalValue": "8",
                         "method": "attrString",
                         "name": "edit",
-                        "required": true,
+                        "wireName": "edit",
                         "type": "string",
-                        "wireName": "edit"
+                        "required": true,
+                        "literalValue": "2"
                       }
                     ],
+                    "sameNode": true
+                  },
+                  {
                     "method": "",
                     "name": "ackAdminRevokeMixin",
+                    "type": "string",
                     "required": false,
-                    "sameNode": true,
-                    "type": "string"
-                  },
-                  {
                     "children": [
                       {
-                        "literalValue": "7",
                         "method": "attrString",
                         "name": "edit",
-                        "required": true,
+                        "wireName": "edit",
                         "type": "string",
-                        "wireName": "edit"
+                        "required": true,
+                        "literalValue": "8"
                       }
                     ],
-                    "method": "",
-                    "name": "ackRevokeMixin",
-                    "required": false,
-                    "sameNode": true,
-                    "type": "string"
+                    "sameNode": true
                   },
                   {
+                    "method": "",
+                    "name": "ackRevokeMixin",
+                    "type": "string",
+                    "required": false,
                     "children": [
                       {
-                        "byteMax": 128,
-                        "byteMin": 9,
+                        "method": "attrString",
+                        "name": "edit",
+                        "wireName": "edit",
+                        "type": "string",
+                        "required": true,
+                        "literalValue": "7"
+                      }
+                    ],
+                    "sameNode": true
+                  },
+                  {
+                    "method": "",
+                    "name": "serverFrankingTagMixin",
+                    "type": "string",
+                    "required": false,
+                    "children": [
+                      {
                         "method": "contentBytes",
                         "name": "frankingReportingTagElementValue",
+                        "type": "bytes",
                         "required": true,
+                        "byteMin": 9,
+                        "byteMax": 128,
                         "sourcePath": [
                           "franking",
                           "reporting_tag"
-                        ],
-                        "type": "bytes"
+                        ]
                       }
                     ],
-                    "method": "",
-                    "name": "serverFrankingTagMixin",
-                    "required": false,
-                    "sameNode": true,
-                    "type": "string"
+                    "sameNode": true
                   },
                   {
                     "method": "",
                     "name": "ackPaidAckPaidConversationOrAckPaidGroupConversationConversationMixinGroup",
-                    "required": false,
                     "type": "union",
+                    "required": false,
                     "unionVariants": [
                       {
-                        "assertions": [
-                          {
-                            "kind": "tag",
-                            "name": "ack"
-                          }
-                        ],
+                        "name": "AckPaidConversation",
                         "fields": [
                           {
                             "method": "attrString",
                             "name": "bizPaidConvoId",
+                            "wireName": "paid_convo_id",
+                            "type": "string",
                             "required": true,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "type": "string",
-                            "wireName": "paid_convo_id"
+                            ]
                           },
                           {
+                            "method": "attrEnum",
+                            "name": "bizPricingModel",
+                            "wireName": "pricing_model",
+                            "type": "enum",
+                            "required": true,
                             "enumRef": {
-                              "module": "WASmaxInMessagePublishEnums",
                               "name": "ENUM_CBP_NBP_PMP",
+                              "module": "WASmaxInMessagePublishEnums",
                               "variants": [
                                 {
                                   "name": "CBP",
@@ -2235,19 +2203,19 @@
                                 }
                               ]
                             },
-                            "method": "attrEnum",
-                            "name": "bizPricingModel",
-                            "required": true,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "type": "enum",
-                            "wireName": "pricing_model"
+                            ]
                           },
                           {
+                            "method": "attrEnum",
+                            "name": "bizBillable",
+                            "wireName": "billable",
+                            "type": "enum",
+                            "required": true,
                             "enumRef": {
-                              "module": "WASmaxInMessagePublishEnums",
                               "name": "ENUM_FALSE_TRUE",
+                              "module": "WASmaxInMessagePublishEnums",
                               "variants": [
                                 {
                                   "name": "false",
@@ -2259,39 +2227,39 @@
                                 }
                               ]
                             },
-                            "method": "attrEnum",
-                            "name": "bizBillable",
-                            "required": true,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "type": "enum",
-                            "wireName": "billable"
+                            ]
                           },
                           {
                             "method": "maybeAttrInt",
                             "name": "bizExpirationTimestamp",
+                            "wireName": "expiration_timestamp",
+                            "type": "integer",
                             "required": false,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "type": "integer",
-                            "wireName": "expiration_timestamp"
+                            ]
                           },
                           {
                             "method": "maybeAttrString",
                             "name": "bizPricingCategory",
+                            "wireName": "pricing_category",
+                            "type": "string",
                             "required": false,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "type": "string",
-                            "wireName": "pricing_category"
+                            ]
                           },
                           {
+                            "method": "maybeAttrEnum",
+                            "name": "bizPricingType",
+                            "wireName": "pricing_type",
+                            "type": "enum",
+                            "required": false,
                             "enumRef": {
-                              "module": "WASmaxInMessagePublishEnums",
                               "name": "ENUM_FREECUSTOMERSERVICE_FREEENTRYPOINT_REGULAR",
+                              "module": "WASmaxInMessagePublishEnums",
                               "variants": [
                                 {
                                   "name": "free_customer_service",
@@ -2307,21 +2275,26 @@
                                 }
                               ]
                             },
-                            "method": "maybeAttrEnum",
-                            "name": "bizPricingType",
-                            "required": false,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "type": "enum",
-                            "wireName": "pricing_type"
+                            ]
                           },
                           {
+                            "method": "child",
+                            "name": "bizDeliveryContext",
+                            "type": "string",
+                            "required": false,
+                            "tag": "delivery_context",
                             "children": [
                               {
+                                "method": "attrEnum",
+                                "name": "optimizationGoal",
+                                "wireName": "optimization_goal",
+                                "type": "enum",
+                                "required": true,
                                 "enumRef": {
-                                  "module": "WASmaxInMessagePublishEnums",
                                   "name": "ENUM_DELIVERY_NOOPTIMIZATION",
+                                  "module": "WASmaxInMessagePublishEnums",
                                   "variants": [
                                     {
                                       "name": "delivery",
@@ -2332,163 +2305,155 @@
                                       "value": "no_optimization"
                                     }
                                   ]
-                                },
-                                "method": "attrEnum",
-                                "name": "optimizationGoal",
-                                "required": true,
-                                "type": "enum",
-                                "wireName": "optimization_goal"
+                                }
                               }
                             ],
-                            "method": "child",
-                            "name": "bizDeliveryContext",
                             "repeats": false,
-                            "required": false,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "tag": "delivery_context",
-                            "type": "string"
+                            ]
                           },
                           {
+                            "method": "child",
+                            "name": "bizOrigin",
+                            "type": "string",
+                            "required": false,
+                            "tag": "origin",
                             "children": [
                               {
                                 "method": "attrString",
                                 "name": "type",
-                                "required": true,
+                                "wireName": "type",
                                 "type": "string",
-                                "wireName": "type"
+                                "required": true
                               },
                               {
+                                "method": "child",
+                                "name": "referral",
+                                "type": "string",
+                                "required": false,
+                                "tag": "referral",
                                 "children": [
                                   {
                                     "method": "maybeAttrString",
                                     "name": "sourceType",
-                                    "required": false,
+                                    "wireName": "source_type",
                                     "type": "string",
-                                    "wireName": "source_type"
+                                    "required": false
                                   },
                                   {
+                                    "method": "child",
+                                    "name": "sourceUrl",
+                                    "type": "string",
+                                    "required": false,
+                                    "tag": "source_url",
                                     "children": [
                                       {
                                         "method": "contentString",
                                         "name": "elementValue",
-                                        "required": true,
-                                        "type": "string"
+                                        "type": "string",
+                                        "required": true
                                       }
                                     ],
-                                    "method": "child",
-                                    "name": "sourceUrl",
-                                    "repeats": false,
-                                    "required": false,
-                                    "tag": "source_url",
-                                    "type": "string"
+                                    "repeats": false
                                   }
                                 ],
-                                "method": "child",
-                                "name": "referral",
-                                "repeats": false,
-                                "required": false,
-                                "tag": "referral",
-                                "type": "string"
+                                "repeats": false
                               }
                             ],
-                            "method": "child",
-                            "name": "bizOrigin",
                             "repeats": false,
-                            "required": false,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "tag": "origin",
-                            "type": "string"
+                            ]
                           },
                           {
+                            "method": "child",
+                            "name": "bizPricing",
+                            "type": "string",
+                            "required": false,
+                            "tag": "pricing",
                             "children": [
                               {
                                 "method": "maybeAttrString",
                                 "name": "consumerCountryCode",
-                                "required": false,
+                                "wireName": "consumer_country_code",
                                 "type": "string",
-                                "wireName": "consumer_country_code"
+                                "required": false
                               },
                               {
                                 "method": "maybeAttrString",
                                 "name": "businessCountryCode",
-                                "required": false,
+                                "wireName": "business_country_code",
                                 "type": "string",
-                                "wireName": "business_country_code"
+                                "required": false
                               },
                               {
                                 "method": "maybeAttrInt",
                                 "name": "conversationStatus",
-                                "required": false,
+                                "wireName": "conversation_status",
                                 "type": "integer",
-                                "wireName": "conversation_status"
+                                "required": false
                               },
                               {
                                 "method": "maybeAttrInt",
                                 "name": "latestC2bTimestamp",
-                                "required": false,
+                                "wireName": "latest_c2b_timestamp",
                                 "type": "integer",
-                                "wireName": "latest_c2b_timestamp"
+                                "required": false
                               },
                               {
                                 "method": "maybeAttrString",
                                 "name": "analyticsConversationId",
-                                "required": false,
+                                "wireName": "analytics_conversation_id",
                                 "type": "string",
-                                "wireName": "analytics_conversation_id"
+                                "required": false
                               },
                               {
                                 "method": "maybeAttrInt",
                                 "name": "b2cTimestamp",
-                                "required": false,
+                                "wireName": "b2c_timestamp",
                                 "type": "integer",
-                                "wireName": "b2c_timestamp"
+                                "required": false
                               }
                             ],
-                            "method": "child",
-                            "name": "bizPricing",
                             "repeats": false,
-                            "required": false,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "tag": "pricing",
-                            "type": "string"
+                            ]
                           }
                         ],
-                        "name": "AckPaidConversation"
-                      },
-                      {
                         "assertions": [
                           {
                             "kind": "tag",
                             "name": "ack"
                           }
-                        ],
+                        ]
+                      },
+                      {
+                        "name": "AckPaidGroupConversation",
                         "fields": [
                           {
                             "method": "maybeAttrString",
                             "name": "bizPricingBusinessCountryCode",
+                            "wireName": "business_country_code",
+                            "type": "string",
                             "required": false,
                             "sourcePath": [
                               "biz",
                               "pricing"
-                            ],
-                            "type": "string",
-                            "wireName": "business_country_code"
+                            ]
                           }
                         ],
-                        "name": "AckPaidGroupConversation"
+                        "assertions": [
+                          {
+                            "kind": "tag",
+                            "name": "ack"
+                          }
+                        ]
                       }
                     ]
                   }
                 ],
-                "name": "NewsletterQuestionResponseAck"
-              },
-              {
                 "assertions": [
                   {
                     "kind": "tag",
@@ -2513,166 +2478,169 @@
                       "id"
                     ]
                   }
-                ],
+                ]
+              },
+              {
+                "name": "NewsletterMessageAck",
                 "fields": [
                   {
-                    "intMax": 2147476647,
-                    "intMin": 99,
                     "method": "maybeAttrInt",
                     "name": "serverId",
-                    "required": false,
+                    "wireName": "server_id",
                     "type": "integer",
-                    "wireName": "server_id"
+                    "required": false,
+                    "intMin": 99,
+                    "intMax": 2147476647
                   },
                   {
-                    "literalValue": "message",
                     "method": "attrString",
                     "name": "class",
-                    "required": true,
+                    "wireName": "class",
                     "type": "string",
-                    "wireName": "class"
+                    "required": true,
+                    "literalValue": "message"
                   },
                   {
                     "method": "attrInt",
                     "name": "t",
-                    "required": true,
+                    "wireName": "t",
                     "type": "integer",
-                    "wireName": "t"
+                    "required": true
                   },
                   {
-                    "children": [
-                      {
-                        "literalValue": "1",
-                        "method": "attrString",
-                        "name": "edit",
-                        "required": true,
-                        "type": "string",
-                        "wireName": "edit"
-                      }
-                    ],
                     "method": "",
                     "name": "ackMessageEditMixin",
+                    "type": "string",
                     "required": false,
-                    "sameNode": true,
-                    "type": "string"
-                  },
-                  {
                     "children": [
                       {
-                        "literalValue": "3",
                         "method": "attrString",
                         "name": "edit",
-                        "required": true,
+                        "wireName": "edit",
                         "type": "string",
-                        "wireName": "edit"
+                        "required": true,
+                        "literalValue": "1"
                       }
                     ],
+                    "sameNode": true
+                  },
+                  {
                     "method": "",
                     "name": "ackAdminEditMixin",
+                    "type": "string",
                     "required": false,
-                    "sameNode": true,
-                    "type": "string"
-                  },
-                  {
                     "children": [
                       {
-                        "literalValue": "2",
                         "method": "attrString",
                         "name": "edit",
-                        "required": true,
+                        "wireName": "edit",
                         "type": "string",
-                        "wireName": "edit"
+                        "required": true,
+                        "literalValue": "3"
                       }
                     ],
+                    "sameNode": true
+                  },
+                  {
                     "method": "",
                     "name": "ackMessagePinMixin",
+                    "type": "string",
                     "required": false,
-                    "sameNode": true,
-                    "type": "string"
-                  },
-                  {
                     "children": [
                       {
-                        "literalValue": "8",
                         "method": "attrString",
                         "name": "edit",
-                        "required": true,
+                        "wireName": "edit",
                         "type": "string",
-                        "wireName": "edit"
+                        "required": true,
+                        "literalValue": "2"
                       }
                     ],
+                    "sameNode": true
+                  },
+                  {
                     "method": "",
                     "name": "ackAdminRevokeMixin",
+                    "type": "string",
                     "required": false,
-                    "sameNode": true,
-                    "type": "string"
-                  },
-                  {
                     "children": [
                       {
-                        "literalValue": "7",
                         "method": "attrString",
                         "name": "edit",
-                        "required": true,
+                        "wireName": "edit",
                         "type": "string",
-                        "wireName": "edit"
+                        "required": true,
+                        "literalValue": "8"
                       }
                     ],
-                    "method": "",
-                    "name": "ackRevokeMixin",
-                    "required": false,
-                    "sameNode": true,
-                    "type": "string"
+                    "sameNode": true
                   },
                   {
+                    "method": "",
+                    "name": "ackRevokeMixin",
+                    "type": "string",
+                    "required": false,
                     "children": [
                       {
-                        "byteMax": 128,
-                        "byteMin": 9,
+                        "method": "attrString",
+                        "name": "edit",
+                        "wireName": "edit",
+                        "type": "string",
+                        "required": true,
+                        "literalValue": "7"
+                      }
+                    ],
+                    "sameNode": true
+                  },
+                  {
+                    "method": "",
+                    "name": "serverFrankingTagMixin",
+                    "type": "string",
+                    "required": false,
+                    "children": [
+                      {
                         "method": "contentBytes",
                         "name": "frankingReportingTagElementValue",
+                        "type": "bytes",
                         "required": true,
+                        "byteMin": 9,
+                        "byteMax": 128,
                         "sourcePath": [
                           "franking",
                           "reporting_tag"
-                        ],
-                        "type": "bytes"
+                        ]
                       }
                     ],
-                    "method": "",
-                    "name": "serverFrankingTagMixin",
-                    "required": false,
-                    "sameNode": true,
-                    "type": "string"
+                    "sameNode": true
                   },
                   {
                     "method": "",
                     "name": "ackPaidAckPaidConversationOrAckPaidGroupConversationConversationMixinGroup",
-                    "required": false,
                     "type": "union",
+                    "required": false,
                     "unionVariants": [
                       {
-                        "assertions": [
-                          {
-                            "kind": "tag",
-                            "name": "ack"
-                          }
-                        ],
+                        "name": "AckPaidConversation",
                         "fields": [
                           {
                             "method": "attrString",
                             "name": "bizPaidConvoId",
+                            "wireName": "paid_convo_id",
+                            "type": "string",
                             "required": true,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "type": "string",
-                            "wireName": "paid_convo_id"
+                            ]
                           },
                           {
+                            "method": "attrEnum",
+                            "name": "bizPricingModel",
+                            "wireName": "pricing_model",
+                            "type": "enum",
+                            "required": true,
                             "enumRef": {
-                              "module": "WASmaxInMessagePublishEnums",
                               "name": "ENUM_CBP_NBP_PMP",
+                              "module": "WASmaxInMessagePublishEnums",
                               "variants": [
                                 {
                                   "name": "CBP",
@@ -2688,19 +2656,19 @@
                                 }
                               ]
                             },
-                            "method": "attrEnum",
-                            "name": "bizPricingModel",
-                            "required": true,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "type": "enum",
-                            "wireName": "pricing_model"
+                            ]
                           },
                           {
+                            "method": "attrEnum",
+                            "name": "bizBillable",
+                            "wireName": "billable",
+                            "type": "enum",
+                            "required": true,
                             "enumRef": {
-                              "module": "WASmaxInMessagePublishEnums",
                               "name": "ENUM_FALSE_TRUE",
+                              "module": "WASmaxInMessagePublishEnums",
                               "variants": [
                                 {
                                   "name": "false",
@@ -2712,39 +2680,39 @@
                                 }
                               ]
                             },
-                            "method": "attrEnum",
-                            "name": "bizBillable",
-                            "required": true,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "type": "enum",
-                            "wireName": "billable"
+                            ]
                           },
                           {
                             "method": "maybeAttrInt",
                             "name": "bizExpirationTimestamp",
+                            "wireName": "expiration_timestamp",
+                            "type": "integer",
                             "required": false,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "type": "integer",
-                            "wireName": "expiration_timestamp"
+                            ]
                           },
                           {
                             "method": "maybeAttrString",
                             "name": "bizPricingCategory",
+                            "wireName": "pricing_category",
+                            "type": "string",
                             "required": false,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "type": "string",
-                            "wireName": "pricing_category"
+                            ]
                           },
                           {
+                            "method": "maybeAttrEnum",
+                            "name": "bizPricingType",
+                            "wireName": "pricing_type",
+                            "type": "enum",
+                            "required": false,
                             "enumRef": {
-                              "module": "WASmaxInMessagePublishEnums",
                               "name": "ENUM_FREECUSTOMERSERVICE_FREEENTRYPOINT_REGULAR",
+                              "module": "WASmaxInMessagePublishEnums",
                               "variants": [
                                 {
                                   "name": "free_customer_service",
@@ -2760,21 +2728,26 @@
                                 }
                               ]
                             },
-                            "method": "maybeAttrEnum",
-                            "name": "bizPricingType",
-                            "required": false,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "type": "enum",
-                            "wireName": "pricing_type"
+                            ]
                           },
                           {
+                            "method": "child",
+                            "name": "bizDeliveryContext",
+                            "type": "string",
+                            "required": false,
+                            "tag": "delivery_context",
                             "children": [
                               {
+                                "method": "attrEnum",
+                                "name": "optimizationGoal",
+                                "wireName": "optimization_goal",
+                                "type": "enum",
+                                "required": true,
                                 "enumRef": {
-                                  "module": "WASmaxInMessagePublishEnums",
                                   "name": "ENUM_DELIVERY_NOOPTIMIZATION",
+                                  "module": "WASmaxInMessagePublishEnums",
                                   "variants": [
                                     {
                                       "name": "delivery",
@@ -2785,190 +2758,209 @@
                                       "value": "no_optimization"
                                     }
                                   ]
-                                },
-                                "method": "attrEnum",
-                                "name": "optimizationGoal",
-                                "required": true,
-                                "type": "enum",
-                                "wireName": "optimization_goal"
+                                }
                               }
                             ],
-                            "method": "child",
-                            "name": "bizDeliveryContext",
                             "repeats": false,
-                            "required": false,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "tag": "delivery_context",
-                            "type": "string"
+                            ]
                           },
                           {
+                            "method": "child",
+                            "name": "bizOrigin",
+                            "type": "string",
+                            "required": false,
+                            "tag": "origin",
                             "children": [
                               {
                                 "method": "attrString",
                                 "name": "type",
-                                "required": true,
+                                "wireName": "type",
                                 "type": "string",
-                                "wireName": "type"
+                                "required": true
                               },
                               {
+                                "method": "child",
+                                "name": "referral",
+                                "type": "string",
+                                "required": false,
+                                "tag": "referral",
                                 "children": [
                                   {
                                     "method": "maybeAttrString",
                                     "name": "sourceType",
-                                    "required": false,
+                                    "wireName": "source_type",
                                     "type": "string",
-                                    "wireName": "source_type"
+                                    "required": false
                                   },
                                   {
+                                    "method": "child",
+                                    "name": "sourceUrl",
+                                    "type": "string",
+                                    "required": false,
+                                    "tag": "source_url",
                                     "children": [
                                       {
                                         "method": "contentString",
                                         "name": "elementValue",
-                                        "required": true,
-                                        "type": "string"
+                                        "type": "string",
+                                        "required": true
                                       }
                                     ],
-                                    "method": "child",
-                                    "name": "sourceUrl",
-                                    "repeats": false,
-                                    "required": false,
-                                    "tag": "source_url",
-                                    "type": "string"
+                                    "repeats": false
                                   }
                                 ],
-                                "method": "child",
-                                "name": "referral",
-                                "repeats": false,
-                                "required": false,
-                                "tag": "referral",
-                                "type": "string"
+                                "repeats": false
                               }
                             ],
-                            "method": "child",
-                            "name": "bizOrigin",
                             "repeats": false,
-                            "required": false,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "tag": "origin",
-                            "type": "string"
+                            ]
                           },
                           {
+                            "method": "child",
+                            "name": "bizPricing",
+                            "type": "string",
+                            "required": false,
+                            "tag": "pricing",
                             "children": [
                               {
                                 "method": "maybeAttrString",
                                 "name": "consumerCountryCode",
-                                "required": false,
+                                "wireName": "consumer_country_code",
                                 "type": "string",
-                                "wireName": "consumer_country_code"
+                                "required": false
                               },
                               {
                                 "method": "maybeAttrString",
                                 "name": "businessCountryCode",
-                                "required": false,
+                                "wireName": "business_country_code",
                                 "type": "string",
-                                "wireName": "business_country_code"
+                                "required": false
                               },
                               {
                                 "method": "maybeAttrInt",
                                 "name": "conversationStatus",
-                                "required": false,
+                                "wireName": "conversation_status",
                                 "type": "integer",
-                                "wireName": "conversation_status"
+                                "required": false
                               },
                               {
                                 "method": "maybeAttrInt",
                                 "name": "latestC2bTimestamp",
-                                "required": false,
+                                "wireName": "latest_c2b_timestamp",
                                 "type": "integer",
-                                "wireName": "latest_c2b_timestamp"
+                                "required": false
                               },
                               {
                                 "method": "maybeAttrString",
                                 "name": "analyticsConversationId",
-                                "required": false,
+                                "wireName": "analytics_conversation_id",
                                 "type": "string",
-                                "wireName": "analytics_conversation_id"
+                                "required": false
                               },
                               {
                                 "method": "maybeAttrInt",
                                 "name": "b2cTimestamp",
-                                "required": false,
+                                "wireName": "b2c_timestamp",
                                 "type": "integer",
-                                "wireName": "b2c_timestamp"
+                                "required": false
                               }
                             ],
-                            "method": "child",
-                            "name": "bizPricing",
                             "repeats": false,
-                            "required": false,
                             "sourcePath": [
                               "biz"
-                            ],
-                            "tag": "pricing",
-                            "type": "string"
+                            ]
                           }
                         ],
-                        "name": "AckPaidConversation"
-                      },
-                      {
                         "assertions": [
                           {
                             "kind": "tag",
                             "name": "ack"
                           }
-                        ],
+                        ]
+                      },
+                      {
+                        "name": "AckPaidGroupConversation",
                         "fields": [
                           {
                             "method": "maybeAttrString",
                             "name": "bizPricingBusinessCountryCode",
+                            "wireName": "business_country_code",
+                            "type": "string",
                             "required": false,
                             "sourcePath": [
                               "biz",
                               "pricing"
-                            ],
-                            "type": "string",
-                            "wireName": "business_country_code"
+                            ]
                           }
                         ],
-                        "name": "AckPaidGroupConversation"
+                        "assertions": [
+                          {
+                            "kind": "tag",
+                            "name": "ack"
+                          }
+                        ]
                       }
                     ]
                   },
                   {
+                    "method": "",
+                    "name": "newsletterSenderRCATAckMixin",
+                    "type": "string",
+                    "required": false,
                     "children": [
                       {
                         "method": "contentBytes",
                         "name": "rcatElementValue",
+                        "type": "bytes",
                         "required": true,
                         "sourcePath": [
                           "rcat"
-                        ],
-                        "type": "bytes"
+                        ]
                       }
                     ],
-                    "method": "",
-                    "name": "newsletterSenderRCATAckMixin",
-                    "required": false,
-                    "sameNode": true,
-                    "type": "string"
+                    "sameNode": true
                   }
                 ],
-                "name": "NewsletterMessageAck"
+                "assertions": [
+                  {
+                    "kind": "tag",
+                    "name": "ack"
+                  },
+                  {
+                    "kind": "reference",
+                    "name": "from",
+                    "referencePath": [
+                      "to"
+                    ]
+                  },
+                  {
+                    "kind": "attr",
+                    "name": "class",
+                    "value": "message"
+                  },
+                  {
+                    "kind": "reference",
+                    "name": "id",
+                    "referencePath": [
+                      "id"
+                    ]
+                  }
+                ]
               }
             ]
           }
-        ],
-        "parserName": "parseNewsletterResponseSuccess"
-      },
-      "tag": "ack"
+        ]
+      }
     },
     {
+      "tag": "ack",
       "module": "WASmaxInStatusPublishPostNewsletterStatusResponseNegative",
       "shape": {
+        "parserName": "parsePostNewsletterStatusResponseNegative",
         "assertions": [
           {
             "kind": "tag",
@@ -2998,32 +2990,43 @@
           {
             "method": "attrString",
             "name": "error",
-            "required": true,
+            "wireName": "error",
             "type": "string",
-            "wireName": "error"
+            "required": true
           },
           {
-            "literalValue": "status",
             "method": "attrString",
             "name": "class",
-            "required": true,
+            "wireName": "class",
             "type": "string",
-            "wireName": "class"
+            "required": true,
+            "literalValue": "status"
           },
           {
             "method": "attrInt",
             "name": "t",
-            "required": true,
+            "wireName": "t",
             "type": "timestamp",
-            "wireName": "t"
+            "required": true
           },
           {
             "method": "",
             "name": "statusAckEditOrRevokeOrAdminRevokeMixinGroup",
-            "required": false,
             "type": "union",
+            "required": false,
             "unionVariants": [
               {
+                "name": "StatusAckEdit",
+                "fields": [
+                  {
+                    "method": "attrString",
+                    "name": "edit",
+                    "wireName": "edit",
+                    "type": "string",
+                    "required": true,
+                    "literalValue": "1"
+                  }
+                ],
                 "assertions": [
                   {
                     "kind": "tag",
@@ -3034,20 +3037,20 @@
                     "name": "edit",
                     "value": "1"
                   }
-                ],
-                "fields": [
-                  {
-                    "literalValue": "1",
-                    "method": "attrString",
-                    "name": "edit",
-                    "required": true,
-                    "type": "string",
-                    "wireName": "edit"
-                  }
-                ],
-                "name": "StatusAckEdit"
+                ]
               },
               {
+                "name": "StatusAckRevoke",
+                "fields": [
+                  {
+                    "method": "attrString",
+                    "name": "edit",
+                    "wireName": "edit",
+                    "type": "string",
+                    "required": true,
+                    "literalValue": "7"
+                  }
+                ],
                 "assertions": [
                   {
                     "kind": "tag",
@@ -3058,20 +3061,20 @@
                     "name": "edit",
                     "value": "7"
                   }
-                ],
-                "fields": [
-                  {
-                    "literalValue": "7",
-                    "method": "attrString",
-                    "name": "edit",
-                    "required": true,
-                    "type": "string",
-                    "wireName": "edit"
-                  }
-                ],
-                "name": "StatusAckRevoke"
+                ]
               },
               {
+                "name": "StatusAckAdminRevoke",
+                "fields": [
+                  {
+                    "method": "attrString",
+                    "name": "edit",
+                    "wireName": "edit",
+                    "type": "string",
+                    "required": true,
+                    "literalValue": "8"
+                  }
+                ],
                 "assertions": [
                   {
                     "kind": "tag",
@@ -3082,63 +3085,52 @@
                     "name": "edit",
                     "value": "8"
                   }
-                ],
-                "fields": [
-                  {
-                    "literalValue": "8",
-                    "method": "attrString",
-                    "name": "edit",
-                    "required": true,
-                    "type": "string",
-                    "wireName": "edit"
-                  }
-                ],
-                "name": "StatusAckAdminRevoke"
+                ]
               }
             ]
           },
           {
+            "method": "",
+            "name": "statusApplicationNegativeAckMixin",
+            "type": "string",
+            "required": false,
             "children": [
               {
                 "method": "attrInt",
                 "name": "applicationError",
-                "required": true,
+                "wireName": "application_error",
                 "type": "integer",
-                "wireName": "application_error"
+                "required": true
               }
             ],
-            "method": "",
-            "name": "statusApplicationNegativeAckMixin",
-            "required": false,
-            "sameNode": true,
-            "type": "string"
+            "sameNode": true
           },
           {
-            "children": [
-              {
-                "intMax": 86400,
-                "intMin": 0,
-                "method": "attrInt",
-                "name": "backoff",
-                "required": true,
-                "type": "integer",
-                "wireName": "backoff"
-              }
-            ],
             "method": "",
             "name": "messageNackRetryAttributesMixin",
+            "type": "string",
             "required": false,
-            "sameNode": true,
-            "type": "string"
+            "children": [
+              {
+                "method": "attrInt",
+                "name": "backoff",
+                "wireName": "backoff",
+                "type": "integer",
+                "required": true,
+                "intMin": 0,
+                "intMax": 86400
+              }
+            ],
+            "sameNode": true
           }
-        ],
-        "parserName": "parsePostNewsletterStatusResponseNegative"
-      },
-      "tag": "ack"
+        ]
+      }
     },
     {
+      "tag": "ack",
       "module": "WASmaxInStatusPublishPostNewsletterStatusResponseSuccess",
       "shape": {
+        "parserName": "parsePostNewsletterStatusResponseSuccess",
         "assertions": [
           {
             "kind": "tag",
@@ -3166,36 +3158,47 @@
         ],
         "fields": [
           {
-            "intMax": 2147476647,
-            "intMin": 99,
             "method": "maybeAttrInt",
             "name": "serverId",
-            "required": false,
+            "wireName": "server_id",
             "type": "integer",
-            "wireName": "server_id"
+            "required": false,
+            "intMin": 99,
+            "intMax": 2147476647
           },
           {
-            "literalValue": "status",
             "method": "attrString",
             "name": "class",
-            "required": true,
+            "wireName": "class",
             "type": "string",
-            "wireName": "class"
+            "required": true,
+            "literalValue": "status"
           },
           {
             "method": "attrInt",
             "name": "t",
-            "required": true,
+            "wireName": "t",
             "type": "timestamp",
-            "wireName": "t"
+            "required": true
           },
           {
             "method": "",
             "name": "statusAckEditOrRevokeOrAdminRevokeMixinGroup",
-            "required": false,
             "type": "union",
+            "required": false,
             "unionVariants": [
               {
+                "name": "StatusAckEdit",
+                "fields": [
+                  {
+                    "method": "attrString",
+                    "name": "edit",
+                    "wireName": "edit",
+                    "type": "string",
+                    "required": true,
+                    "literalValue": "1"
+                  }
+                ],
                 "assertions": [
                   {
                     "kind": "tag",
@@ -3206,20 +3209,20 @@
                     "name": "edit",
                     "value": "1"
                   }
-                ],
-                "fields": [
-                  {
-                    "literalValue": "1",
-                    "method": "attrString",
-                    "name": "edit",
-                    "required": true,
-                    "type": "string",
-                    "wireName": "edit"
-                  }
-                ],
-                "name": "StatusAckEdit"
+                ]
               },
               {
+                "name": "StatusAckRevoke",
+                "fields": [
+                  {
+                    "method": "attrString",
+                    "name": "edit",
+                    "wireName": "edit",
+                    "type": "string",
+                    "required": true,
+                    "literalValue": "7"
+                  }
+                ],
                 "assertions": [
                   {
                     "kind": "tag",
@@ -3230,20 +3233,20 @@
                     "name": "edit",
                     "value": "7"
                   }
-                ],
-                "fields": [
-                  {
-                    "literalValue": "7",
-                    "method": "attrString",
-                    "name": "edit",
-                    "required": true,
-                    "type": "string",
-                    "wireName": "edit"
-                  }
-                ],
-                "name": "StatusAckRevoke"
+                ]
               },
               {
+                "name": "StatusAckAdminRevoke",
+                "fields": [
+                  {
+                    "method": "attrString",
+                    "name": "edit",
+                    "wireName": "edit",
+                    "type": "string",
+                    "required": true,
+                    "literalValue": "8"
+                  }
+                ],
                 "assertions": [
                   {
                     "kind": "tag",
@@ -3254,29 +3257,18 @@
                     "name": "edit",
                     "value": "8"
                   }
-                ],
-                "fields": [
-                  {
-                    "literalValue": "8",
-                    "method": "attrString",
-                    "name": "edit",
-                    "required": true,
-                    "type": "string",
-                    "wireName": "edit"
-                  }
-                ],
-                "name": "StatusAckAdminRevoke"
+                ]
               }
             ]
           }
-        ],
-        "parserName": "parsePostNewsletterStatusResponseSuccess"
-      },
-      "tag": "ack"
+        ]
+      }
     },
     {
+      "tag": "ack",
       "module": "WASmaxInReceiptPublishViewResponseSuccess",
       "shape": {
+        "parserName": "parsePublishViewResponseSuccess",
         "assertions": [
           {
             "kind": "tag",
@@ -3311,24 +3303,29 @@
         ],
         "fields": [
           {
-            "literalValue": "receipt",
             "method": "attrString",
             "name": "class",
-            "required": true,
+            "wireName": "class",
             "type": "string",
-            "wireName": "class"
+            "required": true,
+            "literalValue": "receipt"
           },
           {
             "method": "maybeAttrInt",
             "name": "t",
-            "required": false,
+            "wireName": "t",
             "type": "integer",
-            "wireName": "t"
+            "required": false
           },
           {
+            "method": "maybeAttrEnum",
+            "name": "readreceipts",
+            "wireName": "readreceipts",
+            "type": "enum",
+            "required": false,
             "enumRef": {
-              "module": "WASmaxInReceiptEnums",
               "name": "ENUM_ALL_NONE",
+              "module": "WASmaxInReceiptEnums",
               "variants": [
                 {
                   "name": "all",
@@ -3339,37 +3336,32 @@
                   "value": "none"
                 }
               ]
-            },
-            "method": "maybeAttrEnum",
-            "name": "readreceipts",
-            "required": false,
-            "type": "enum",
-            "wireName": "readreceipts"
+            }
           },
           {
+            "method": "",
+            "name": "deprecatedEditMixin",
+            "type": "string",
+            "required": false,
             "children": [
               {
                 "method": "attrEnum",
                 "name": "edit",
-                "required": true,
+                "wireName": "edit",
                 "type": "enum",
-                "wireName": "edit"
+                "required": true
               }
             ],
-            "method": "",
-            "name": "deprecatedEditMixin",
-            "required": false,
-            "sameNode": true,
-            "type": "string"
+            "sameNode": true
           }
-        ],
-        "parserName": "parsePublishViewResponseSuccess"
-      },
-      "tag": "ack"
+        ]
+      }
     },
     {
+      "tag": "ack",
       "module": "WAWebSendReceiptJobCommon",
       "shape": {
+        "parserName": "readReceiptAckParser",
         "assertions": [
           {
             "kind": "tag",
@@ -3378,9 +3370,13 @@
         ],
         "fields": [
           {
+            "method": "attrEnum",
+            "name": "readreceipts",
+            "type": "enum",
+            "required": false,
             "enumRef": {
-              "module": "WAWebPrivacySettings",
               "name": "ALL_NONE",
+              "module": "WAWebPrivacySettings",
               "variants": [
                 {
                   "name": "all",
@@ -3391,20 +3387,16 @@
                   "value": "none"
                 }
               ]
-            },
-            "method": "attrEnum",
-            "name": "readreceipts",
-            "required": false,
-            "type": "enum"
+            }
           }
-        ],
-        "parserName": "readReceiptAckParser"
-      },
-      "tag": "ack"
+        ]
+      }
     },
     {
+      "tag": "ack",
       "module": "WAWebSendMsgCommonApi",
       "shape": {
+        "parserName": "sendMsgAckSyncParser",
         "assertions": [
           {
             "kind": "tag",
@@ -3415,51 +3407,47 @@
           {
             "method": "attrTime",
             "name": "t",
-            "required": true,
-            "type": "integer"
+            "type": "integer",
+            "required": true
           },
           {
             "method": "maybeAttrString",
             "name": "sync",
-            "required": false,
-            "type": "string"
+            "type": "string",
+            "required": false
           },
           {
             "method": "maybeAttrString",
             "name": "phash",
-            "required": false,
-            "type": "string"
+            "type": "string",
+            "required": false
           },
           {
             "method": "attrString",
             "name": "refresh_lid",
-            "required": false,
-            "type": "string"
+            "type": "string",
+            "required": false
           },
           {
             "method": "maybeAttrString",
             "name": "addressing_mode",
-            "required": false,
-            "type": "string"
+            "type": "string",
+            "required": false
           },
           {
             "method": "maybeAttrInt",
             "name": "count",
-            "required": false,
-            "type": "integer"
+            "type": "integer",
+            "required": false
           },
           {
             "method": "maybeAttrInt",
             "name": "error",
-            "required": false,
-            "type": "integer"
+            "type": "integer",
+            "required": false
           }
-        ],
-        "parserName": "sendMsgAckSyncParser"
-      },
-      "tag": "ack"
+        ]
+      }
     }
-  ],
-  "schemaVersion": "2.0.0",
-  "waVersion": "2.3000.1044659339"
+  ]
 }

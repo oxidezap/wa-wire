@@ -1467,6 +1467,7 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-062 | A packed run is read as an integer where one is expected | The nibble alphabet exists to compress runs of digits, so any real encoder packs timestamps. Reading only strings meant every packed integer failed to derive | 17 |
 | D-063 | A JID is read whatever form the encoder chose | The wire has a dedicated JID form and an encoder may use it or write text; both are valid. Reading only the dedicated form made one engine derive where another derived nothing from identical traffic | 17 |
 | D-064 | A bare server is only read as a JID when the wire wrote it as a token | Servers are dictionary entries, so a token is evidence. Accepting any word without an `@` would turn a JID field into "any string at all" | 17 |
+| D-065 | A spec defect is fixed in the spec, never worked around here | The derivation is generated from whatspec so that it says what WA Web says. Softening a required field locally would make it quietly disagree, which is the failure this project exists to detect | 17 |
 
 ---
 
@@ -1532,12 +1533,26 @@ rest.
 - **`tests/encoding_shapes.rs`** is where this now lives: one value, several
   valid encodings, one derived event. Seven cases, and the place to add the
   next one.
-- **One finding belongs to whatspec, not here.** All five captured `<message>`
-  stanzas fail to derive, and the cause is that `<meta>` declares a required
-  `content` *attribute* the real stanzas do not carry. If real WhatsApp traffic
-  also omits it, the spec extraction is wrong — which is a whatspec question.
-  Noted rather than worked around: papering over a required field here would
-  make the derivation quietly disagree with WA Web.
+- **The last finding was whatspec's, and it was a real extraction bug** (D-065).
+  All five captured `<message>` stanzas failed because `<meta>` declared a
+  required `content` attribute real stanzas do not carry. Tracing it into
+  `wa-forge` found the cause: an attribute read whose name is not a string
+  literal — `e.attrString(k)` — fell back to naming the field `content`, and
+  since `attrString` is not a `maybe` spelling it was published as **required**.
+  The generated parser then rejected every element that correctly lacked it.
+
+  Three fields were invented that way, each obligatory and each unsatisfiable:
+  `incoming /content` (`attrJidWithType`), `incoming /meta/content`
+  (`attrString`), `notif /content` (`attrFromJid`).
+
+  Fixed upstream in `wa-forge`: a read whose name cannot be resolved is reported
+  through the existing `dropsByReason` channel — `attributeNameNotLiteral` —
+  rather than guessed at. Dropping a read says "this scanner could not follow
+  it"; inventing one says something about the protocol that is not true, and the
+  generated parser enforces it.
+
+  With the regenerated spec, captured `<message>` derivation goes from **0 of 5
+  to 5 of 5**, and the captured corpus from 31 to 36 derived stanzas.
 
 ### rev 16 — 2026-08-07
 
