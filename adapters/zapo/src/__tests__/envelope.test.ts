@@ -33,8 +33,10 @@ describe('envelope layout', () => {
             frame: Uint8Array.from([0x01, 0x02]),
             plaintexts: [
                 {
+                    // `Ok` because the layout needs a non-empty payload to
+                    // show, and only `Ok` may carry one.
                     path: [258],
-                    status: PlaintextStatus.DecryptFailed,
+                    status: PlaintextStatus.Ok,
                     payload: Uint8Array.from([0x61, 0x62]),
                 },
             ],
@@ -50,7 +52,7 @@ describe('envelope layout', () => {
                 0x01, 0x00, // pt_count = 1
                 0x01, // path_len = 1 component
                 0x02, 0x01, // path[0] = 258 little-endian
-                0x01, // status = DecryptFailed
+                0x00, // status = Ok
                 0x02, 0x00, 0x00, 0x00, // payload_len = 2
                 0x61, 0x62, // payload
             ],
@@ -165,6 +167,29 @@ describe('envelope limits', () => {
             { path: [0x1_0000], status: PlaintextStatus.Ok, payload: new Uint8Array() },
         ])
         assert.throws(() => encodeEnvelope(stanza), /path component/)
+    })
+
+    it('refuses a payload under a status that defines none', () => {
+        // The Rust decoder rejects one of these. Writing one here would mean
+        // the two halves of the boundary disagree about what is valid, which
+        // is the thing writing the format twice is supposed to catch.
+        for (const status of [
+            PlaintextStatus.DecryptFailed,
+            PlaintextStatus.Unsupported,
+            PlaintextStatus.Unobserved,
+        ]) {
+            const stanza = inbound(new Uint8Array(), [
+                { path: [0], status, payload: Uint8Array.from([1, 2]) },
+            ])
+            assert.throws(() => encodeEnvelope(stanza), /only ok may carry any/)
+        }
+        assert.doesNotThrow(() =>
+            encodeEnvelope(
+                inbound(new Uint8Array(), [
+                    { path: [0], status: PlaintextStatus.Ok, payload: Uint8Array.from([1, 2]) },
+                ]),
+            ),
+        )
     })
 
     it('rejects more plaintexts than the count can describe', () => {

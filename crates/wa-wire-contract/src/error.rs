@@ -6,6 +6,8 @@
 
 use core::fmt;
 
+use crate::status::PlaintextStatus;
+
 /// Why an envelope could not be decoded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -26,6 +28,19 @@ pub enum DecodeError {
     /// The status byte of a plaintext entry is not a value this contract
     /// version defines.
     InvalidStatus(u8),
+    /// A plaintext entry carries a payload under a status that defines none.
+    ///
+    /// Only [`PlaintextStatus::Ok`] describes usable bytes. Bytes under any
+    /// other status have no defined meaning, and reading them as plaintext
+    /// would be reading whatever the producer happened to leave there.
+    ///
+    /// [`PlaintextStatus::Ok`]: crate::status::PlaintextStatus::Ok
+    PayloadOnFailedStatus {
+        /// The status the entry declared.
+        status: PlaintextStatus,
+        /// How many bytes it carried anyway.
+        len: usize,
+    },
     /// The envelope decoded correctly but bytes remain. A trailing tail means
     /// the producer and consumer disagree about the layout, which is a fault
     /// even though the prefix parsed.
@@ -98,6 +113,10 @@ impl fmt::Display for DecodeError {
                 write!(f, "reserved flag bits set: {bits:#06x}")
             }
             Self::InvalidStatus(byte) => write!(f, "invalid plaintext status: {byte}"),
+            Self::PayloadOnFailedStatus { status, len } => write!(
+                f,
+                "status {status} carries {len} payload byte(s); only ok may carry any"
+            ),
             Self::TrailingBytes(count) => {
                 write!(f, "{count} trailing byte(s) after the envelope")
             }
@@ -121,6 +140,17 @@ pub enum EncodeError {
     PathTooLong(usize),
     /// More plaintext entries than the `u16` count can describe.
     TooManyEntries(usize),
+    /// A plaintext entry carries a payload under a status that defines none.
+    ///
+    /// Refused at the producer rather than tolerated, so an envelope whose
+    /// status and payload contradict each other never reaches a consumer that
+    /// has to guess which of the two to believe.
+    PayloadOnFailedStatus {
+        /// The status the entry declared.
+        status: PlaintextStatus,
+        /// How many bytes it carried anyway.
+        len: usize,
+    },
     /// The destination slice is smaller than [`encoded_len`] reported.
     ///
     /// [`encoded_len`]: crate::envelope::EnvelopeBuilder::encoded_len
@@ -141,6 +171,10 @@ impl fmt::Display for EncodeError {
             Self::PayloadTooLong(len) => write!(f, "payload of {len} byte(s) exceeds u32"),
             Self::PathTooLong(len) => write!(f, "path of {len} component(s) exceeds u8"),
             Self::TooManyEntries(count) => write!(f, "{count} plaintext entries exceed u16"),
+            Self::PayloadOnFailedStatus { status, len } => write!(
+                f,
+                "status {status} carries {len} payload byte(s); only ok may carry any"
+            ),
             Self::BufferTooSmall { needed, available } => write!(
                 f,
                 "destination too small: needed {needed} byte(s), {available} available"
@@ -201,6 +235,16 @@ mod tests {
         );
         assert!(DecodeError::InvalidStatus(9).to_string().contains('9'));
         assert!(DecodeError::TrailingBytes(3).to_string().contains('3'));
+
+        let paired = DecodeError::PayloadOnFailedStatus {
+            status: PlaintextStatus::Unobserved,
+            len: 12,
+        }
+        .to_string();
+        assert!(
+            paired.contains("unobserved") && paired.contains("12"),
+            "{paired}"
+        );
     }
 
     #[test]
@@ -209,6 +253,15 @@ mod tests {
         assert!(EncodeError::PayloadTooLong(6).to_string().contains('6'));
         assert!(EncodeError::PathTooLong(7).to_string().contains('7'));
         assert!(EncodeError::TooManyEntries(8).to_string().contains('8'));
+        let paired = EncodeError::PayloadOnFailedStatus {
+            status: PlaintextStatus::DecryptFailed,
+            len: 9,
+        }
+        .to_string();
+        assert!(
+            paired.contains("decrypt-failed") && paired.contains('9'),
+            "{paired}"
+        );
         let small = EncodeError::BufferTooSmall {
             needed: 10,
             available: 2,

@@ -102,16 +102,21 @@ export class PlaintextJoiner {
      * One with `<enc>` children is held for its plaintexts; anything else goes
      * straight to the sink. Either way this first ages the stanzas already
      * waiting, emitting any that have waited long enough.
+     *
+     * Returns whether the stanza is being held. A caller that also decides
+     * whether the engine sees the stanza needs to know: a held one is waiting
+     * on payloads only the engine can produce.
      */
-    public acceptNode(node: BinaryNode, frame: Uint8Array, sink: StanzaSink): void {
+    public acceptNode(node: BinaryNode, frame: Uint8Array, sink: StanzaSink): boolean {
         this.age(sink)
 
         const pending = begin(node, frame)
         if (pending === null) {
             sink({ direction: Direction.Inbound, frameOrigin: FrameOrigin.ReEncoded, frame })
-            return
+            return false
         }
         this.pending.push(pending)
+        return true
     }
 
     /**

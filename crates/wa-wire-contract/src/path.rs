@@ -23,11 +23,16 @@ impl<'a> NodePath<'a> {
     /// Wrap the little-endian component bytes of a path.
     ///
     /// `bytes.len()` must be even; the decoder only ever produces such slices.
-    /// An odd length truncates the trailing half-component rather than
-    /// panicking.
+    /// An odd length drops the trailing half-component here, at construction,
+    /// rather than at each read: a path whose byte count disagreed with its
+    /// component count would encode a length prefix the decoder then uses to
+    /// take fewer bytes than were written, shifting every field after it.
     #[must_use]
     pub const fn from_le_bytes(bytes: &'a [u8]) -> Self {
-        Self { bytes }
+        // `& !1` rounds down to the nearest even length without arithmetic
+        // that could underflow on an empty slice.
+        let (whole, _odd_tail) = bytes.split_at(bytes.len() & !1);
+        Self { bytes: whole }
     }
 
     /// The root node itself.
@@ -165,6 +170,10 @@ mod tests {
         assert_eq!(path.len(), 1);
         assert_eq!(path.iter().collect::<Vec<_>>(), [1]);
         assert_eq!(path.get(1), None);
+        // The bytes are truncated too, not just the count. The encoder writes
+        // `len()` as the prefix and `as_le_bytes()` as the body, so the two
+        // disagreeing would shift every field after the path.
+        assert_eq!(path.as_le_bytes(), [1, 0]);
     }
 
     #[test]

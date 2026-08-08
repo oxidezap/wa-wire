@@ -119,7 +119,7 @@ export function createRequester(engine: NodeRequester): StanzaRequester {
         async requestFrame(frame: Uint8Array, timeoutMs?: number): Promise<Uint8Array> {
             let node: BinaryNode
             try {
-                node = decodeBinaryNode(Buffer.from(frame))
+                node = decodeBinaryNode(frame)
             } catch (error) {
                 throw new RequestError('frame is not a decodable stanza', error)
             }
@@ -163,7 +163,7 @@ export function createSender(engine: NodeSender): StanzaSender {
         async sendFrame(frame: Uint8Array): Promise<void> {
             let node: BinaryNode
             try {
-                node = decodeBinaryNode(Buffer.from(frame))
+                node = decodeBinaryNode(frame)
             } catch (error) {
                 // Distinguished from an engine refusal on purpose: a frame this
                 // adapter cannot read never reached the socket, and the fix is

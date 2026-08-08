@@ -65,7 +65,7 @@ export interface Plaintext {
     /** Child indices from the root node. */
     readonly path: readonly number[]
     readonly status: PlaintextStatus
-    /** Empty unless `status` is `Ok`. */
+    /** Empty unless `status` is `Ok`; encoding one that is not throws. */
     readonly payload: Uint8Array
 }
 
@@ -100,6 +100,7 @@ export function encodedLength(stanza: Stanza): number {
     for (const plaintext of plaintexts) {
         requireU8(plaintext.path.length, 'path')
         requireU32(plaintext.payload.length, 'payload')
+        requireEmptyUnlessOk(plaintext)
         total += 1 + plaintext.path.length * 2 + 1 + 4 + plaintext.payload.length
     }
     return total
@@ -182,5 +183,21 @@ function requireU16(value: number, what: string): void {
 function requireU32(value: number, what: string): void {
     if (!fitsPrefix(value, 32)) {
         throw new EncodeError(`${what} of ${value} does not fit in 32 bits`)
+    }
+}
+
+/**
+ * Only `Ok` may carry a payload.
+ *
+ * Bytes under any other status have no defined meaning, so an envelope that
+ * carried them would leave a consumer choosing which of the two to believe.
+ * The Rust decoder refuses one; refusing to *write* one is what keeps that from
+ * being a cross-language surprise.
+ */
+function requireEmptyUnlessOk(plaintext: Plaintext): void {
+    if (plaintext.status !== PlaintextStatus.Ok && plaintext.payload.length > 0) {
+        throw new EncodeError(
+            `status ${plaintext.status} carries ${plaintext.payload.length} payload byte(s); only ok may carry any`
+        )
     }
 }

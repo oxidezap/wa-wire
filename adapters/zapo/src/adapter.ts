@@ -15,7 +15,13 @@ import { defineWaClientPlugin } from 'zapo-js'
 import type { BinaryNode, WaClientPluginContext } from 'zapo-js'
 import { encodeBinaryNode } from 'zapo-js/transport'
 
-import { INFO, require as requireCapabilities, type Capability } from './capability.js'
+import {
+    INFO,
+    TAKEOVER_CAPABILITIES,
+    TAP_CAPABILITIES,
+    require as requireCapabilities,
+    type Capability,
+} from './capability.js'
 import {
     Direction,
     FrameOrigin,
@@ -44,7 +50,10 @@ export enum Mode {
      *
      * Never suppresses decryption: L0-plain depends on the engine having
      * decrypted, so a takeover that disabled crypto would silently degrade the
-     * contract.
+     * contract. In `zapo` decryption happens *inside* the dispatch this mode
+     * suppresses, so a stanza carrying ciphertext is passed on to the engine
+     * and only everything else is dropped. That exception is the whole reason
+     * this mode is still L0-plain rather than L0-wire.
      */
     Takeover = 'takeover',
 }
@@ -70,8 +79,13 @@ export interface Options {
      * the rest, so failures are reported here and the stanza continues to the
      * engine. Silence would be worse: a consumer would see a gap and have no
      * way to know there was one.
+     *
+     * Carries the stanza rather than the node it came from. A stanza held for
+     * its plaintexts reaches the sink long after the filter that saw the node
+     * returned, and handing back a placeholder node would put wrong ids and a
+     * wrong tag into the one report a consumer has about a gap.
      */
-    readonly onError?: (error: unknown, node: BinaryNode) => void
+    readonly onError?: (error: unknown, stanza: Stanza) => void
 }
 
 /** This adapter's declaration. */
@@ -91,8 +105,13 @@ export function waWire(options: Options) {
         id: 'wa-wire',
         setup(context: WaClientPluginContext) {
             // Before anything is registered: a consumer that asked for what
-            // this adapter cannot do should not get a half-working install.
-            requireCapabilities(options.requires ?? [])
+            // this instance does not do should not get a half-working install.
+            // Checked against the mode, not against the adapter: installed as a
+            // tap it suppresses nothing, whatever it is capable of.
+            requireCapabilities(
+                options.requires ?? [],
+                mode === Mode.Takeover ? TAKEOVER_CAPABILITIES : TAP_CAPABILITIES
+            )
             // The joiner holds a `<message>` until its plaintexts arrive, so a
             // consumer sees one envelope per stanza rather than a frame and
             // then a stream of payloads to correlate itself.
@@ -101,15 +120,21 @@ export function waWire(options: Options) {
                 try {
                     options.sink(stanza)
                 } catch (error) {
-                    options.onError?.(error, { tag: 'message', attrs: {} })
+                    options.onError?.(error, stanza)
                 }
             }
 
             const unregister = context.registerIncomingStanzaFilter((node) => {
-                joiner.acceptNode(node, encodeBinaryNode(node), sink)
+                const held = joiner.acceptNode(node, encodeBinaryNode(node), sink)
                 // Under takeover the engine stops interpreting the stanza but
                 // still acks it, so the server does not redeliver.
-                return mode === Mode.Takeover
+                //
+                // Except when the joiner is holding it: the payloads it waits
+                // for are produced by the very handler suppression would skip,
+                // so dropping it here would leave every encrypted stanza to
+                // time out and cross as `Unobserved`. Takeover suppresses
+                // dispatch, never crypto.
+                return mode === Mode.Takeover && !held
             })
             const onPayload = (event: {
                 readonly stanzaId?: string
@@ -149,10 +174,11 @@ export function waWire(options: Options) {
  * registered.
  */
 export function forward(node: BinaryNode, options: Options): void {
+    const stanza = toStanza(node)
     try {
-        options.sink(toStanza(node))
+        options.sink(stanza)
     } catch (error) {
-        options.onError?.(error, node)
+        options.onError?.(error, stanza)
     }
 }
 

@@ -5,7 +5,7 @@ import type { BinaryNode } from 'zapo-js'
 import { decodeBinaryNode } from 'zapo-js/transport'
 
 import { Capability, INFO, UnmetCapabilitiesError, has, missing } from '../capability.js'
-import { Direction, FrameOrigin, PlaintextStatus } from '../envelope.js'
+import { Direction, FrameOrigin, PlaintextStatus, type Stanza } from '../envelope.js'
 import { Mode, forward, supports, toEnvelope, toStanza, waWire } from '../adapter.js'
 
 function receipt(): BinaryNode {
@@ -109,17 +109,18 @@ describe('forwarding', () => {
         )
     })
 
-    it('passes the offending node to the reporter', () => {
-        let reported: BinaryNode | undefined
-        forward(receipt(), {
+    it('passes the offending stanza to the reporter', () => {
+        const node = receipt()
+        let reported: Stanza | undefined
+        forward(node, {
             sink: () => {
                 throw new Error('x')
             },
-            onError: (_error, node) => {
-                reported = node
+            onError: (_error, stanza) => {
+                reported = stanza
             },
         })
-        assert.equal(reported?.tag, 'receipt')
+        assert.deepEqual(reported, toStanza(node))
     })
 })
 
@@ -190,6 +191,50 @@ describe('the plugin', () => {
             filter(node)
         }
         assert.deepEqual(seen, ['receipt', 'receipt', 'receipt'])
+    })
+
+    it('lets an encrypted stanza through under takeover, so it still gets decrypted', () => {
+        // `zapo` decrypts inside the dispatch takeover suppresses. Dropping a
+        // held message here would mean its payloads never arrive, and every
+        // encrypted stanza would cross as `Unobserved` — L0-wire wearing an
+        // L0-plain label.
+        const filter = install({ sink: () => {}, mode: Mode.Takeover })
+
+        assert.equal(filter(message()), false, 'the engine must still decrypt it')
+        assert.equal(filter(receipt()), true, 'everything else is still suppressed')
+    })
+
+    it('still produces plaintext under takeover', () => {
+        const stanzas: Array<{ readonly plaintexts?: readonly { status: number }[] }> = []
+        const { filter, onPayload } = installFull({
+            sink: (s) => stanzas.push(s),
+            mode: Mode.Takeover,
+        })
+
+        filter(message())
+        onPayload({
+            stanzaId: message().attrs.id,
+            encIndex: 0,
+            plaintext: new Uint8Array([7, 7]),
+        })
+
+        assert.deepEqual(
+            stanzas[0]?.plaintexts?.map((p) => p.status),
+            [PlaintextStatus.Ok],
+            'takeover suppresses dispatch, never crypto',
+        )
+    })
+
+    it('refuses to install as a tap for a consumer that needs takeover', () => {
+        // The instance is what a consumer gets, not the adapter's full range.
+        // Installed as a tap it suppresses nothing, whatever it is capable of.
+        assert.throws(
+            () => install({ sink: () => {}, requires: [Capability.Takeover] }),
+            UnmetCapabilitiesError,
+        )
+        assert.doesNotThrow(() =>
+            install({ sink: () => {}, mode: Mode.Takeover, requires: [Capability.Takeover] }),
+        )
     })
 
     it('joins a payload onto the message it belongs to', () => {

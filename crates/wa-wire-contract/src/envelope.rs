@@ -43,7 +43,8 @@ pub struct PlaintextEntry<'a> {
     /// Whether the payload holds usable plaintext, and if not, why.
     pub status: PlaintextStatus,
     /// The decrypted bytes. Empty unless `status` is
-    /// [`PlaintextStatus::Ok`].
+    /// [`PlaintextStatus::Ok`] — encoding and decoding both refuse an entry
+    /// that breaks this, so the two can never contradict each other.
     pub payload: &'a [u8],
 }
 
@@ -110,7 +111,8 @@ impl<'a> EnvelopeRef<'a> {
     /// Decode an envelope from `buf`.
     ///
     /// The whole envelope is validated: lengths must be consistent, reserved
-    /// flag bits clear, statuses known, and no bytes may remain afterwards.
+    /// flag bits clear, statuses known, every payload consistent with its
+    /// status, and no bytes may remain afterwards.
     pub fn decode(buf: &'a [u8]) -> Result<Self, DecodeError> {
         let mut reader = Reader::new(buf);
 
@@ -289,9 +291,22 @@ fn entry_count_prefix(count: usize) -> Result<u16, EncodeError> {
     u16::try_from(count).map_err(|_| EncodeError::TooManyEntries(count))
 }
 
+// Both directions enforce it, because each is the other's only guard: a
+// producer in another language does not run the encoder here, and a consumer
+// there does not run this decoder.
+fn check_status_payload(status: PlaintextStatus, len: usize) -> bool {
+    status.is_ok() || len == 0
+}
+
 fn entry_len(entry: &PlaintextEntry<'_>) -> Result<usize, EncodeError> {
     path_len_prefix(entry.path.len())?;
     payload_len_prefix(entry.payload.len())?;
+    if !check_status_payload(entry.status, entry.payload.len()) {
+        return Err(EncodeError::PayloadOnFailedStatus {
+            status: entry.status,
+            len: entry.payload.len(),
+        });
+    }
     // path_len(1) + path + status(1) + payload_len(4) + payload
     entry
         .path
@@ -308,6 +323,12 @@ fn parse_entry<'a>(reader: &mut Reader<'a>) -> Result<PlaintextEntry<'a>, Decode
     let status = PlaintextStatus::from_byte(reader.u8(Field::Status)?)?;
     let payload_len = reader.u32(Field::PayloadLen)?;
     let payload = reader.take_u32(payload_len, Field::Payload)?;
+    if !check_status_payload(status, payload.len()) {
+        return Err(DecodeError::PayloadOnFailedStatus {
+            status,
+            len: payload.len(),
+        });
+    }
     Ok(PlaintextEntry {
         path: NodePath::from_le_bytes(path_bytes),
         status,
@@ -475,6 +496,71 @@ mod tests {
     }
 
     #[test]
+    fn an_odd_path_does_not_shift_the_fields_after_it() {
+        // The prefix says how many components; the body is what the path holds.
+        // If a path could report one component and write three bytes, the
+        // decoder would read the third as the status byte.
+        let odd = [1u8, 0, 2];
+        let entries = [entry(&odd, PlaintextStatus::Ok, b"payload")];
+        let bytes = encode(Flags::inbound(), b"frame", &entries);
+
+        let env = EnvelopeRef::decode(&bytes).expect("decodes");
+        let got = env.entries().next().expect("one entry");
+        assert_eq!(got.path.len(), 1);
+        assert_eq!(got.path.as_le_bytes(), [1, 0]);
+        assert_eq!(got.status, PlaintextStatus::Ok);
+        assert_eq!(got.payload, b"payload");
+    }
+
+    #[test]
+    fn a_failed_status_may_not_carry_a_payload() {
+        for status in [
+            PlaintextStatus::DecryptFailed,
+            PlaintextStatus::Unsupported,
+            PlaintextStatus::Unobserved,
+        ] {
+            let p = path(&[0]);
+            let entries = [entry(&p, status, b"leftover")];
+            let err = EnvelopeBuilder::new(Flags::inbound(), b"frame")
+                .with_entries(entries.iter().copied())
+                .encode_to_vec()
+                .expect_err("must refuse");
+            assert_eq!(
+                err,
+                EncodeError::PayloadOnFailedStatus { status, len: 8 },
+                "{status} must not encode a payload"
+            );
+        }
+    }
+
+    #[test]
+    fn a_payload_under_a_failed_status_is_refused_on_the_way_in_too() {
+        // Hand-built, because the encoder can no longer produce one: the other
+        // side of the boundary may be an encoder this crate never ran.
+        let p = path(&[0]);
+        let valid = encode(
+            Flags::inbound(),
+            b"frame",
+            &[entry(&p, PlaintextStatus::Ok, b"xy")],
+        );
+        let mut corrupt = valid.clone();
+        let status_at = valid.len() - 7;
+        assert_eq!(corrupt[status_at], PlaintextStatus::Ok.to_byte());
+        corrupt[status_at] = PlaintextStatus::DecryptFailed.to_byte();
+
+        assert_eq!(
+            EnvelopeRef::decode(&corrupt),
+            Err(DecodeError::PayloadOnFailedStatus {
+                status: PlaintextStatus::DecryptFailed,
+                len: 2,
+            })
+        );
+        // The same bytes with an empty payload stay valid, so the test is
+        // about the pairing rather than about the edit.
+        assert!(EnvelopeRef::decode(&valid).is_ok());
+    }
+
+    #[test]
     fn empty_frame_round_trips() {
         let bytes = encode(Flags::outbound(), &[], &[]);
         let env = EnvelopeRef::decode(&bytes).expect("decodes");
@@ -588,7 +674,9 @@ mod tests {
     #[test]
     fn byte_layout_is_exact() {
         let p = path(&[258]);
-        let entries = [entry(&p, PlaintextStatus::DecryptFailed, b"ab")];
+        // `Ok` because the layout needs a non-empty payload to show, and only
+        // `Ok` may carry one.
+        let entries = [entry(&p, PlaintextStatus::Ok, b"ab")];
         let bytes = encode(Flags::outbound(), b"\x01\x02", &entries);
 
         #[rustfmt::skip]
@@ -600,7 +688,7 @@ mod tests {
             0x01, 0x00,             // pt_count = 1
             0x01,                   // path_len = 1 component
             0x02, 0x01,             // path[0] = 258 little-endian
-            0x01,                   // status = DecryptFailed
+            0x00,                   // status = Ok
             0x02, 0x00, 0x00, 0x00, // payload_len = 2
             b'a', b'b',             // payload
         ];

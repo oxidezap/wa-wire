@@ -18,7 +18,13 @@ export const Capability = {
     L0Request: 'l0.request',
     /** Emits the payloads it decrypted alongside the frame. */
     L0Plaintext: 'l0.plaintext',
-    /** Suppresses the engine's own dispatch, leaving it as transport and acks. */
+    /**
+     * Suppresses the engine's own dispatch, leaving it as transport and acks.
+     *
+     * Never suppresses decryption: L0-plain is produced by the engine, so a
+     * takeover that stopped it would silently downgrade the contract to
+     * L0-wire. A stanza carrying ciphertext still reaches the engine.
+     */
     Takeover: 'l0.takeover',
     /** Supplies the engine's original frame bytes, so nothing is re-encoded. */
     ZeroCopyFrame: 'l0.zero-copy-frame',
@@ -38,12 +44,31 @@ export interface AdapterInfo {
 }
 
 /**
+ * What an instance installed as a tap provides.
+ *
+ * A tap observes and lets the engine carry on, so it provides everything
+ * except suppression. Stated separately from {@link INFO} because a consumer
+ * holds an instance, not an adapter.
+ */
+export const TAP_CAPABILITIES: readonly Capability[] = [
+    Capability.L0InboundTap,
+    Capability.L0Plaintext,
+    Capability.DrainHook,
+]
+
+/** What an instance installed for takeover provides: a tap, plus suppression. */
+export const TAKEOVER_CAPABILITIES: readonly Capability[] = [
+    ...TAP_CAPABILITIES,
+    Capability.Takeover,
+]
+
+/**
  * What this adapter claims.
  *
  * Every entry is asserted against real behaviour in this package's tests, so a
  * claim cannot quietly stop being true.
  *
- * Three notable absences:
+ * Two notable absences:
  *
  * - **`l0.inbound.auth-phase`** — `zapo` protects `success` and `failure` from
  *   stanza filters, so the tap does not see the authentication exchange. That
@@ -52,20 +77,16 @@ export interface AdapterInfo {
  * - **`l0.zero-copy-frame`** — the filter receives a decoded node, not the
  *   buffer it came from, so the frame is re-encoded. See the README for the
  *   one-line change upstream that would close this.
- * - **`l0.plaintext`** — the filter runs before decryption, so a `<message>`
- *   crosses with its ciphertext and no plaintext table.
+ *
+ * This is everything the adapter *can* do. An installed instance may provide
+ * less: see {@link TAP_CAPABILITIES}.
  */
 export const INFO: AdapterInfo = {
     id: 'zapo',
     version: '0.1.0',
     engineVersion: '1.7',
     contractVersion: 1,
-    capabilities: [
-        Capability.L0InboundTap,
-        Capability.L0Plaintext,
-        Capability.Takeover,
-        Capability.DrainHook,
-    ],
+    capabilities: TAKEOVER_CAPABILITIES,
 }
 
 /**
@@ -102,9 +123,17 @@ export function has(capability: Capability): boolean {
     return INFO.capabilities.includes(capability)
 }
 
-/** Which of `required` this adapter lacks. */
-export function missing(required: readonly Capability[]): Capability[] {
-    return required.filter((capability) => !has(capability))
+/**
+ * Which of `required` is not in `provided`.
+ *
+ * Defaults to everything the adapter can do. An installed instance passes the
+ * set that instance actually provides, which is not always the same thing.
+ */
+export function missing(
+    required: readonly Capability[],
+    provided: readonly Capability[] = INFO.capabilities
+): Capability[] {
+    return required.filter((capability) => !provided.includes(capability))
 }
 
 /** Raised when a consumer required capabilities this adapter does not have. */
@@ -116,18 +145,26 @@ export class UnmetCapabilitiesError extends Error {
 }
 
 /**
- * Throw unless this adapter has every capability in `required`.
+ * Throw unless `provided` covers every capability in `required`.
  *
  * The setup-time gate. Without it a consumer discovers that its engine never
  * emits plaintext, or re-encodes frames it meant to replay, as *missing
  * traffic* — where the evidence of the problem is the thing that is absent.
  * Naming the requirement turns that into a refused install.
  *
+ * Checked against what the instance provides rather than against
+ * {@link INFO}: an adapter that can take over but was installed as a tap
+ * suppresses nothing, and a consumer told otherwise would be waiting for the
+ * engine to stop interpreting stanzas it is still interpreting.
+ *
  * Reports everything missing at once, so a caller fixes its setup in one pass
  * rather than one round trip per capability.
  */
-export function require(required: readonly Capability[]): void {
-    const absent = missing(required)
+export function require(
+    required: readonly Capability[],
+    provided: readonly Capability[] = INFO.capabilities
+): void {
+    const absent = missing(required, provided)
     if (absent.length > 0) {
         throw new UnmetCapabilitiesError(absent)
     }

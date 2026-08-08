@@ -57,6 +57,30 @@ describe('sending a stanza', () => {
         )
     })
 
+    it('sends without any Node-only global', async () => {
+        // The adapter is meant to run wherever `zapo` runs, which includes a
+        // browser, a worker and Deno. Reaching for `Buffer` on the way out
+        // would make every send fail there, and only there.
+        const frame = new Uint8Array(encodeBinaryNode(receipt()))
+        const sent: BinaryNode[] = []
+        const sender = createSender({
+            sendNode: async (node) => {
+                sent.push(node)
+            },
+        })
+
+        const held = globalThis.Buffer
+        // @ts-expect-error removing a global is the whole point of the test
+        delete globalThis.Buffer
+        try {
+            await sender.sendFrame(frame)
+        } finally {
+            globalThis.Buffer = held
+        }
+
+        assert.equal(sent.length, 1)
+    })
+
     it('reports a frame it cannot read without touching the socket', async () => {
         // Distinguished from an engine refusal on purpose: nothing was sent, and
         // the fix is in what the caller passed.
@@ -200,6 +224,25 @@ describe('requesting a reply', () => {
             RequestError
         )
         assert.equal(asked, false, 'the engine was never asked')
+    })
+
+    it('requests without any Node-only global either', async () => {
+        const requester = createRequester({
+            sendNode: async () => {},
+            query: async (node) => node,
+        })
+
+        const held = globalThis.Buffer
+        // @ts-expect-error removing a global is the whole point of the test
+        delete globalThis.Buffer
+        try {
+            const reply = await requester.requestFrame(
+                new Uint8Array(encodeBinaryNode(receipt()))
+            )
+            assert.ok(reply.length > 0)
+        } finally {
+            globalThis.Buffer = held
+        }
     })
 
     it('can still send without requesting', async () => {

@@ -17,7 +17,7 @@ bundled-tokens = []
 [dependencies]
 
 [dev-dependencies]
-wa-wire-contract = { path = "../wa-wire-contract" }
+wa-wire-contract = { path = "../wa-wire-contract", version = "0.1.0" }
 
 [lints]
 workspace = true

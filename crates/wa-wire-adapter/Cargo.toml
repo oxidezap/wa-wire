@@ -15,7 +15,7 @@ default = ["alloc"]
 alloc = ["wa-wire-contract/alloc"]
 
 [dependencies]
-wa-wire-contract = { path = "../wa-wire-contract", default-features = false }
+wa-wire-contract = { path = "../wa-wire-contract", version = "0.1.0", default-features = false }
 
 [lints]
 workspace = true

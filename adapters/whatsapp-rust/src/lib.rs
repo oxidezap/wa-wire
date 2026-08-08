@@ -60,7 +60,8 @@ use wa_wire_adapter::{
 };
 use whatsapp_rust::OwnedNodeRef;
 use whatsapp_rust::plugins::{
-    ClientPlugin, PluginCapability, PluginContext, PluginFuture, PluginManifest,
+    ClientPlugin, PluginCapability, PluginContext, PluginCoreEventSubscription, PluginFuture,
+    PluginManifest,
 };
 use whatsapp_rust::types::events::{Event, EventHandler, EventInterest, EventKind};
 
@@ -154,10 +155,12 @@ where
 
 /// The API this plugin publishes to the engine.
 ///
-/// Deliberately empty: a tap has nothing to offer other plugins, and exposing
-/// the sink here would let one plugin steal another's stanzas.
+/// No methods: a tap has nothing to offer other plugins, and exposing the sink
+/// here would let one plugin steal another's stanzas. What it does hold is the
+/// event subscription, so that the tap lasts exactly as long as the plugin the
+/// host installed — and is released when the host drops it.
 pub struct WaWireApi {
-    _private: (),
+    _subscription: PluginCoreEventSubscription,
 }
 
 impl<S> ClientPlugin for WaWirePlugin<S>
@@ -183,7 +186,10 @@ where
                 .ok_or_else(|| anyhow::anyhow!("host did not grant events.core.observe"))?;
 
             // Declaring interest in RawNode is what makes the host take the
-            // forwarding lease; dropping the subscription releases it.
+            // forwarding lease; dropping the subscription releases it. Handing
+            // it to the API rather than leaking it is what ties the lease to
+            // the plugin's own lifetime, so a process that installs and tears
+            // down several clients does not accumulate live taps.
             let subscription = events.subscribe(
                 interest(),
                 Arc::new(RawNodeTap {
@@ -191,11 +197,10 @@ where
                     joiner: Mutex::new(PlaintextJoiner::new()),
                 }),
             )?;
-            // The subscription lives as long as the plugin's resources do; the
-            // host drops it on shutdown.
-            core::mem::forget(subscription);
 
-            Ok(Arc::new(WaWireApi { _private: () }))
+            Ok(Arc::new(WaWireApi {
+                _subscription: subscription,
+            }))
         })
     }
 }

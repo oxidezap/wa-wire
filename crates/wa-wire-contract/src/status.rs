@@ -61,6 +61,23 @@ impl PlaintextStatus {
     pub const fn is_ok(self) -> bool {
         matches!(self, Self::Ok)
     }
+
+    /// A stable name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::DecryptFailed => "decrypt-failed",
+            Self::Unsupported => "unsupported",
+            Self::Unobserved => "unobserved",
+        }
+    }
+}
+
+impl core::fmt::Display for PlaintextStatus {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.name())
+    }
 }
 
 #[cfg(test)]
@@ -107,6 +124,19 @@ mod tests {
         assert!(!PlaintextStatus::DecryptFailed.is_ok());
         assert!(!PlaintextStatus::Unsupported.is_ok());
         assert!(!PlaintextStatus::Unobserved.is_ok());
+    }
+
+    #[test]
+    fn every_status_has_a_distinct_name() {
+        extern crate alloc;
+        use alloc::string::ToString;
+        for (i, a) in ALL.iter().enumerate() {
+            assert!(!a.name().is_empty());
+            assert_eq!(a.to_string(), a.name());
+            for b in ALL.iter().skip(i.saturating_add(1)) {
+                assert_ne!(a.name(), b.name(), "status names must be unique");
+            }
+        }
     }
 
     #[test]
