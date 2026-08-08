@@ -1345,8 +1345,8 @@ so step 0 is done and implementation can begin.
 | ~~6~~ | ~~**Conformance runner**~~ | — | **done in rev 11** — the central claim is now a test result |
 | 7 | `Baileys` adapter | third engine | `ws.on('frame')` for tap; one-line patch for bytes |
 | 8 | `hypermeow` adapter + Go hook | fourth engine | hook at `client.go:844`, bytes at `:824`; **MPL-2.0 subdirectory with NOTICE** |
-| ~~9~~ | ~~`whatsapp-rust` takeover patch (D-020)~~ | — | **done in rev 13** — a pre-dispatch interceptor, upstream at #1239 |
-| ~~10~~ | ~~`whatsapp-rust` adapter, L0-plain~~ | — | **done in rev 14** — a per-`<enc>` plaintext event upstream at #1240, joined to its frame adapter-side |
+| ~~9~~ | ~~`whatsapp-rust` takeover patch (D-020)~~ | — | **done in rev 13** — a pre-dispatch interceptor, merged upstream as #1239 |
+| ~~10~~ | ~~`whatsapp-rust` adapter, L0-plain~~ | — | **done in rev 14** — a per-`<enc>` plaintext event merged upstream as #1240, joined to its frame adapter-side |
 
 **Step 6 is the milestone that matters.** Everything before it is plumbing;
 step 6 is where "four engines produce identical L1" stops being a claim and
