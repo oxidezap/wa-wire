@@ -41,6 +41,13 @@ are two formats waiting to diverge. Fixtures written by one are read by the
 other in
 [`cross_language.rs`](../wa-wire-conformance/tests/cross_language.rs).
 
+## Held to the same rules as the rest
+
+Reading never allocates, and `wa-wire-alloc-check` measures that rather than
+asserting it. Malformed input is reportable and never a panic, and the mutation
+sweep in `wa-wire-conformance` holds that across every decoder here. Walking a
+32-record recording carries a time budget.
+
 ## Testing
 
 ```sh

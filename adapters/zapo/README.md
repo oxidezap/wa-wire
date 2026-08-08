@@ -27,18 +27,28 @@ It never suppresses decryption. L0-plain depends on the engine having
 decrypted, so a takeover that disabled crypto would silently degrade the
 contract rather than extend it.
 
+In `zapo` decryption happens *inside* the dispatch takeover suppresses, so a
+stanza carrying ciphertext is passed on and only everything else is dropped.
+That exception is the whole reason this mode is still L0-plain.
+
 ## Capabilities
 
 | Capability | Status |
 | --- | --- |
 | `l0.inbound.tap` | yes — the filter sees every inbound stanza |
-| `l0.takeover` | yes — returning `true` drops it, and `zapo` still acks |
+| `l0.plaintext` | yes — payloads joined onto the stanza they came from |
 | `lifecycle.drain-hook` | yes — `registerDispose` runs after handlers drain |
+| `l0.takeover` | only when installed as `Mode.Takeover` |
+| `l0.outbound` | on `createSender` |
+| `l0.request` | on `createRequester` |
 | `l0.inbound.auth-phase` | **no** |
 | `l0.zero-copy-frame` | **no** |
-| `l0.plaintext` | **no** |
-| `l0.outbound` | **no** |
-| `l0.request` | **no** |
+
+The first three are what any instance provides. Takeover is not: installed as a
+tap this adapter suppresses nothing, whatever it is capable of, so the
+capability is checked against the mode rather than against the adapter
+(`TAP_CAPABILITIES` and `TAKEOVER_CAPABILITIES`). Sending and requesting carry
+their own declarations for the same reason.
 
 Every row is asserted in `src/__tests__/adapter.test.ts`. A claim that stops
 being true fails a test rather than quietly misleading a consumer.
@@ -61,19 +71,32 @@ Closing it is one line upstream, at `src/transport/binary/decoder.ts:344`:
 Emitting them alongside the node would make `l0.zero-copy-frame` true here, the
 same way `OwnedNodeRef::backing_bytes` did for `whatsapp-rust`.
 
-### Why no plaintexts
+### How the plaintexts get there
 
-The filter runs before decryption, so a `<message>` crosses with its ciphertext
-and an empty plaintext table. Most stanzas — receipts, acks, presence — never
-had anything encrypted, so this is honest rather than degraded. Reaching
-L0-plain needs a second observation point after Signal.
+The filter runs before decryption, so the frame alone is L0-wire. `zapo` emits
+`debug_decrypted_payload` per `<enc>` afterwards, and `joiner.ts` holds a
+`<message>` until its payloads arrive so a consumer sees one envelope per stanza
+rather than a frame and then a stream of payloads to correlate itself.
+
+It closes by counting the stanza's `<enc>` children, so the common case has no
+clock in it. Giving up on one that never arrives is measured in **stanzas
+rather than milliseconds**: the receive path is ordered, and a count reads the
+same on every machine, which a duration does not.
+
+A fan-out `<message>` crosses as L0-wire with no table. Its `<enc>` nodes under
+`<participants><to>` are numbered after the direct ones and only for this
+device, and reproducing that needs a device JID this adapter does not have. A
+frame without payloads is a smaller claim than a payload on the wrong `<enc>`.
 
 ## Cross-language fixtures
 
-`fixtures/*.bin` are envelopes written by this encoder and decoded by the Rust
-one in `crates/wa-wire-conformance/tests/cross_language.rs`. The boundary format
-is described in two languages, and two descriptions only ever tested separately
-are two formats waiting to diverge.
+Two formats are written here and read by Rust in
+`crates/wa-wire-conformance/tests/cross_language.rs`: `fixtures/*.bin` are
+RFC-008 envelopes, and `fixtures/*.wawr` are RFC-010 recordings, including one
+frozen with no trailer so the other side has to read an interrupted file.
+
+Each format is described in two languages, and two descriptions only ever
+tested separately are two formats waiting to diverge.
 
 ```console
 npx tsx scripts/emit-fixtures.ts

@@ -1,6 +1,7 @@
 # wa-wire adapter for whatsapp-rust
 
-Tap mode: observes every decoded stanza and forwards its frame bytes verbatim.
+Observes every decoded stanza, forwards its frame bytes verbatim, joins the
+plaintexts the engine decrypted onto it, and can send.
 
 ## Building
 
@@ -68,15 +69,18 @@ real rather than cosmetic.
 | --- | --- | --- |
 | `l0.inbound.tap` | yes | yes |
 | `l0.zero-copy-frame` | yes | yes |
+| `l0.plaintext` | yes | **no** |
 | `l0.inbound.auth-phase` | yes | **no** |
 | `l0.takeover` | **no** | yes |
-| `l0.plaintext` | **no** | **no** |
-| `l0.outbound` | **no** | **no** |
-| `l0.request` | **no** | **no** |
+| `l0.outbound` | on `Sender` | on `Sender` |
+| `l0.request` | on `Sender` | on `Sender` |
 | `lifecycle.drain-hook` | **no** | **no** |
 
 Neither is a superset of the other, which is why they carry separate
-declarations (`INFO` and `takeover::TAKEOVER_INFO`). Every row is asserted in
+declarations (`INFO` and `takeover::TAKEOVER_INFO`). Sending is a third
+(`SENDING_INFO`, and `REQUESTING_INFO` when replies are correlated), because an
+adapter built to observe genuinely cannot send and one set covering both would
+be false for whichever the consumer actually holds. Every row is asserted in
 this crate's tests.
 
 **Tap** rides `Event::RawNode`, emitted before any early return, so it sees
@@ -99,33 +103,47 @@ use wa_wire_adapter_whatsapp_rust::takeover::{TakeTags, attach};
 let handle = attach(&client, sink, TakeTags::new(["receipt"]));
 ```
 
-### Requires the interceptor API
+### Requires two engine changes
 
 Takeover needs `Client::add_stanza_interceptor`, added in
 [oxidezap/whatsapp-rust#1239](https://github.com/oxidezap/whatsapp-rust/pull/1239).
-Tap works without it.
+Plaintexts need `Event::DecryptedPayload`, added in
+[#1240](https://github.com/oxidezap/whatsapp-rust/pull/1240). A plain tap over
+`Event::RawNode` works without either.
 
-### Why no plaintexts
+### How the plaintexts get there
 
-`Event::RawNode` is dispatched where a stanza is decoded, which is necessarily
-*before* Signal runs. So this adapter emits **L0-wire**: envelopes it produces
-carry a frame and an empty plaintext table.
+`Event::RawNode` fires where a stanza is decoded, which is necessarily *before*
+Signal runs, so the frame alone is **L0-wire**. `Event::DecryptedPayload`
+carries each `<enc>`'s plaintext afterwards, and `plaintext.rs` joins the two:
+a `<message>` is held until its payloads arrive, then crosses as one envelope
+with its table filled in.
 
-That is honest rather than degraded — most stanzas (receipts, acks, presence,
-IQ) never had anything encrypted. But a `<message>` crosses without its
-plaintext, so L0-plain needs a second observation point inside the engine, after
-decryption. That is a patch, not a configuration, and it is separate work.
+Closing by counting, not by clock. The stanza says how many `<enc>` children it
+has, so the last payload completes the table and the envelope goes immediately.
+What has no signal is an `<enc>` that will never produce one, so giving up is
+measured in **stanzas rather than milliseconds**: the receive path is ordered,
+and a count is the same on every machine, which a duration is not.
 
-### Why no takeover
+A fan-out `<message>` is the exception and crosses as L0-wire with no table.
+The engine numbers the `<enc>` nodes under `<participants><to>` after the direct
+ones and only for its own device, and reproducing that needs the device JID this
+adapter does not have. A frame without payloads is a smaller claim than a
+payload attached to the wrong `<enc>`, which would read as a message from the
+wrong device.
 
-`Event::RawNode` observes; the engine's pipeline runs regardless. Suppressing it
-would mean overriding the `StanzaRouter`, which panics on duplicate tag
-registration. Also separate work.
+Takeover does not claim `l0.plaintext`: interception happens before decryption
+too, and a takeover consumer holds the stanza rather than waiting for payloads.
+
+### Why no drain hook
+
+Nothing in the engine says when incoming handlers have finished, so a consumer
+cannot know its queue is quiet. Absent rather than approximated.
 
 ## Cost when nobody is listening
 
-`Event::RawNode` sits behind a lease the plugin host takes only when a
-subscription declares interest in it. Without one the engine skips forwarding
+`Event::RawNode` and `Event::DecryptedPayload` each sit behind a lease the
+plugin host takes only when a subscription declares interest in them. Without one the engine skips forwarding
 entirely — it does not even wrap an `ack` in an `Arc`. Installing this plugin is
 what turns that on; dropping it turns it back off.
 

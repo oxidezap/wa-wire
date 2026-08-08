@@ -36,6 +36,28 @@ prevent.
 | Coverage lost | a limit on the adapter | a regression |
 | Coverage gained | not a finding | an improvement, reported and passing |
 
+## What it reports
+
+The header describes both recordings, the verdict names the profile that
+answered, and the findings are split into failures, improvements and everything
+the profile tolerated but still saw.
+
+Below that, what the payloads turned out to be:
+
+```
+content:
+  conversation   baseline    6   candidate    6
+  image          baseline    2   candidate    1   <- differs
+  unreadable     baseline    0   candidate    1   <- differs
+```
+
+Per side rather than merged. A single total would hide a candidate that read
+fewer messages than the baseline, which is the finding. The section is omitted
+when neither side carries a plaintext, rather than printed empty.
+
+Long lists are trimmed and say what they trimmed. A cap nobody is told about
+reads as "that was all of them".
+
 ## Which dictionary
 
 Frames are parsed against the token dictionary they were encoded with (D-082),

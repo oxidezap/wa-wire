@@ -1,10 +1,10 @@
 # wa-wire — Design Document
 
-> **Status:** **IMPLEMENTING** — ten RFCs accepted. Steps 1–6 and 9–12 of §8 are
+> **Status:** **IMPLEMENTING** — ten RFCs accepted. Steps 1–6 and 9–13 of §8 are
 > done and L1 now derives from both halves of L0-plain; steps 7–8 (Baileys,
 > hypermeow) remain. Two engines are measured agreeing on derived events
-> (rev 15), and both now emit L0-plain — two of the four the definition of done
-> asks for.
+> (rev 15), and both emit L0-plain — two of the four the definition of done
+> asks for, which is the largest gap left.
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
@@ -1674,6 +1674,7 @@ so step 0 is done and implementation can begin.
 | ~~10~~ | ~~`whatsapp-rust` adapter, L0-plain~~ | — | **done in rev 14** — a per-`<enc>` plaintext event merged upstream as #1240, joined to its frame adapter-side |
 | ~~11~~ | ~~`wa-wire-recording` — the RFC-010 container, plus comparison profiles~~ | — | **done in rev 24** — the ad hoc `WAWR` is a contract read by both languages, `is_fault` is a profile, and comparability is declared in the file rather than assumed by the runner |
 | ~~12~~ | ~~`wa-wire-gate` — the command, and a fuzz sweep over every decoder~~ | — | **done in rev 25** — the first thing here anyone can run; three-valued exit codes; every decoder now proves the "reportable, never a panic" claim it makes |
+| ~~13~~ | ~~`wa-wire-proto` and the payload half of L1~~ | — | **done in rev 27** — the boundary carried decrypted payloads that nothing read; the numbers are generated from whatspec's `WAProto.proto` after rev 28 corrected where they came from |
 
 **Step 6 is the milestone that matters.** Everything before it is plumbing;
 step 6 is where "four engines produce identical L1" stops being a claim and
