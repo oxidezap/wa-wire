@@ -21,6 +21,7 @@
 
 export {
     Capability,
+    REQUESTING_INFO,
     SENDING_INFO,
     UnmetCapabilitiesError,
     declares,
@@ -31,9 +32,14 @@ export {
 } from './capability.js'
 export {
     NotConnectedError,
+    RequestError,
+    RequestTimeoutError,
     SendError,
+    createRequester,
     createSender,
+    type NodeRequester,
     type NodeSender,
+    type StanzaRequester as OutboundRequester,
     type StanzaSender as OutboundSender,
 } from './send.js'
 export {

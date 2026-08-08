@@ -1473,6 +1473,8 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-068 | An outbound frame is the same bytes as an inbound one | Record and replay stop being separate features: a captured envelope can be sent back as it stands. Each adapter converts to whatever its engine wants, so a consumer never learns which | 21 |
 | D-069 | Sending is declared separately from observing | An adapter built to observe genuinely cannot send. One capability set covering both would be false for whichever the consumer actually holds | 21 |
 | D-070 | `l0.outbound` does not imply `l0.request` | Writing to the socket and being handed the correlated answer are different powers; an engine may offer one without the other | 21 |
+| D-071 | A rejection carries the reply's frame only where the engine hands it over | `whatsapp-rust` parses an error reply and keeps its code and text, not its bytes. Naming the absence lets a consumer check; pretending uniformity would make it find out at runtime | 22 |
+| D-072 | The three declarations are a ladder, each a superset of the last | A consumer raising its requirement from observing to sending to requesting never loses something it already relied on | 22 |
 
 ---
 

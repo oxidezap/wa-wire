@@ -100,6 +100,97 @@ pub trait StanzaSender: Send + Sync {
     fn send_frame<'a>(&'a self, frame: &'a [u8]) -> SendFuture<'a>;
 }
 
+/// A future an adapter's request returns, resolving to the reply's frame.
+pub type RequestFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<alloc::vec::Vec<u8>, RequestError>> + Send + 'a>>;
+
+/// Why a request produced no reply.
+///
+/// Requesting can fail in every way sending can, and then in two more that only
+/// exist because something is being waited for.
+#[derive(Debug)]
+pub enum RequestError {
+    /// The stanza never left.
+    Send(SendError),
+    /// It left, and nothing came back in time.
+    ///
+    /// Distinct from a failed send because the two call for opposite responses:
+    /// a send that failed can be retried, while a request that timed out may
+    /// well have been acted on — retrying it repeats whatever it did.
+    TimedOut,
+    /// A reply came back and the engine read it as an error.
+    ///
+    /// The frame is carried rather than interpreted where it can be: what makes
+    /// a reply an error is protocol, and reading it is L1's job.
+    ///
+    /// `None` is a real difference between engines, named rather than papered
+    /// over. Some report a rejection having already parsed it, keeping the code
+    /// and text and dropping the bytes — so a consumer that needs the reply
+    /// itself cannot get it from those, and would find that out at runtime if
+    /// this pretended otherwise. Check it before depending on it.
+    Rejected {
+        /// The reply's frame, when the engine hands it over.
+        frame: Option<alloc::vec::Vec<u8>>,
+    },
+}
+
+impl fmt::Display for RequestError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Send(error) => write!(f, "the request was not sent: {error}"),
+            Self::TimedOut => f.write_str("no reply before the deadline"),
+            Self::Rejected { frame: Some(frame) } => {
+                write!(
+                    f,
+                    "the server replied with an error ({} bytes)",
+                    frame.len()
+                )
+            }
+            Self::Rejected { frame: None } => {
+                f.write_str("the server replied with an error the engine did not hand over")
+            }
+        }
+    }
+}
+
+impl core::error::Error for RequestError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::Send(error) => Some(error),
+            Self::TimedOut | Self::Rejected { .. } => None,
+        }
+    }
+}
+
+impl From<SendError> for RequestError {
+    fn from(error: SendError) -> Self {
+        Self::Send(error)
+    }
+}
+
+/// Sends a stanza and hands back the reply the server correlated to it.
+///
+/// A strictly stronger claim than [`StanzaSender`], and a separate capability
+/// for that reason: correlating a reply means holding the engine's own table of
+/// outstanding requests, which an engine may not expose even when it will
+/// happily write to the socket for you.
+///
+/// [`Capability::L0Request`]: wa_wire_contract::Capability::L0Request
+pub trait StanzaRequester: StanzaSender {
+    /// Send `frame` and wait for the reply the server addresses to it.
+    ///
+    /// The reply crosses as a frame, like everything else — unparsed, because
+    /// interpreting it is L1's job and a consumer may want the bytes exactly as
+    /// they arrived.
+    ///
+    /// # Errors
+    ///
+    /// [`RequestError`] separates a send that never left from a reply that
+    /// never came and a reply that came back as an error, because a caller's
+    /// answer to each is different.
+    fn request_frame<'a>(&'a self, frame: &'a [u8]) -> RequestFuture<'a>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

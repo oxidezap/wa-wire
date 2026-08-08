@@ -20,7 +20,7 @@
  */
 
 import type { BinaryNode } from 'zapo-js'
-import { decodeBinaryNode } from 'zapo-js/transport'
+import { decodeBinaryNode, encodeBinaryNode } from 'zapo-js/transport'
 
 /** Why a stanza could not be sent. */
 export class SendError extends Error {
@@ -52,6 +52,11 @@ export interface NodeSender {
     readonly sendNode: (node: BinaryNode) => Promise<void>
 }
 
+/** What a requester needs: send, and be handed the reply. */
+export interface NodeRequester extends NodeSender {
+    readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
+}
+
 /** Puts a stanza on the wire. */
 export interface StanzaSender {
     /**
@@ -62,6 +67,88 @@ export interface StanzaSender {
      * stanza is another stanza, and it arrives inbound.
      */
     readonly sendFrame: (frame: Uint8Array) => Promise<void>
+}
+
+/** Raised when a request produced no usable reply. */
+export class RequestError extends Error {
+    constructor(
+        message: string,
+        public override readonly cause?: unknown
+    ) {
+        super(message)
+        this.name = 'RequestError'
+    }
+}
+
+/**
+ * Raised when the stanza left and nothing came back in time.
+ *
+ * Kept apart from a failed send because the two call for opposite responses: a
+ * send that failed can be retried, while a request that timed out may well have
+ * been acted on — retrying repeats whatever it did.
+ */
+export class RequestTimeoutError extends RequestError {
+    constructor(cause?: unknown) {
+        super('no reply before the deadline', cause)
+        this.name = 'RequestTimeoutError'
+    }
+}
+
+/** Sends a stanza and hands back the reply the server correlated to it. */
+export interface StanzaRequester extends StanzaSender {
+    /**
+     * Send `frame` and wait for its reply, which crosses as a frame like
+     * everything else — unparsed, because interpreting it is L1's job and a
+     * consumer may want the bytes exactly as they arrived.
+     */
+    readonly requestFrame: (frame: Uint8Array, timeoutMs?: number) => Promise<Uint8Array>
+}
+
+/**
+ * A requester over an engine's own `query`.
+ *
+ * A strictly stronger claim than {@link createSender}, and a separate capability
+ * for that reason: correlating a reply means holding the engine's table of
+ * outstanding requests, which an engine may not expose even when it will
+ * happily write to the socket.
+ */
+export function createRequester(engine: NodeRequester): StanzaRequester {
+    const sender = createSender(engine)
+    return {
+        sendFrame: sender.sendFrame,
+        async requestFrame(frame: Uint8Array, timeoutMs?: number): Promise<Uint8Array> {
+            let node: BinaryNode
+            try {
+                node = decodeBinaryNode(Buffer.from(frame))
+            } catch (error) {
+                throw new RequestError('frame is not a decodable stanza', error)
+            }
+
+            try {
+                const reply = await engine.query(node, timeoutMs)
+                return new Uint8Array(encodeBinaryNode(reply))
+            } catch (error) {
+                if (isTimeout(error)) {
+                    throw new RequestTimeoutError(error)
+                }
+                throw isNotConnected(error)
+                    ? new NotConnectedError(error)
+                    : new RequestError('the request failed', error)
+            }
+        },
+    }
+}
+
+/**
+ * Whether the engine failed because nothing came back in time.
+ *
+ * Matched on the message, like {@link isNotConnected} and for the same reason:
+ * `zapo` does not type this failure, and a miss degrades to a plain
+ * {@link RequestError}, which still tells the caller the request failed.
+ */
+function isTimeout(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error)
+    return /timed? ?out|deadline/i.test(message)
 }
 
 /**

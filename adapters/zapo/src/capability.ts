@@ -80,6 +80,18 @@ export const SENDING_INFO: AdapterInfo = {
     capabilities: [...INFO.capabilities, Capability.L0Outbound],
 }
 
+/**
+ * What this adapter can do when it also correlates replies.
+ *
+ * A ladder, not three unrelated sets: requesting includes sending, which
+ * includes observing, so a consumer that raises its requirement never loses
+ * something it already relied on.
+ */
+export const REQUESTING_INFO: AdapterInfo = {
+    ...SENDING_INFO,
+    capabilities: [...SENDING_INFO.capabilities, Capability.L0Request],
+}
+
 /** Whether `info` declares `capability`. */
 export function declares(info: AdapterInfo, capability: Capability): boolean {
     return info.capabilities.includes(capability)

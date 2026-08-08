@@ -4,8 +4,15 @@ import { describe, it } from 'node:test'
 import type { BinaryNode } from 'zapo-js'
 import { encodeBinaryNode } from 'zapo-js/transport'
 
-import { Capability, INFO, SENDING_INFO, declares } from '../capability.js'
-import { NotConnectedError, SendError, createSender } from '../send.js'
+import { Capability, INFO, REQUESTING_INFO, SENDING_INFO, declares } from '../capability.js'
+import {
+    NotConnectedError,
+    RequestError,
+    RequestTimeoutError,
+    SendError,
+    createRequester,
+    createSender,
+} from '../send.js'
 
 function receipt(): BinaryNode {
     return { tag: 'receipt', attrs: { id: 'R1', from: '5511999998888@s.whatsapp.net' } }
@@ -132,5 +139,91 @@ describe('what sending declares', () => {
         // Writing to the socket and being handed the answer are different
         // powers. `zapo` can correlate a reply, but that is its own claim.
         assert.ok(!declares(SENDING_INFO, Capability.L0Request))
+    })
+})
+
+describe('requesting a reply', () => {
+    it('hands back the reply the engine correlated', async () => {
+        const reply: BinaryNode = { tag: 'iq', attrs: { id: 'Q1', type: 'result' } }
+        const requester = createRequester({
+            sendNode: async () => {},
+            query: async () => reply,
+        })
+
+        const frame = await requester.requestFrame(new Uint8Array(encodeBinaryNode(receipt())))
+
+        assert.deepEqual(frame, new Uint8Array(encodeBinaryNode(reply)))
+    })
+
+    it('separates no reply from a failed send', async () => {
+        // A send that failed can be retried; a request that timed out may well
+        // have been acted on, so retrying repeats whatever it did.
+        const requester = createRequester({
+            sendNode: async () => {},
+            query: async () => {
+                throw new Error('request timed out')
+            },
+        })
+
+        await assert.rejects(
+            () => requester.requestFrame(new Uint8Array(encodeBinaryNode(receipt()))),
+            RequestTimeoutError
+        )
+    })
+
+    it('still reports a disconnected engine as its own failure', async () => {
+        const requester = createRequester({
+            sendNode: async () => {},
+            query: async () => {
+                throw new Error('socket is closed')
+            },
+        })
+
+        await assert.rejects(
+            () => requester.requestFrame(new Uint8Array(encodeBinaryNode(receipt()))),
+            NotConnectedError
+        )
+    })
+
+    it('reports a frame it cannot read without touching the socket', async () => {
+        let asked = false
+        const requester = createRequester({
+            sendNode: async () => {},
+            query: async () => {
+                asked = true
+                return receipt()
+            },
+        })
+
+        await assert.rejects(
+            () => requester.requestFrame(new Uint8Array([0xff, 0xff])),
+            RequestError
+        )
+        assert.equal(asked, false, 'the engine was never asked')
+    })
+
+    it('can still send without requesting', async () => {
+        // A requester is a sender too, so a consumer holding one does not need
+        // a second object to fire and forget.
+        const sent: BinaryNode[] = []
+        const requester = createRequester({
+            sendNode: async (node) => {
+                sent.push(node)
+            },
+            query: async () => receipt(),
+        })
+
+        await requester.sendFrame(new Uint8Array(encodeBinaryNode(receipt())))
+
+        assert.equal(sent.length, 1)
+    })
+
+    it('is a stronger claim than sending', () => {
+        assert.ok(!declares(SENDING_INFO, Capability.L0Request))
+        assert.ok(declares(REQUESTING_INFO, Capability.L0Request))
+        assert.ok(
+            declares(REQUESTING_INFO, Capability.L0Outbound),
+            'and requesting implies sending'
+        )
     })
 })

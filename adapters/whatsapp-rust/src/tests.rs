@@ -7,6 +7,8 @@
 
 use super::*;
 
+use wa_wire_adapter::RequestError;
+
 use crate::plaintext::PlaintextJoiner;
 
 use std::sync::{Arc, Mutex};
@@ -468,4 +470,65 @@ fn a_consumer_that_needs_to_send_is_refused_by_the_observing_declaration() {
         "asking a tap to send is refused at setup, not at the first send"
     );
     assert_eq!(SENDING_INFO.require(needs_send), Ok(()));
+}
+
+#[test]
+fn requesting_is_a_stronger_claim_than_sending() {
+    // Writing to the socket and being handed the correlated answer are
+    // different powers. An engine can offer the first without the second, so
+    // one declaration covering both would be a claim neither has shown.
+    assert!(!INFO.has(Capability::L0Request), "the tap does neither");
+    assert!(
+        !SENDING_INFO.has(Capability::L0Request),
+        "sending alone does not correlate a reply"
+    );
+    assert!(REQUESTING_INFO.has(Capability::L0Request));
+    assert!(
+        REQUESTING_INFO.has(Capability::L0Outbound),
+        "and requesting implies sending"
+    );
+}
+
+#[test]
+fn each_declaration_is_a_superset_of_the_last() {
+    // The three are a ladder, not three unrelated sets: a consumer that
+    // upgrades its requirement never loses something it already relied on.
+    for capability in CAPABILITIES.iter() {
+        assert!(SENDING_INFO.has(capability), "{capability} lost by sending");
+    }
+    for capability in SENDING_CAPABILITIES.iter() {
+        assert!(
+            REQUESTING_INFO.has(capability),
+            "{capability} lost by requesting"
+        );
+    }
+}
+
+#[test]
+fn a_consumer_that_needs_a_reply_is_refused_by_the_sending_declaration() {
+    let needs_reply = CapabilitySet::NONE.with(Capability::L0Request);
+
+    assert!(
+        SENDING_INFO.require(needs_reply).is_err(),
+        "found out at setup, not when the first reply never arrives"
+    );
+    assert_eq!(REQUESTING_INFO.require(needs_reply), Ok(()));
+}
+
+#[test]
+fn a_rejection_this_engine_cannot_hand_over_says_so() {
+    // The engine parses an error reply and keeps its code and text, not its
+    // bytes — so `Rejected` carries `None` here. That is a real difference
+    // between engines, and a consumer that needs the reply itself has to check
+    // rather than find out at runtime.
+    let rejected = RequestError::Rejected { frame: None };
+
+    assert!(
+        rejected.to_string().contains("did not hand over"),
+        "the message says what is absent and why: {rejected}"
+    );
+    assert!(
+        !matches!(rejected, RequestError::TimedOut),
+        "and it is not confused with no reply at all"
+    );
 }

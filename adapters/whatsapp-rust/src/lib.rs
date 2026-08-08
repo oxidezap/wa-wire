@@ -55,9 +55,10 @@
 use std::sync::{Arc, Mutex};
 
 use wa_wire_adapter::{
-    AdapterInfo, Capability, CapabilitySet, RawStanza, SendError, SendFuture, StanzaSender,
-    StanzaSink, Violation,
+    AdapterInfo, Capability, CapabilitySet, RawStanza, RequestError, RequestFuture, SendError,
+    SendFuture, StanzaRequester, StanzaSender, StanzaSink, Violation,
 };
+use whatsapp_rust::OwnedNodeRef;
 use whatsapp_rust::plugins::{
     ClientPlugin, PluginCapability, PluginContext, PluginFuture, PluginManifest,
 };
@@ -373,3 +374,59 @@ impl StanzaSender for Sender {
         })
     }
 }
+
+/// This adapter's declaration when it also sends and correlates replies.
+pub const REQUESTING_INFO: AdapterInfo<'static> = AdapterInfo::new(
+    PLUGIN_ID,
+    ADAPTER_VERSION,
+    ENGINE_VERSION,
+    SENDING_CAPABILITIES.with(Capability::L0Request),
+);
+
+impl StanzaRequester for Sender {
+    fn request_frame<'a>(&'a self, frame: &'a [u8]) -> RequestFuture<'a> {
+        Box::pin(async move {
+            // The engine correlates by the stanza's own id, so the frame has to
+            // become a node for it to read one. This is the one place outbound
+            // is not opaque bytes, and it is the engine's requirement rather
+            // than the boundary's.
+            let node = OwnedNodeRef::new(frame.to_vec())
+                .map_err(|error| {
+                    RequestError::Send(SendError::Engine(Box::new(FrameNotDecodable(error))))
+                })?
+                .get()
+                .to_owned();
+
+            match self.client.send_iq_node(node, None).await {
+                Ok(reply) => Ok(reply.backing_bytes().to_vec()),
+                Err(whatsapp_rust::IqError::Timeout) => Err(RequestError::TimedOut),
+                Err(whatsapp_rust::IqError::NotConnected) => {
+                    Err(RequestError::Send(SendError::NotConnected))
+                }
+                // The engine parses the error reply and keeps the code and text,
+                // not the bytes — so there is nothing to hand over here. The
+                // `None` says exactly that rather than implying no reply came.
+                Err(error @ whatsapp_rust::IqError::ServerError { .. }) => {
+                    let _ = error;
+                    Err(RequestError::Rejected { frame: None })
+                }
+                Err(other) => Err(RequestError::Send(SendError::Engine(Box::new(other)))),
+            }
+        })
+    }
+}
+
+/// A frame the engine's own decoder could not read.
+///
+/// Its own type so the failure names itself in a report, instead of arriving as
+/// a bare string inside an engine error it did not come from.
+#[derive(Debug)]
+struct FrameNotDecodable(whatsapp_rust::wacore_binary::BinaryError);
+
+impl core::fmt::Display for FrameNotDecodable {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "frame is not a decodable stanza: {}", self.0)
+    }
+}
+
+impl core::error::Error for FrameNotDecodable {}

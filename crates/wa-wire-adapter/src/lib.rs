@@ -77,7 +77,7 @@ pub mod stanza;
 pub use info::{AdapterInfo, Violation};
 pub use path::{MAX_DEPTH, NodePathBuf, PathTooDeep};
 #[cfg(feature = "alloc")]
-pub use send::{SendError, SendFuture, StanzaSender};
+pub use send::{RequestError, RequestFuture, SendError, SendFuture, StanzaRequester, StanzaSender};
 pub use sink::{CountingSink, NullSink, StanzaSink};
 pub use stanza::{Plaintext, RawStanza};
 
