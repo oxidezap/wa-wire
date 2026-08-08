@@ -320,10 +320,14 @@ fn a_recording_frozen_mid_write_there_is_still_readable_here() {
 /// Read from the source rather than from a fixture: the list is a handful of
 /// string constants, and a generated fixture would be a third description to
 /// keep in step.
+///
+/// One file for both TypeScript adapters, since the vocabulary is the
+/// contract's and they share it. An adapter's own declaration is not here and
+/// has no business being — what an adapter *has* is checked by that adapter.
 #[test]
 fn both_languages_name_the_same_capabilities() {
-    let path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../adapters/zapo/src/capability.ts");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../adapters/typescript/src/capability.ts");
     let source = std::fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
 

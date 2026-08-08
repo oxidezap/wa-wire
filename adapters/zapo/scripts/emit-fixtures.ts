@@ -25,13 +25,13 @@ import {
     PlaintextStatus,
     encodeEnvelope,
     type Stanza,
-} from '../src/envelope.js'
+} from '@oxidezap/wa-wire-ts'
 import {
     ArtifactClass,
     RecordKind,
     encodeRecording,
     type RecordInput,
-} from '../src/recording.js'
+} from '@oxidezap/wa-wire-ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const OUT = join(HERE, '..', 'fixtures')

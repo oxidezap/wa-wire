@@ -22,3 +22,6 @@ __pycache__/
 # The Go adapter's module cache artefacts. `go.sum` is committed; the rest is
 # the toolchain's.
 adapters/hypermeow/vendor/
+
+# TypeScript adapter builds and their local dependency links.
+adapters/*/dist/

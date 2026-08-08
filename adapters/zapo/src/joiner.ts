@@ -38,7 +38,7 @@
 
 import type { BinaryNode } from 'zapo-js'
 
-import { Direction, FrameOrigin, PlaintextStatus, type Plaintext, type Stanza } from './envelope.js'
+import { Direction, FrameOrigin, PlaintextStatus, type Plaintext, type Stanza } from '@oxidezap/wa-wire-ts'
 
 /**
  * How many later stanzas a pending message tolerates before it is emitted with

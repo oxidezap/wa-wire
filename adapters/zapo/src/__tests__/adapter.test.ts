@@ -4,8 +4,10 @@ import { describe, it } from 'node:test'
 import type { BinaryNode } from 'zapo-js'
 import { decodeBinaryNode } from 'zapo-js/transport'
 
-import { Capability, INFO, UnmetCapabilitiesError, has, missing } from '../capability.js'
-import { Direction, FrameOrigin, PlaintextStatus, type Stanza } from '../envelope.js'
+import { Capability, UnmetCapabilitiesError } from '@oxidezap/wa-wire-ts'
+import { has, missing } from '../capability.js'
+import { INFO } from '../capability.js'
+import { Direction, FrameOrigin, PlaintextStatus, type Stanza } from '@oxidezap/wa-wire-ts'
 import { Mode, forward, supports, toEnvelope, toStanza, waWire } from '../adapter.js'
 
 function receipt(): BinaryNode {

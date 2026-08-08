@@ -4,7 +4,8 @@ import { describe, it } from 'node:test'
 import type { BinaryNode } from 'zapo-js'
 import { encodeBinaryNode } from 'zapo-js/transport'
 
-import { Capability, INFO, REQUESTING_INFO, SENDING_INFO, declares } from '../capability.js'
+import { Capability, declares } from '@oxidezap/wa-wire-ts'
+import { INFO, REQUESTING_INFO, SENDING_INFO } from '../capability.js'
 import {
     NotConnectedError,
     RequestError,

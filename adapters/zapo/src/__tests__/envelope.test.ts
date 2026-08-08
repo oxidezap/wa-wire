@@ -12,7 +12,7 @@ import {
     encodedLength,
     fitsPrefix,
     type Stanza,
-} from '../envelope.js'
+} from '@oxidezap/wa-wire-ts'
 
 function inbound(frame: Uint8Array, plaintexts?: Stanza['plaintexts']): Stanza {
     return {

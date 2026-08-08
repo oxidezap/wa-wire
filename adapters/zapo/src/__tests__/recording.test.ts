@@ -16,7 +16,7 @@ import {
     encodeRecording,
     readMark,
     type RecordingMeta
-} from '../recording.js'
+} from '@oxidezap/wa-wire-ts'
 
 const META: RecordingMeta = {
     adapter: {

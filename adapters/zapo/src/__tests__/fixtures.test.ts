@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, it } from 'node:test'
 
-import { PlaintextStatus } from '../envelope.js'
+import { PlaintextStatus } from '@oxidezap/wa-wire-ts'
 import { EnvelopeReader } from './reader.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))

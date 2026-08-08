@@ -15,19 +15,9 @@ import { defineWaClientPlugin } from 'zapo-js'
 import type { BinaryNode, WaClientPluginContext } from 'zapo-js'
 import { encodeBinaryNode } from 'zapo-js/transport'
 
-import {
-    INFO,
-    TAKEOVER_CAPABILITIES,
-    TAP_CAPABILITIES,
-    require as requireCapabilities,
-    type Capability,
-} from './capability.js'
-import {
-    Direction,
-    FrameOrigin,
-    encodeEnvelope,
-    type Stanza,
-} from './envelope.js'
+import { require as requireCapabilities, type Capability } from '@oxidezap/wa-wire-ts'
+import { INFO, TAKEOVER_CAPABILITIES, TAP_CAPABILITIES } from './capability.js'
+import { Direction, FrameOrigin, encodeEnvelope, type Stanza } from '@oxidezap/wa-wire-ts'
 import { PlaintextJoiner } from './joiner.js'
 
 /** Where the adapter delivers stanzas. */

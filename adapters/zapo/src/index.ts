@@ -19,19 +19,9 @@
  * tests rather than left as a claim.
  */
 
-export {
-    Capability,
-    REQUESTING_INFO,
-    SENDING_INFO,
-    TAKEOVER_CAPABILITIES,
-    TAP_CAPABILITIES,
-    UnmetCapabilitiesError,
-    declares,
-    has,
-    missing,
-    require,
-    type AdapterInfo,
-} from './capability.js'
+export { Capability, UnmetCapabilitiesError, declares, type AdapterInfo } from '@oxidezap/wa-wire-ts'
+export { has, missing, require } from './capability.js'
+export { REQUESTING_INFO, SENDING_INFO, TAKEOVER_CAPABILITIES, TAP_CAPABILITIES } from './capability.js'
 export {
     NotConnectedError,
     RequestError,
@@ -44,39 +34,8 @@ export {
     type StanzaRequester as OutboundRequester,
     type StanzaSender as OutboundSender,
 } from './send.js'
-export {
-    ArtifactClass,
-    CONTAINER_VERSION,
-    CRITICAL_BIT,
-    MAGIC,
-    RECORDING_HEADER_LEN,
-    RecordKind,
-    RecordingReadError,
-    RecordingTag,
-    RecordingWriteError,
-    crc32,
-    decodeRecording,
-    encodeRecording,
-    readMark,
-    type DecodedRecording,
-    type Integrity,
-    type MetaEntry,
-    type RecordInput,
-    type RecordingMeta,
-} from './recording.js'
-export {
-    CONTRACT_VERSION,
-    Direction,
-    EncodeError,
-    FrameOrigin,
-    HEADER_LEN,
-    PlaintextStatus,
-    encodeEnvelope,
-    encodedLength,
-    fitsPrefix,
-    type Plaintext,
-    type Stanza,
-} from './envelope.js'
+export { ArtifactClass, CONTAINER_VERSION, CRITICAL_BIT, MAGIC, RECORDING_HEADER_LEN, RecordKind, RecordingReadError, RecordingTag, RecordingWriteError, crc32, decodeRecording, encodeRecording, readMark, type DecodedRecording, type Integrity, type MetaEntry, type RecordInput, type RecordingMeta } from '@oxidezap/wa-wire-ts'
+export { CONTRACT_VERSION, Direction, EncodeError, FrameOrigin, HEADER_LEN, PlaintextStatus, encodeEnvelope, encodedLength, fitsPrefix, type Plaintext, type Stanza } from '@oxidezap/wa-wire-ts'
 export {
     INFO,
     Mode,

@@ -94,6 +94,7 @@ own manifests.
 | [`whatsapp-rust`](adapters/whatsapp-rust) | `whatsapp-rust` (Rust) | tap, takeover, sending |
 | [`zapo`](adapters/zapo) | `zapo` (TypeScript) | tap, takeover, sending |
 | [`hypermeow`](adapters/hypermeow) | `hypermeow` (Go) | tap, takeover |
+| [`Baileys`](adapters/baileys) | `Baileys` (TypeScript) | tap |
 
 Both emit L0-plain. What they cover differs, and the
 [capability matrix](DESIGN.md#rfc-002--capability-matrix) is where that is
@@ -107,8 +108,11 @@ half of a conversation and nothing the client replied.
 Adapters live outside the main workspace: each drags in a whole engine, and the
 contract and codec stay dependency-free on purpose.
 
-The envelope is written **three times** — Rust, TypeScript, Go — because an
-adapter runs inside its engine and the engines are in three languages. The
+The envelope is written **three times** — Rust, TypeScript, Go — for four
+engines, because an adapter runs inside its engine and the engines are in three
+languages. `zapo` and `Baileys` share
+[one TypeScript writing](adapters/typescript); a fourth in a language that
+already has one would be a description nobody checks against the others. The
 first two hand their work to Rust, natively or through WebAssembly; Go can do
 neither, since Rust in Go means cgo and cgo in the per-stanza hot path is the
 cost the boundary exists to avoid.

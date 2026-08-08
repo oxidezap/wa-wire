@@ -22,15 +22,9 @@ import { fileURLToPath } from 'node:url'
 import { decodeBinaryNode, encodeBinaryNode } from 'zapo-js/transport'
 import type { BinaryNode } from 'zapo-js'
 
-import { Direction, FrameOrigin, encodeEnvelope, type Stanza } from '../src/envelope.js'
+import { Direction, FrameOrigin, encodeEnvelope, type Stanza } from '@oxidezap/wa-wire-ts'
 import { INFO } from '../src/capability.js'
-import {
-    ArtifactClass,
-    RecordKind,
-    crc32,
-    encodeRecording,
-    type RecordInput,
-} from '../src/recording.js'
+import { ArtifactClass, RecordKind, crc32, encodeRecording, type RecordInput } from '@oxidezap/wa-wire-ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')

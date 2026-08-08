@@ -9,7 +9,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 40
+> **Last revised:** rev 41
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1752,8 +1752,9 @@ No L2. No Layer 3 host.
 
 1. `wa-wire-contract` published, with the RFC-008 format specified and frozen.
 2. Four adapters emitting L0-plain: `whatsapp-rust`, `zapo`, `Baileys`,
-   `hypermeow`. **Three of four as of rev 38**, the Go one built against an
-   open upstream PR. `Baileys` remains.
+   `hypermeow`. **Done as of rev 41.** Two are built against local engine
+   changes: `hypermeow` against an open upstream PR, `Baileys` against
+   observation points that exist only in a working tree.
 3. L1 derivation generated from `whatspec`, host-side, single implementation.
    **Done.** Inbound stanzas in rev 11, payloads in rev 27 — generated rather
    than written since rev 28 corrected where the numbers come from — and
@@ -1977,10 +1978,45 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-120 | A recording carrying a direction its manifest does not claim is a fault under every profile | Inconsistent with itself rather than with the other recording: nothing downstream can tell whether those records are real or an artefact of how the file was assembled | 36 |
 | D-121 | The envelope is written a third time, in Go, and cross-checked rather than shared | Go cannot host the Rust core — cgo in the per-stanza hot path is the cost the boundary exists to avoid — so the format is implemented by someone who cannot use any of this code. That is the case the design was made for, and the difference between a specification and a library with three callers. The Go encoder has no Rust to check itself against, so its fixtures are read by the Rust side | 38 |
 | D-122 | ~~D-022's MPL-2.0 subdirectory is not needed~~, and the reason is kept | The adapter carries no `whatsmeow` file: the hooks went upstream, where they are MPL-2.0 already, and what is here only imports the engine — which §3.3 allows under other terms. D-022 stays because copying or vendoring one file would make it true again | 38 |
+| D-123 | The boundary is implemented once per *language*, not once per adapter | Baileys is the second TypeScript engine, and a fourth writing of the format in a language that already has one would be a description nobody checks against the others. `@oxidezap/wa-wire-ts` was extracted out of the `zapo` adapter for it; the Go one stayed separate because Go genuinely cannot use any of it | 41 |
+| D-124 | A shared package holds the vocabulary and no adapter's declaration | The extracted module carried `zapo`'s `INFO` and a `has()` closing over it, which read as "the adapter" while there was one and was wrong the moment there were two. What an adapter *has* lives with the adapter | 41 |
+| D-125 | Baileys reports a plaintext's *child* index, chosen having watched two adapters resolve an `<enc>`-relative one | Both of the earlier engines report which `<enc>` decrypted, counting `<enc>` nodes, and their adapters must work out which child that is — ambiguous the moment a stanza carries anything else, and unresolvable for a fan-out `<message>`, so both give up and emit L0-wire. Designing the hook against a need already understood cost nothing and removed the case | 41 |
 
 ---
 
 ## Changelog
+
+### rev 41 — 2026-08-08
+
+- **The fourth engine.** `Baileys` needed two observation points and had
+  neither: the buffer a node was decoded from fell out of scope in
+  `processData`, and nothing carried a plaintext outside the parse that
+  consumed it. Both are local changes to a working tree, not a PR.
+  - `decodeBinaryNodeWithBuffer` is the whole of the first: the same work
+    `decodeBinaryNode` does, handing back the decompressed bytes as well.
+  - The second fires **before the protobuf is parsed**, and fires for a payload
+    whose padding will not strip — the defect the `hypermeow` review found one
+    layer deeper in its engine, avoided here by having seen it there.
+  - The hook reports the payload's **child** index (D-125), which the other two
+    engines do not, so this adapter has no fan-out case to give up on.
+- **The format was not written a fourth time** (D-123). Baileys is the second
+  TypeScript engine, so `@oxidezap/wa-wire-ts` was extracted out of the `zapo`
+  adapter and both now share it. Three writings is three *languages*, which is
+  the number an adapter's home imposes; a fourth in a language that already has
+  one would be a description nobody checks against the others.
+  - Extracting it surfaced that the module carried `zapo`'s own declaration and
+    a `has()` closing over it (D-124) — a shape that reads correctly while
+    there is one adapter and silently means the wrong thing once there are two.
+  - It also surfaced that the TypeScript side had no `verify`, which the Rust
+    and Go adapters both have. Added to the shared package, so both TypeScript
+    adapters now check an envelope against their own declaration.
+- **The three joiners do not agree on ordering, and this is the second one to
+  notice.** `zapo` and `whatsapp-rust` emit an unheld stanza the moment it
+  arrives, which puts an ack ahead of a message that came first; the Go adapter
+  and this one queue and emit in arrival order. A recording compared position by
+  position reports the difference as a divergence in whichever engine was
+  slower. Recorded rather than fixed here: changing two working adapters is its
+  own change.
 
 ### rev 40 — 2026-08-08
 

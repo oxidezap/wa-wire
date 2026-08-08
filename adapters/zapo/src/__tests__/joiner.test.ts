@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 
 import type { BinaryNode } from 'zapo-js'
 
-import { PlaintextStatus, type Stanza } from '../envelope.js'
+import { PlaintextStatus, type Stanza } from '@oxidezap/wa-wire-ts'
 import { PlaintextJoiner } from '../joiner.js'
 
 /** A `<message>` whose children are the given `<enc>` types, in order. */

@@ -7,7 +7,7 @@
  * one exists so a mistake surfaces on this side too, at the line that made it.
  */
 
-import { HEADER_LEN } from '../envelope.js'
+import { HEADER_LEN } from '@oxidezap/wa-wire-ts'
 
 export interface ReadPlaintext {
     readonly path: number[]

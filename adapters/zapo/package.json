@@ -12,7 +12,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\"",
@@ -28,5 +30,8 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "zapo-js": "file:../../../zapo"
+  },
+  "dependencies": {
+    "@oxidezap/wa-wire-ts": "file:../typescript"
   }
 }
