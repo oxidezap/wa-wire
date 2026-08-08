@@ -331,3 +331,34 @@ fn an_attribute_is_read_by_its_name_on_the_wire() {
         "camelCase is the bundle's name for this field, not the wire's"
     );
 }
+
+/// The derivation is for stanzas that *arrive*, and says so by being wrong
+/// about one that leaves.
+///
+/// whatspec's `incoming` domain records how WA Web parses what the server
+/// sends. An `<ack>` the client sends looks similar and means something else:
+/// inbound it is the server acknowledging our send, outbound it is us
+/// acknowledging a delivery. Same tag, same attributes, opposite speaker.
+///
+/// Nothing here can tell those apart, because nothing here is told which
+/// direction a stanza travelled — so an outbound stanza does not merely fail
+/// to derive, it derives *confidently and wrongly*. That is why the conformance
+/// comparator refuses to derive outbound envelopes rather than trusting this.
+#[test]
+fn an_outbound_stanza_derives_under_the_inbound_grammar() {
+    // The shape of an ack a client sends: id, to, class.
+    let ours = Fixture::node("ack")
+        .attr("id", "ABCD1234")
+        .jid_attr("to", "5511999998888")
+        .attr("class", "receipt")
+        .build();
+
+    let derived = derive(&parse(&ours));
+    assert!(
+        derived.is_ok(),
+        "an outbound ack is accepted by an inbound shape: {:?}",
+        derived.err()
+    );
+    // And it is reported as the inbound event, which is the wrong reading.
+    assert!(matches!(derived.expect("derives"), Event::Ack(_)));
+}

@@ -107,7 +107,12 @@ impl<'a> AdapterInfo<'a> {
                 count: stanza.plaintexts.len(),
             });
         }
-        if !self.has(Capability::L0Outbound)
+        // `L0OutboundObserved`, not `L0Outbound`. This check has always been
+        // documented as "does not claim to observe the outbound path" and has
+        // always tested the capability for *sending* — which every adapter with
+        // a `Sender` has, and which says nothing about whether the engine
+        // reports what left. An envelope travelling outbound is an observation.
+        if !self.has(Capability::L0OutboundObserved)
             && matches!(stanza.direction, wa_wire_contract::Direction::Outbound)
         {
             return Err(Violation::OutboundWithoutCapability);
@@ -237,7 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn outbound_stanzas_require_the_outbound_capability() {
+    fn outbound_stanzas_require_the_capability_that_observes_them() {
         let inbound_only = info(&[Capability::L0InboundTap]);
         assert_eq!(
             inbound_only.verify(&RawStanza::outbound(b"f")),
@@ -245,8 +250,23 @@ mod tests {
         );
         assert_eq!(inbound_only.verify(&RawStanza::inbound(b"f")), Ok(()));
 
-        let both = info(&[Capability::L0InboundTap, Capability::L0Outbound]);
+        let both = info(&[Capability::L0InboundTap, Capability::L0OutboundObserved]);
         assert_eq!(both.verify(&RawStanza::outbound(b"f")), Ok(()));
+    }
+
+    /// Being able to send is not being able to see what was sent.
+    ///
+    /// Every adapter with a `Sender` declares `l0.outbound`, and until one
+    /// engine added an outbound observation point none of them could report a
+    /// single stanza that left. An adapter that could send and emitted an
+    /// outbound envelope would have been inventing it.
+    #[test]
+    fn being_able_to_send_does_not_admit_an_outbound_envelope() {
+        let sender = info(&[Capability::L0InboundTap, Capability::L0Outbound]);
+        assert_eq!(
+            sender.verify(&RawStanza::outbound(b"f")),
+            Err(Violation::OutboundWithoutCapability)
+        );
     }
 
     #[test]

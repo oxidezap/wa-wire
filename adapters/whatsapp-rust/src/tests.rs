@@ -252,15 +252,15 @@ fn the_declaration_matches_what_this_adapter_actually_does() {
 #[test]
 fn an_undeclared_stanza_shape_is_rejected_by_verify() {
     // Guards the declaration itself: were this adapter ever to start
-    // re-encoding, or to emit outbound stanzas, `verify` must catch it.
+    // re-encoding, `verify` must catch it.
     assert_eq!(
         verify(&RawStanza::inbound(b"f").re_encoded()),
         Err(Violation::ReEncodedDespiteZeroCopy)
     );
-    assert_eq!(
-        verify(&RawStanza::outbound(b"f")),
-        Err(Violation::OutboundWithoutCapability)
-    );
+    // Outbound is declared now, so it is allowed — and the declaration is what
+    // makes it allowed. An adapter that emitted one without claiming
+    // `l0.outbound.observed` would still be caught.
+    assert_eq!(verify(&RawStanza::outbound(b"f")), Ok(()));
 }
 
 #[test]
@@ -531,4 +531,109 @@ fn a_rejection_this_engine_cannot_hand_over_says_so() {
         !matches!(rejected, RequestError::TimedOut),
         "and it is not confused with no reply at all"
     );
+}
+
+// --- the outbound half -------------------------------------------------------
+
+/// The buffer the engine hands over on a send: marshalled, format byte **kept**.
+///
+/// This is where the two observation points differ. `RawNode` gives the buffer
+/// its decoder consumed, which `unpack` has already stripped; `SentFrame` gives
+/// what went to the Noise encryption, which still carries the byte.
+fn sent_frame_event(node: &Node) -> Arc<Event> {
+    let packed = marshal::marshal(node).expect("marshals");
+    Arc::new(Event::SentFrame(
+        events::SentFrame::builder().plaintext(packed.into()).build(),
+    ))
+}
+
+/// A sent stanza crosses as an outbound envelope carrying the unpacked frame.
+///
+/// The assertion is against `frame_of`, which strips the format byte, so a
+/// build that forwarded `SentFrame.plaintext` untouched fails here rather than
+/// writing a recording every reader misparses by one byte.
+#[test]
+fn a_sent_frame_crosses_unpacked_and_outbound() {
+    let node = message_node();
+    let captured: Arc<Mutex<Vec<(Direction, Vec<u8>)>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink = {
+        let captured = Arc::clone(&captured);
+        move |stanza: RawStanza<'_>| {
+            captured
+                .lock()
+                .expect("sink lock")
+                .push((stanza.direction, stanza.frame.to_vec()));
+        }
+    };
+    let handler = RawNodeTap {
+        joiner: Mutex::new(PlaintextJoiner::new()),
+        sink: Arc::new(Mutex::new(sink)),
+    };
+    handler.handle_event(sent_frame_event(&node));
+
+    let seen = captured.lock().expect("sink lock").clone();
+    assert_eq!(seen.len(), 1, "one send, one envelope");
+    assert_eq!(seen[0].0, Direction::Outbound);
+    assert_eq!(
+        seen[0].1,
+        frame_of(&node),
+        "the format byte must be stripped, as it is on the inbound side"
+    );
+
+    // And what crossed is parseable as a stanza, which is the point of
+    // stripping it: a reader walks this the same way it walks an inbound frame.
+    let parsed = Parser::new(tokens::TABLE)
+        .parse(&seen[0].1)
+        .expect("the outbound frame parses");
+    assert!(parsed.tag().eq_str("message"));
+}
+
+/// An outbound stanza waits for nothing.
+///
+/// A `<message>` inbound is held until its plaintexts arrive. The same tag
+/// outbound has no `<enc>` this adapter decrypted, so holding it would delay a
+/// stanza for a payload that is never coming. It is emitted without a flush.
+#[test]
+fn an_outbound_message_is_not_held_for_plaintexts() {
+    let captured: Arc<Mutex<usize>> = Arc::new(Mutex::new(0));
+    let sink = {
+        let captured = Arc::clone(&captured);
+        move |_: RawStanza<'_>| {
+            *captured.lock().expect("sink lock") += 1;
+        }
+    };
+    let handler = RawNodeTap {
+        joiner: Mutex::new(PlaintextJoiner::new()),
+        sink: Arc::new(Mutex::new(sink)),
+    };
+
+    handler.handle_event(sent_frame_event(&message_node()));
+    assert_eq!(
+        *captured.lock().expect("sink lock"),
+        1,
+        "emitted before any flush"
+    );
+}
+
+/// A frame the engine wrote that will not unpack is dropped, not forwarded.
+#[test]
+fn an_unpackable_sent_frame_is_dropped() {
+    let event = Arc::new(Event::SentFrame(
+        events::SentFrame::builder()
+            .plaintext(Vec::new().into())
+            .build(),
+    ));
+    let captured: Arc<Mutex<usize>> = Arc::new(Mutex::new(0));
+    let sink = {
+        let captured = Arc::clone(&captured);
+        move |_: RawStanza<'_>| {
+            *captured.lock().expect("sink lock") += 1;
+        }
+    };
+    let handler = RawNodeTap {
+        joiner: Mutex::new(PlaintextJoiner::new()),
+        sink: Arc::new(Mutex::new(sink)),
+    };
+    handler.handle_event(event);
+    assert_eq!(*captured.lock().expect("sink lock"), 0);
 }

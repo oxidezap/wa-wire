@@ -1,9 +1,10 @@
 //! `wa-wire` adapter for the `whatsapp-rust` engine, in tap mode.
 //!
-//! Installs as a native plugin, subscribes to `Event::RawNode`, and forwards
-//! each stanza's frame bytes to a [`StanzaSink`]. Nothing is re-encoded and
-//! nothing is copied: `whatsapp-rust` already retains the buffer its decoder
-//! consumed, so forwarding a stanza is a refcount bump.
+//! Installs as a native plugin, subscribes to `Event::RawNode` and
+//! `Event::SentFrame`, and forwards each stanza's frame bytes to a
+//! [`StanzaSink`] — both halves of the session, marked by direction. Nothing is
+//! re-encoded and nothing is copied: `whatsapp-rust` already retains the buffer
+//! its decoder consumed, so forwarding a stanza is a refcount bump.
 //!
 //! ```
 //! use wa_wire_adapter::{CountingSink, RawStanza};
@@ -34,7 +35,8 @@
 //! | `l0.inbound.auth-phase` | yes — `success`, `failure` and `xmlstreamend` all reach it |
 //! | `l0.zero-copy-frame` | yes — the decode buffer is already retained |
 //! | `l0.plaintext` | yes — `Event::DecryptedPayload` reports each one after Signal |
-//! | `l0.outbound` | **no** — the engine has no raw outbound observer |
+//! | `l0.outbound.observed` | yes — `Event::SentFrame` reports each stanza that went to the wire |
+//! | `l0.outbound` | on `Sender`, not here — this plugin observes and does not send |
 //! | `l0.takeover` | in [`takeover`], not here — `RawNode` observes; the pipeline runs regardless |
 //!
 //! Plaintext is the one that needs two observation points rather than one.
@@ -59,6 +61,7 @@ use wa_wire_adapter::{
     SendFuture, StanzaRequester, StanzaSender, StanzaSink, Violation,
 };
 use whatsapp_rust::OwnedNodeRef;
+use whatsapp_rust::wacore_binary::util::unpack;
 use whatsapp_rust::plugins::{
     ClientPlugin, PluginCapability, PluginContext, PluginCoreEventSubscription, PluginFuture,
     PluginManifest,
@@ -72,7 +75,11 @@ use crate::plaintext::{DecryptedEnc, PlaintextJoiner};
 /// Both are lease-gated in the engine, and the host takes each lease from this
 /// interest — so declaring the pair here is also what turns them on.
 fn interest() -> EventInterest {
-    EventInterest::of(&[EventKind::RawNode, EventKind::DecryptedPayload])
+    EventInterest::of(&[
+        EventKind::RawNode,
+        EventKind::DecryptedPayload,
+        EventKind::SentFrame,
+    ])
 }
 
 /// The engine version this adapter was written against.
@@ -91,6 +98,7 @@ pub const PLUGIN_ID: &str = "wa-wire";
 pub const CAPABILITIES: CapabilitySet = CapabilitySet::NONE
     .with(Capability::L0InboundTap)
     .with(Capability::L0InboundAuthPhase)
+    .with(Capability::L0OutboundObserved)
     .with(Capability::L0Plaintext)
     .with(Capability::ZeroCopyFrame);
 
@@ -220,6 +228,14 @@ impl<S: StanzaSink> RawNodeTap<S> {
     /// A poisoned lock means a consumer panicked. Dropping the stanza beats
     /// propagating the panic into the engine's receive path, and beats emitting
     /// past a joiner whose buffer may be half-updated.
+    /// The sink alone, for a stanza with no plaintext to wait for.
+    fn with_sink(&self, work: impl FnOnce(&mut S)) {
+        let Ok(mut sink) = self.sink.lock() else {
+            return;
+        };
+        work(&mut sink);
+    }
+
     fn with_both(&self, work: impl FnOnce(&mut PlaintextJoiner, &mut S)) {
         let Ok(mut joiner) = self.joiner.lock() else {
             return;
@@ -254,6 +270,26 @@ where
             // The frame is a refcount bump on the buffer the decoder retained.
             Event::RawNode(node) => self.with_both(|joiner, sink| {
                 joiner.accept_frame(node, &mut VerifyingSink(sink));
+            }),
+            // The other half of the session. Not routed through the joiner:
+            // an outbound stanza has no `<enc>` this adapter decrypted, so
+            // there is nothing to wait for and holding it back would only
+            // delay it.
+            //
+            // `SentFrame` carries the *packed* buffer — the format byte the
+            // binary protocol writes is still on the front, where `RawNode`
+            // hands over a buffer `unpack` has already stripped. Forwarding it
+            // as-is would put a frame in the recording that every reader
+            // misparses by one byte.
+            Event::SentFrame(sent) => self.with_sink(|sink| {
+                let Ok(unpacked) = unpack(sent.plaintext.as_ref()) else {
+                    // A frame the engine wrote and we cannot unpack is not one
+                    // we can honestly claim to have observed. Dropping it loses
+                    // a record; forwarding it would put bytes in a recording
+                    // that no reader can parse.
+                    return;
+                };
+                VerifyingSink(sink).accept(RawStanza::outbound(&unpacked));
             }),
             Event::DecryptedPayload(payload) => self.with_both(|joiner, sink| {
                 joiner.accept_plaintext(

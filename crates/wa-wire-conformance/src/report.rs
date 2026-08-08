@@ -4,7 +4,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use wa_wire_codec::{Parser, TokenTable};
-use wa_wire_contract::{EnvelopeRef, FrameOrigin, NodePath, PlaintextEntry};
+use wa_wire_contract::{Direction, EnvelopeRef, FrameOrigin, NodePath, PlaintextEntry};
 use wa_wire_l1::{DeriveError, Event, derive};
 
 use crate::comparability;
@@ -201,15 +201,31 @@ pub fn compare<'a>(left: &Recording<'a>, right: &Recording<'a>, tables: Tables<'
         }
 
         compare_envelopes(&mut report, index, a, b);
-        compare_derivations(
-            &mut report,
-            (&left_parser, &right_parser),
-            index,
-            left,
-            right,
-            a,
-            b,
-        );
+
+        // Outbound stanzas are compared at L0 and never derived.
+        //
+        // The derivation comes from whatspec's `incoming` domain, which records
+        // how WA Web parses what the *server* sends. An outbound stanza is a
+        // different grammar wearing the same tags: an `<ack>` inbound is the
+        // server acknowledging our send, an `<ack>` outbound is us
+        // acknowledging a delivery. Nothing in `derive` is told which way a
+        // stanza travelled, so an outbound one does not fail to derive — it
+        // derives confidently and wrongly, and two engines agreeing on a wrong
+        // reading would report as agreement.
+        //
+        // Deriving these needs whatspec's request-side domains, which nothing
+        // here generates from yet. Until then the bytes are the claim.
+        if a.flags().direction == Direction::Inbound {
+            compare_derivations(
+                &mut report,
+                (&left_parser, &right_parser),
+                index,
+                left,
+                right,
+                a,
+                b,
+            );
+        }
     }
 
     report

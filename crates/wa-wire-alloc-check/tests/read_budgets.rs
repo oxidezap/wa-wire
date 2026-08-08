@@ -55,6 +55,25 @@ struct Budget {
     ceiling: Duration,
 }
 
+/// Whether the binary was built with coverage instrumentation.
+///
+/// `cargo llvm-cov` compiles every crate with a counter on each branch, which
+/// costs about four times the walk it is counting. A budget measured against
+/// that measures the instrumentation: the thing these budgets exist to catch —
+/// a borrow becoming a copy — is a change of a different order, and burying it
+/// under a 4x multiplier makes it harder to see rather than easier.
+///
+/// So the ceilings are not enforced under coverage. They are still *printed*,
+/// and `cargo test` enforces them on every run including CI's, so nothing stops
+/// being checked; what stops is one job checking a number it cannot interpret.
+///
+/// This was found by a budget that fits on CI's runner and not on a developer's
+/// under the same instrumentation, which means it was passing on the margin
+/// rather than on the merits.
+fn instrumented_for_coverage() -> bool {
+    std::env::var_os("CARGO_LLVM_COV").is_some()
+}
+
 fn measure(budget: &Budget, mut work: impl FnMut()) -> Duration {
     // One untimed pass, so a cold cache is not charged to the first budget.
     work();
@@ -72,7 +91,7 @@ fn measure(budget: &Budget, mut work: impl FnMut()) -> Duration {
         budget.ceiling.as_nanos()
     );
     assert!(
-        each <= budget.ceiling,
+        each <= budget.ceiling || instrumented_for_coverage(),
         "{} took {} ns/op, past its {} ns budget. Either something started \
          copying, or the budget is wrong and moving it is a decision worth \
          writing down.",
@@ -214,5 +233,17 @@ fn a_budget_that_is_exceeded_fails_rather_than_prints() {
             },
         );
     });
-    assert!(outcome.is_err(), "a blown budget has to fail the run");
+
+    // Under coverage the ceilings are deliberately not enforced, so the
+    // mechanism being off is the correct result — and this asserts that it is
+    // off *for that reason*, rather than letting a genuinely broken assertion
+    // hide behind the exemption.
+    if instrumented_for_coverage() {
+        assert!(
+            outcome.is_ok(),
+            "under coverage a blown budget is reported and not enforced"
+        );
+    } else {
+        assert!(outcome.is_err(), "a blown budget has to fail the run");
+    }
 }

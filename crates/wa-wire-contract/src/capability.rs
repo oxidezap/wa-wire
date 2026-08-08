@@ -20,6 +20,19 @@ pub enum Capability {
     L0InboundAuthPhase,
     /// Sends a raw stanza.
     L0Outbound,
+    /// Reports each stanza the engine *sent*, as it went to the wire.
+    ///
+    /// Distinct from [`L0Outbound`], which is the ability to send. Sending is
+    /// what an adapter does; knowing what left is what a recording needs, and
+    /// an engine can perfectly well offer one and not the other — every engine
+    /// did, until one of them added an outbound observation point.
+    ///
+    /// Without it a recording holds the inbound half of a session and nothing
+    /// the client replied, so a gate can say the candidate *read* the same
+    /// traffic and not that it *answered* the same way.
+    ///
+    /// [`L0Outbound`]: Self::L0Outbound
+    L0OutboundObserved,
     /// Raw request/response against a stanza, correlated by the engine.
     L0Request,
     /// Emits the payloads it decrypted alongside the frame, so a consumer gets
@@ -42,10 +55,11 @@ pub enum Capability {
 
 impl Capability {
     /// Every capability this contract version defines.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::L0InboundTap,
         Self::L0InboundAuthPhase,
         Self::L0Outbound,
+        Self::L0OutboundObserved,
         Self::L0Request,
         Self::L0Plaintext,
         Self::Takeover,
@@ -60,6 +74,7 @@ impl Capability {
             Self::L0InboundTap => "l0.inbound.tap",
             Self::L0InboundAuthPhase => "l0.inbound.auth-phase",
             Self::L0Outbound => "l0.outbound",
+            Self::L0OutboundObserved => "l0.outbound.observed",
             Self::L0Request => "l0.request",
             Self::L0Plaintext => "l0.plaintext",
             Self::Takeover => "l0.takeover",
@@ -76,7 +91,7 @@ impl Capability {
             .find(|capability| capability.identifier() == identifier)
     }
 
-    const fn bit(self) -> u8 {
+    const fn bit(self) -> u16 {
         match self {
             Self::L0InboundTap => 0,
             Self::L0InboundAuthPhase => 1,
@@ -86,6 +101,7 @@ impl Capability {
             Self::Takeover => 5,
             Self::ZeroCopyFrame => 6,
             Self::DrainHook => 7,
+            Self::L0OutboundObserved => 8,
         }
     }
 }
@@ -97,8 +113,14 @@ impl fmt::Display for Capability {
 }
 
 /// A set of capabilities, packed into a bitmask.
+///
+/// `u16` because there are nine and there were eight. Widening it is a
+/// source-level change and not a wire one: a recording declares capabilities by
+/// *name* and keeps the ones it does not recognise as bytes, so a reader from
+/// before the ninth still round-trips a recording that claims it. That is why
+/// adding one does not bump [`ContractVersion`](crate::ContractVersion).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
-pub struct CapabilitySet(u8);
+pub struct CapabilitySet(u16);
 
 impl CapabilitySet {
     /// The empty set.
@@ -113,19 +135,19 @@ impl CapabilitySet {
     /// This set plus `capability`.
     #[must_use]
     pub const fn with(self, capability: Capability) -> Self {
-        Self(self.0 | (1u8 << capability.bit()))
+        Self(self.0 | (1u16 << capability.bit()))
     }
 
     /// This set without `capability`.
     #[must_use]
     pub const fn without(self, capability: Capability) -> Self {
-        Self(self.0 & !(1u8 << capability.bit()))
+        Self(self.0 & !(1u16 << capability.bit()))
     }
 
     /// Whether `capability` is present.
     #[must_use]
     pub const fn contains(self, capability: Capability) -> bool {
-        self.0 & (1u8 << capability.bit()) != 0
+        self.0 & (1u16 << capability.bit()) != 0
     }
 
     /// Whether every capability in `other` is present here.
@@ -232,9 +254,9 @@ mod tests {
 
     #[test]
     fn bits_are_unique_so_the_mask_is_lossless() {
-        let mut seen = 0u8;
+        let mut seen = 0u16;
         for capability in Capability::ALL {
-            let bit = 1u8 << capability.bit();
+            let bit = 1u16 << capability.bit();
             assert_eq!(seen & bit, 0, "{capability} reuses a bit");
             seen |= bit;
         }

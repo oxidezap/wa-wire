@@ -42,7 +42,7 @@ use wa_wire_codec::TokenTable;
 use wa_wire_conformance::{
     Comparability, ComparisonProfile, Incomparable, Recording, Tables, Verdict, compare,
 };
-use wa_wire_contract::EnvelopeRef;
+use wa_wire_contract::{Direction, EnvelopeRef};
 use wa_wire_l1::content::derive_content;
 use wa_wire_recording::RecordingRef;
 
@@ -344,6 +344,15 @@ pub fn run(baseline: &[u8], candidate: &[u8], profile: ComparisonProfile, max: u
         let _ = writeln!(report, "\ncontent:\n{content}");
     }
 
+    // Which way they travelled. A recording holding no outbound records is a
+    // recording of half a session, and the reader should be told which half
+    // they are looking at rather than inferring it from a total.
+    let _ = writeln!(
+        report,
+        "\ndirection:\n{}",
+        summarise_direction(&left, &right)
+    );
+
     section(
         &mut report,
         "failures",
@@ -398,6 +407,43 @@ fn summarise_content(left: &RecordingRef<'_>, right: &RecordingRef<'_>) -> Strin
         let _ = writeln!(out, "  {kind:<14} baseline {a:>4}   candidate {b:>4}{note}");
     }
     out
+}
+
+/// How many stanzas travelled each way, per side.
+///
+/// Reported separately from the content counts because a recording can be whole
+/// and still hold one half of a session: until an engine could report what it
+/// sent, every recording did. A candidate that stopped observing its own sends
+/// would otherwise show up as nothing at all — the evidence of the loss being
+/// the records that are absent.
+fn summarise_direction(left: &RecordingRef<'_>, right: &RecordingRef<'_>) -> String {
+    let (mine, theirs) = (direction_counts(left), direction_counts(right));
+    let mut out = String::new();
+    for (label, a, b) in [
+        ("inbound", mine.0, theirs.0),
+        ("outbound", mine.1, theirs.1),
+    ] {
+        let note = if a == b { "" } else { "   <- differs" };
+        let _ = writeln!(
+            out,
+            "  {label:<14} baseline {a:>4}   candidate {b:>4}{note}"
+        );
+    }
+    out
+}
+
+/// `(inbound, outbound)` envelope counts. An envelope that will not decode is
+/// counted as neither, and shows up as a length or malformed-envelope finding.
+fn direction_counts(recording: &RecordingRef<'_>) -> (usize, usize) {
+    recording
+        .envelopes()
+        .filter_map(|bytes| EnvelopeRef::decode(bytes).ok())
+        .fold((0, 0), |(inbound, outbound), envelope| {
+            match envelope.flags().direction {
+                Direction::Inbound => (inbound.saturating_add(1), outbound),
+                Direction::Outbound => (inbound, outbound.saturating_add(1)),
+            }
+        })
 }
 
 /// Message kinds in one recording, with how many of each.

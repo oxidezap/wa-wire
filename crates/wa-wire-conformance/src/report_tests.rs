@@ -34,6 +34,13 @@ fn envelope(builder: FixtureBuilder) -> Vec<u8> {
         .expect("encodes")
 }
 
+fn outbound_envelope(builder: FixtureBuilder) -> Vec<u8> {
+    let fixture = builder.build();
+    RawStanza::outbound(fixture.bytes())
+        .encode_to_vec()
+        .expect("encodes")
+}
+
 /// A receipt every shape in the spec accepts.
 fn receipt(id: &str) -> FixtureBuilder {
     Fixture::node("receipt")
@@ -739,4 +746,79 @@ fn faults_are_a_subset_of_divergences() {
     );
     assert!(!report.agrees());
     assert_eq!(report.compared(), 2);
+}
+
+// --- direction ---------------------------------------------------------------
+
+/// An outbound stanza is compared at L0 and never derived.
+///
+/// The derivation is generated from whatspec's `incoming` domain: it describes
+/// how WA Web parses what the *server* sends. An outbound `<ack>` satisfies
+/// those same shapes and means something else — inbound it is the server
+/// acknowledging our send, outbound it is us acknowledging a delivery — so
+/// deriving one produces a confident wrong answer rather than an error.
+///
+/// Two engines agreeing on a wrong reading would be reported as agreement,
+/// which is the failure this guards against.
+#[test]
+fn an_outbound_stanza_is_not_derived() {
+    // Same tag both sides, and bodies that would derive to *different* events
+    // if either were derived: different `type` picks a different shape.
+    let a = outbound_envelope(
+        Fixture::node("receipt")
+            .attr("id", "AAAA1111")
+            .jid_attr("from", "5511999998888")
+            .attr("type", "read"),
+    );
+    let b = outbound_envelope(
+        Fixture::node("receipt")
+            .attr("id", "AAAA1111")
+            .jid_attr("from", "5511999998888")
+            .attr("type", "played"),
+    );
+    let (la, rb): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
+    let left = recording("left", &la);
+    let right = recording("right", &rb);
+
+    let report = compare(&left, &right, Tables::shared(FIXTURE_TABLE));
+    let found: Vec<_> = report.divergences().collect();
+    assert!(
+        !found.iter().any(|d| matches!(d.layer(), Layer::L1)),
+        "no L1 finding may come from an outbound stanza: {found:?}"
+    );
+    // The bytes still differ, and that is reported — at L0, where it belongs.
+    assert!(
+        found.iter().any(|d| matches!(d, Divergence::Frame { .. })),
+        "the frame difference is still a finding: {found:?}"
+    );
+}
+
+/// The same two stanzas *inbound* do produce an L1 finding.
+///
+/// Without this, the test above would pass just as well if the comparison had
+/// stopped working altogether.
+#[test]
+fn the_same_two_stanzas_inbound_do_diverge_at_l1() {
+    let a = envelope(
+        Fixture::node("receipt")
+            .attr("id", "AAAA1111")
+            .jid_attr("from", "5511999998888")
+            .attr("type", "read"),
+    );
+    let b = envelope(
+        Fixture::node("receipt")
+            .attr("id", "AAAA1111")
+            .jid_attr("from", "5511999998888")
+            .attr("type", "played"),
+    );
+    let (la, rb): ([&[u8]; 1], [&[u8]; 1]) = ([&a], [&b]);
+    let left = recording("left", &la);
+    let right = recording("right", &rb);
+
+    let report = compare(&left, &right, Tables::shared(FIXTURE_TABLE));
+    let found: Vec<_> = report.divergences().collect();
+    assert!(
+        found.iter().any(|d| matches!(d.layer(), Layer::L1)),
+        "inbound, this pair is an L1 divergence: {found:?}"
+    );
 }

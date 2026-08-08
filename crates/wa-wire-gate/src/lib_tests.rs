@@ -19,6 +19,13 @@ fn envelope(builder: FixtureBuilder) -> Vec<u8> {
         .expect("encodes")
 }
 
+fn outbound_envelope(builder: FixtureBuilder) -> Vec<u8> {
+    let fixture = builder.build();
+    wa_wire_adapter::RawStanza::outbound(fixture.bytes())
+        .encode_to_vec()
+        .expect("encodes")
+}
+
 /// A recording of `stanzas`, declaring `input` as the traffic it replays.
 fn recording(adapter: &str, input: &[u8], stanzas: &[Vec<u8>]) -> Vec<u8> {
     recording_with(adapter, input, stanzas, None, false)
@@ -569,4 +576,37 @@ fn an_outcome_is_debuggable_and_comparable() {
     let two = gate(&bytes, &bytes, ComparisonProfile::Interop);
     assert_eq!(one, two, "the gate is a pure function of its inputs");
     assert!(!format!("{one:?}").is_empty());
+}
+
+/// The report says how many stanzas went each way, per side.
+///
+/// A candidate that stopped observing its own sends loses records, and records
+/// that are absent are exactly what a total cannot show. Reporting the split
+/// makes the loss the visible thing rather than the invisible one.
+#[test]
+fn the_report_counts_each_direction_per_side() {
+    let input = b"corpus";
+    let baseline = recording(
+        "left",
+        input,
+        &[
+            envelope(receipt("AAAA")),
+            outbound_envelope(receipt("BBBB")),
+        ],
+    );
+    // The candidate read the same traffic and reported nothing it sent.
+    let candidate = recording("right", input, &[envelope(receipt("AAAA"))]);
+
+    let outcome = gate(&baseline, &candidate, ComparisonProfile::Regression);
+    let report = outcome.report;
+
+    assert!(report.contains("direction:"), "{report}");
+    assert!(
+        report.contains("outbound       baseline    1   candidate    0   <- differs"),
+        "the missing half must be named: {report}"
+    );
+    assert!(
+        report.contains("inbound        baseline    1   candidate    1"),
+        "{report}"
+    );
 }
