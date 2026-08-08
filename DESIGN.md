@@ -9,7 +9,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 36
+> **Last revised:** rev 37
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1754,15 +1754,21 @@ No L2. No Layer 3 host.
 2. Four adapters emitting L0-plain: `whatsapp-rust`, `zapo`, `Baileys`,
    `hypermeow`. **Two of four as of rev 19.**
 3. L1 derivation generated from `whatspec`, host-side, single implementation.
-   **Stanza derivation done in rev 11; the payload derivation done in rev 27,
-   written rather than generated because whatspec has no oracle for it.**
+   **Done.** Inbound stanzas in rev 11, payloads in rev 27 — generated rather
+   than written since rev 28 corrected where the numbers come from — and
+   outbound stanzas in rev 33. Nothing the generators cannot express is left
+   unreported: `UNMODELLED_FIELDS` and `UNTYPED_FIELDS` are empty, and the nine
+   `REQUEST_SCOPED_ASSERTIONS` are a design limit rather than a backlog.
 4. Conformance suite (RFC-005) green: identical L0 in → identical L1 out across
    all four engines. **Green for two of them as of rev 15.**
 5. Capability matrix machine-readable and enforced at setup. **Done in rev 20.**
    All five upgrade-gate criteria are measured as of rev 29: stanzas not lost,
    frames still parsing, the same L1, plaintext coverage held, and a
    performance budget per read path.
-6. Takeover working on at least `zapo` (native) and `whatsapp-rust` (patched).
+6. Takeover working on at least `zapo` (native) and `whatsapp-rust`. **Done.**
+   No patch in the end: `StanzaInterceptor` landed upstream as #1239, so both
+   are native — partial on the Rust side, and the matrix says which five
+   stanzas it never offers.
 
 **Explicitly out of v1:** L2 commands, Layer 3 host, session handoff, fencing,
 multi-session pooling, media transfer, the `wa-store-migrate` port.
@@ -1970,6 +1976,18 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 37 — 2026-08-08
+
+- **The definition of done was two items behind the work.** Item 3 still said
+  the payload derivation was written "because whatspec has no oracle for it",
+  which rev 28 reversed; item 6 still called `whatsapp-rust` takeover a patch,
+  which rev 31 recorded as upstream. Both are done, and the list now says so —
+  a checklist that undercounts what is finished is as misleading as one that
+  overcounts.
+- Of the six, **two remain**: publishing `wa-wire-contract`, and the third and
+  fourth engines. They are the same item twice over, since a frozen contract is
+  what a new adapter is written against.
 
 ### rev 36 — 2026-08-08
 
