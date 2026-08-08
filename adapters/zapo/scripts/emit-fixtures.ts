@@ -161,7 +161,11 @@ const container = encodeRecording(
             manifestHash: 'sha256:fixture',
             generatorVersion: '0.1.0',
         },
-        dictionary: 'whatspec@2.3000.1044659339',
+        // No dictionary tag on purpose. Declaring one is a claim that a
+        // reader holding that table can parse these frames, and this fixture
+        // exists to exercise the container rather than to make that claim.
+        // A reader that met an identity it does not have would refuse, which
+        // is right, and would stop this fixture testing anything else.
         artifactClass: ArtifactClass.Synthetic,
         inputDigest: new TextEncoder().encode('cross-language-fixture'),
         createdAt: 1_754_000_000_000n,

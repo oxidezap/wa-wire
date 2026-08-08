@@ -42,6 +42,8 @@ use wa_wire_codec::TokenTable;
 use wa_wire_conformance::{
     Comparability, ComparisonProfile, Incomparable, Recording, Tables, Verdict, compare,
 };
+use wa_wire_contract::EnvelopeRef;
+use wa_wire_l1::content::derive_content;
 use wa_wire_recording::RecordingRef;
 
 /// How many findings are printed before the rest are summarised.
@@ -333,6 +335,15 @@ pub fn run(baseline: &[u8], candidate: &[u8], profile: ComparisonProfile, max: u
         comparison.compared()
     );
 
+    // What the stanzas turned out to be. The frame says a `<message>` arrived
+    // and only the payload says what it was, so a report that stopped at the
+    // count would leave the reader with the half the boundary already had
+    // before it could read plaintexts at all.
+    let content = summarise_content(&left, &right);
+    if !content.is_empty() {
+        let _ = writeln!(report, "\ncontent:\n{content}");
+    }
+
     section(
         &mut report,
         "failures",
@@ -362,6 +373,65 @@ pub fn run(baseline: &[u8], candidate: &[u8], profile: ComparisonProfile, max: u
         verdict: Some(verdict),
         report,
     }
+}
+
+/// What the two sides' payloads say, side by side.
+///
+/// Counted per side rather than merged: a candidate that read fewer messages
+/// than the baseline is the finding, and a single total would hide it behind
+/// the sum.
+fn summarise_content(left: &RecordingRef<'_>, right: &RecordingRef<'_>) -> String {
+    let (mine, theirs) = (content_counts(left), content_counts(right));
+    if mine.is_empty() && theirs.is_empty() {
+        return String::new();
+    }
+
+    let mut kinds: Vec<&str> = mine.iter().chain(theirs.iter()).map(|(k, _)| *k).collect();
+    kinds.sort_unstable();
+    kinds.dedup();
+
+    let mut out = String::new();
+    for kind in kinds {
+        let a = count_of(&mine, kind);
+        let b = count_of(&theirs, kind);
+        let note = if a == b { "" } else { "   <- differs" };
+        let _ = writeln!(out, "  {kind:<14} baseline {a:>4}   candidate {b:>4}{note}");
+    }
+    out
+}
+
+/// Message kinds in one recording, with how many of each.
+///
+/// A payload that does not read as a message is counted too, under a name of
+/// its own: silently leaving it out would make a recording of unreadable
+/// payloads look like a recording of none.
+fn content_counts(recording: &RecordingRef<'_>) -> Vec<(&'static str, usize)> {
+    let mut counts: Vec<(&'static str, usize)> = Vec::new();
+    let mut bump = |name: &'static str| match counts.iter_mut().find(|(k, _)| *k == name) {
+        Some((_, seen)) => *seen = seen.saturating_add(1),
+        None => counts.push((name, 1)),
+    };
+
+    for envelope in recording.envelopes() {
+        let Ok(decoded) = EnvelopeRef::decode(envelope) else {
+            continue;
+        };
+        for entry in decoded.entries().filter(|entry| entry.status.is_ok()) {
+            match derive_content(entry.payload) {
+                Ok(content) => bump(content.kind.name()),
+                Err(_) => bump("unreadable"),
+            }
+        }
+    }
+    counts.sort_unstable();
+    counts
+}
+
+fn count_of(counts: &[(&'static str, usize)], kind: &str) -> usize {
+    counts
+        .iter()
+        .find(|(name, _)| *name == kind)
+        .map_or(0, |(_, seen)| *seen)
 }
 
 fn render_verdict(verdict: Verdict, profile: ComparisonProfile) -> String {

@@ -19,6 +19,7 @@ wa-wire-codec = { path = "../wa-wire-codec", version = "0.1.0", features = [
 ] }
 wa-wire-conformance = { path = "../wa-wire-conformance", version = "0.1.0" }
 wa-wire-contract = { path = "../wa-wire-contract", version = "0.1.0" }
+wa-wire-l1 = { path = "../wa-wire-l1", version = "0.1.0" }
 wa-wire-recording = { path = "../wa-wire-recording", version = "0.1.0" }
 
 [dev-dependencies]

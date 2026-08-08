@@ -54,6 +54,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "wa-wire-gate"
+version = "0.1.0"
+dependencies = [
+ "wa-wire-adapter",
+ "wa-wire-codec",
+ "wa-wire-conformance",
+ "wa-wire-contract",
+ "wa-wire-l1",
+ "wa-wire-recording",
+]
+
+[[package]]
 name = "wa-wire-l1"
 version = "0.1.0"
 dependencies = [

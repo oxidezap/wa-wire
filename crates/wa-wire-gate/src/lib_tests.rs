@@ -486,6 +486,82 @@ fn a_recording_that_records_its_spec_carries_it_into_the_comparison() {
 }
 
 #[test]
+fn the_report_says_what_the_stanzas_turned_out_to_be() {
+    // A count of stanzas is the half the boundary had before it could read a
+    // payload at all. The kinds are the half that needed L1 to grow.
+    use wa_wire_adapter::Plaintext;
+    use wa_wire_contract::NodePath;
+
+    let path = [0u8, 0];
+    let conversation = b"\x0a\x02hi";
+    let fixture = receipt("A").build();
+    let plaintexts = [Plaintext::ok(NodePath::from_le_bytes(&path), conversation)];
+    let envelope = wa_wire_adapter::RawStanza::inbound(fixture.bytes())
+        .with_plaintexts(&plaintexts)
+        .encode_to_vec()
+        .expect("encodes");
+
+    let meta = MetaBuilder::new()
+        .artifact_class(ArtifactClass::Replayed)
+        .expect("class")
+        .input_digest(b"monday")
+        .expect("input");
+    let mut writer = RecordingWriter::new(meta).expect("writer");
+    writer.envelope(&envelope).expect("envelope");
+    let bytes = writer.finish();
+
+    let outcome = gate(&bytes, &bytes, ComparisonProfile::Regression);
+    assert_eq!(outcome.verdict, Some(Verdict::Pass));
+    assert!(outcome.report.contains("content:"), "{}", outcome.report);
+    assert!(
+        outcome.report.contains("conversation"),
+        "the report has to name what it read:\n{}",
+        outcome.report
+    );
+    assert!(!outcome.report.contains("differs"), "the two sides agree");
+}
+
+#[test]
+fn a_side_that_read_fewer_messages_is_marked_rather_than_summed() {
+    // Merging the two counts would hide exactly the finding worth seeing.
+    use wa_wire_adapter::Plaintext;
+    use wa_wire_contract::NodePath;
+
+    let path = [0u8, 0];
+    let fixture = receipt("A").build();
+    let with_text = wa_wire_adapter::RawStanza::inbound(fixture.bytes())
+        .with_plaintexts(&[Plaintext::ok(NodePath::from_le_bytes(&path), b"\x0a\x02hi")])
+        .encode_to_vec()
+        .expect("encodes");
+    let unreadable = wa_wire_adapter::RawStanza::inbound(fixture.bytes())
+        .with_plaintexts(&[Plaintext::ok(
+            NodePath::from_le_bytes(&path),
+            b"\x0a\x7f\x01",
+        )])
+        .encode_to_vec()
+        .expect("encodes");
+
+    let build = |envelope: &[u8]| {
+        let meta = MetaBuilder::new()
+            .artifact_class(ArtifactClass::Replayed)
+            .expect("class")
+            .input_digest(b"monday")
+            .expect("input");
+        let mut writer = RecordingWriter::new(meta).expect("writer");
+        writer.envelope(envelope).expect("envelope");
+        writer.finish()
+    };
+
+    let outcome = gate(
+        &build(&with_text),
+        &build(&unreadable),
+        ComparisonProfile::Regression,
+    );
+    assert!(outcome.report.contains("differs"), "{}", outcome.report);
+    assert!(outcome.report.contains("unreadable"), "{}", outcome.report);
+}
+
+#[test]
 fn an_outcome_is_debuggable_and_comparable() {
     let stanzas = [envelope(receipt("A"))];
     let bytes = recording("engine", b"monday", &stanzas);

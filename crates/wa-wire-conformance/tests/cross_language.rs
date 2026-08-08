@@ -216,7 +216,11 @@ fn a_recording_written_in_typescript_reads_here() {
     assert_eq!(provenance.whatsapp_version, "2.3000.1044659339");
     assert_eq!(provenance.manifest_hash, "sha256:fixture");
 
-    assert_eq!(recording.dictionary(), Some("whatspec@2.3000.1044659339"));
+    assert_eq!(
+        recording.dictionary(),
+        None,
+        "the fixture declares no dictionary, because it cannot back the claim"
+    );
     assert_eq!(recording.artifact_class(), Some(ArtifactClass::Synthetic));
     assert_eq!(
         recording.input_digest(),

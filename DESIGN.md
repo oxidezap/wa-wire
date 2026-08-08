@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 28
+> **Last revised:** rev 29
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1644,6 +1644,9 @@ No L2. No Layer 3 host.
 4. Conformance suite (RFC-005) green: identical L0 in → identical L1 out across
    all four engines. **Green for two of them as of rev 15.**
 5. Capability matrix machine-readable and enforced at setup. **Done in rev 20.**
+   All five upgrade-gate criteria are measured as of rev 29: stanzas not lost,
+   frames still parsing, the same L1, plaintext coverage held, and a
+   performance budget per read path.
 6. Takeover working on at least `zapo` (native) and `whatsapp-rust` (patched).
 
 **Explicitly out of v1:** L2 commands, Layer 3 host, session handoff, fencing,
@@ -1819,6 +1822,8 @@ Portability is enforced too: the contract builds with no allocator and for
 | ~~D-090~~ | ~~The payload half of L1 is **written**, not generated~~ | **Reversed by D-093.** The stated reason was false: whatspec does extract the protobuf | 27 |
 | D-093 | **Reverses D-090.** The payload's field numbers are generated from whatspec's `WAProto.proto`, and only the rules stay written | whatspec's `wa-proto` extracts the schema from the bundle's `internalSpec` modules and pins it by SHA-256 in its manifest, so the oracle D-090 said did not exist was there all along. Hand-writing the numbers cost 22 of the 29 wrappers the spec declares | 28 |
 | D-094 | Wrappers are collected from the spec **by type**, never by name | A list of names is a second place to add one and therefore a place to forget one. Collecting every `Message` field whose type is `FutureProofMessage` is what turned seven into twenty-nine | 28 |
+| D-096 | The gate reports what the payloads turned out to be, per side | A count of stanzas is the half the boundary had before it could read a payload at all. Counting per side rather than merging is what makes a candidate that read fewer messages visible instead of hidden behind a sum | 29 |
+| D-097 | Each read path carries a time budget, asserted rather than plotted | A benchmark whose only output is a number tells the next person nothing: they see 900 ns and cannot say whether it is fine. The budgets sit several times above the measured cost, because what is worth catching is a copy where there was a borrow, not a slower runner | 29 |
 | D-095 | Provenance carries a digest per domain, not one for the build | WhatsApp can renumber a protobuf field without touching how a stanza parses. One digest would call two builds the same spec when only half of it matched | 28 |
 | D-091 | A payload whose first field is unmodelled crosses as `Unmodelled(n)`, never as empty | Without the whole schema, an unknown variant and a metadata field are indistinguishable, so reporting the number seen is the most that can be claimed. Reporting nothing would make a protocol change look like an empty message, which is the one reading that is certainly wrong | 27 |
 | D-092 | Wrappers are unwrapped before the kind is reported, and the depth is reported | A consumer asking what a message said does not mean "it was a device-sent copy of an ephemeral wrapper". The count is kept because a nested payload is a fact worth seeing rather than one to hide | 27 |
@@ -1826,6 +1831,33 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 29 — 2026-08-08
+
+- **The gate reports content.** It could say "14 stanzas compared" and not what
+  any of them were, which is the half the boundary already had before L1 could
+  read a payload. It now counts message kinds per side and marks the ones that
+  differ (D-096). Counting per side is the point: a merged total would hide a
+  candidate that read fewer messages than the baseline, which is the finding.
+- **The fifth gate criterion is measured** (D-097). Four of the five had tests
+  behind them and performance had nothing. Each read path now carries a budget
+  and the assertion is against the budget, not against last week's run:
+  envelope decode 210 ns, frame parse 1.2 µs, stanza derive 11.6 µs, payload
+  derive 521 ns, walking a 32-record recording 87 µs, all in a debug build.
+  Ceilings sit around four times those, because what is worth catching is a
+  borrow becoming a copy and not a loaded CI runner.
+  - The budgets live in `tests/` rather than `benches/`, since a criterion that
+    runs only when somebody remembers is not a criterion. A test asserts that a
+    blown budget fails the run, so the mechanism cannot rot into printing.
+  - `stanza derive` at nine times the parse it contains is not a defect: the
+    generated derivation tries shapes richest-first until one matches, so a
+    receipt walks several that do not. Recorded because it is the first time
+    anybody measured it.
+- **A cross-language fixture was making a claim it could not back.** It declared
+  a token dictionary, the gate correctly refused to compare recordings whose
+  dictionary it does not have, and the fixture stopped testing anything else.
+  The claim is gone: a dictionary tag says a reader holding that table can parse
+  these frames, and that fixture exists to exercise the container.
 
 ### rev 28 — 2026-08-08
 
