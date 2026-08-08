@@ -185,7 +185,19 @@ impl EventHandler for Pairing {
                 // Blocking, on a thread of its own: this runs on the event
                 // dispatch path, and holding it up delays the next stanza.
                 std::thread::spawn(move || {
-                    let posted = ureq::post(&url)
+                    // Same reasoning as the transport's: a server worth pointing
+                    // this at during development presents its own certificate,
+                    // and this whole example is behind `insecure-capture`.
+                    let agent: ureq::Agent = ureq::Agent::config_builder()
+                        .tls_config(
+                            ureq::tls::TlsConfig::builder()
+                                .disable_verification(true)
+                                .build(),
+                        )
+                        .build()
+                        .into();
+                    let posted = agent
+                        .post(&url)
                         .header("content-type", "text/plain")
                         .send(code.as_bytes());
                     match posted {
@@ -255,10 +267,16 @@ async fn main() -> anyhow::Result<()> {
             post_to: settings.pair_post.clone(),
         }))
         .detach();
-    client.connect().await?;
+    // `run`, not `connect`. `connect` completes the handshake and returns;
+    // the loop that reads frames off the socket lives inside `run`, so a
+    // capture built on `connect` alone sees the server's bytes arrive at the
+    // transport and never get decoded.
+    let running = Arc::clone(&client);
+    let task = tokio::spawn(async move { running.run().await });
 
     tokio::time::sleep(Duration::from_secs(settings.seconds)).await;
     client.disconnect().await;
+    task.abort();
 
     let sink = sink.lock().expect("sink lock");
     println!(

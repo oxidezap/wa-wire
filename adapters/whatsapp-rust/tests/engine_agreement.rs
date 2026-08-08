@@ -11,12 +11,15 @@
 //!
 //! # The result
 //!
-//! They agree at L1, and — not what this was written expecting — their frames
-//! are byte-identical too. The suite is built to tolerate an L0 difference
-//! because two encodings of one stanza are both valid; on this corpus there is
-//! nothing to tolerate. The tests assert the stronger property, so a future
-//! change that starts producing different bytes shows up as a result rather
-//! than passing silently under the weaker one.
+//! They agree on every derived event, and disagree on the bytes of three
+//! stanzas — all three from captured traffic, none from the hand-written half.
+//! That is the suite working as designed: the format leaves some choices open
+//! (a server JID as a JID or as a dictionary token; a childless node with an
+//! explicit empty body or none at all), both engines pick validly, and the
+//! derivation reads them identically.
+//!
+//! The three are named in `KNOWN_ENCODER_DIVERGENCES`, so a fourth is a
+//! deliberate decision rather than a counter going up.
 //!
 //! # Regenerating
 //!
@@ -32,7 +35,7 @@ use std::sync::Arc;
 
 use wa_wire_adapter::{AdapterInfo, RawStanza, StanzaSink};
 use wa_wire_adapter_whatsapp_rust::INFO;
-use wa_wire_conformance::{Recording, compare};
+use wa_wire_conformance::{Layer, Recording, compare};
 use whatsapp_rust::OwnedNodeRef;
 
 /// `zapo`'s declaration, as its own source states it.
@@ -57,28 +60,40 @@ fn workspace(path: &str) -> PathBuf {
 }
 
 /// Every corpus frame, in name order — the same order both readers use.
+///
+/// `captured/` holds frames recorded from a server rather than written by hand.
+/// Both directories are read, and a capture is just more corpus: the comparison
+/// does not care where a frame came from.
 fn corpus() -> Vec<(String, Vec<u8>)> {
-    let dir = workspace("crates/wa-wire-conformance/corpus");
-    let mut entries: Vec<_> = std::fs::read_dir(&dir)
-        .unwrap_or_else(|error| {
-            panic!(
-                "{}: {error}\nrun `cargo run --example emit-corpus`",
+    let root = workspace("crates/wa-wire-conformance/corpus");
+    let mut entries = Vec::new();
+    for dir in [root.clone(), root.join("captured")] {
+        let Ok(read) = std::fs::read_dir(&dir) else {
+            assert_ne!(
+                dir,
+                root,
+                "{}: missing — run `cargo run --example emit-corpus`",
                 dir.display()
-            )
-        })
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|ext| ext == "bin"))
-        .collect();
+            );
+            continue;
+        };
+        entries.extend(
+            read.filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| path.extension().is_some_and(|ext| ext == "bin")),
+        );
+    }
     entries.sort();
     assert!(!entries.is_empty(), "the corpus must not be empty");
 
     entries
         .into_iter()
         .map(|path| {
+            // Prefixed with the directory, so a captured frame and a written
+            // one cannot collide on a name and cannot be confused in a report.
             let name = path
-                .file_stem()
-                .expect("corpus file has a name")
+                .strip_prefix(&root)
+                .unwrap_or(&path)
                 .to_string_lossy()
                 .into_owned();
             (name, std::fs::read(&path).expect("corpus file reads"))
@@ -180,30 +195,78 @@ fn the_two_engines_derive_the_same_events_from_the_same_traffic() {
     assert!(report.agrees());
 }
 
+/// Stanzas where the two encoders legitimately choose different bytes.
+///
+/// Named rather than counted, so adding a divergence is a deliberate act with a
+/// reviewed reason and not a number quietly going up.
+const KNOWN_ENCODER_DIVERGENCES: &[(&str, &str)] = &[
+    (
+        "captured/0000-iq.bin",
+        "from=s.whatsapp.net: whatsapp-rust writes it as a JID with no user, zapo as a dictionary token",
+    ),
+    (
+        "captured/0001-iq.bin",
+        "same server-JID-versus-token choice as 0000",
+    ),
+    (
+        "captured/0012-iq.bin",
+        "a childless <list>: whatsapp-rust writes an explicit empty body, zapo omits it entirely",
+    ),
+];
+
 #[test]
-fn the_two_encoders_agree_byte_for_byte() {
-    // Not what this test was written expecting. `zapo` re-encodes from a
-    // decoded node while `whatsapp-rust` forwards the buffer it received, so
-    // the two had every opportunity to differ — and produce identical bytes for
-    // the whole corpus.
+fn the_encoders_differ_only_where_they_are_known_to() {
+    // The hand-written corpus produced identical bytes from both engines, which
+    // made the tolerance for L0 differences look theoretical. Real traffic
+    // settled that: the two encoders do diverge, on choices the format leaves
+    // open, and the derivation reads both the same way.
     //
-    // That is a stronger result than the one the conformance suite is built to
-    // tolerate, and it is worth pinning: if a future change to either encoder
-    // starts producing different bytes, that is a real event about the two
-    // implementations, even though the comparison would still pass on meaning.
+    // Anything not on the list is new, and worth a look before it is added.
     let ours = whatsapp_rust_envelopes();
     let theirs = zapo_envelopes();
+    let names: Vec<_> = corpus().into_iter().map(|(name, _)| name).collect();
 
+    let mut unexpected = Vec::new();
+    let mut seen = Vec::new();
     for (index, (a, b)) in ours.iter().zip(&theirs).enumerate() {
         let a = wa_wire_contract::EnvelopeRef::decode(a).expect("ours decodes");
         let b = wa_wire_contract::EnvelopeRef::decode(b).expect("theirs decodes");
-        assert_eq!(
-            a.frame(),
-            b.frame(),
-            "stanza {index}: the encoders diverged — if this is intended, the \
-             conformance claim moves from `is_identical` to `agrees`"
-        );
+        if a.frame() == b.frame() {
+            continue;
+        }
+        let name = names[index].as_str();
+        match KNOWN_ENCODER_DIVERGENCES
+            .iter()
+            .find(|(known, _)| *known == name)
+        {
+            Some((_, reason)) => seen.push((name, *reason)),
+            None => unexpected.push(format!(
+                "  {name}: {} bytes against {}",
+                a.frame().len(),
+                b.frame().len()
+            )),
+        }
     }
+
+    assert!(
+        unexpected.is_empty(),
+        "the encoders diverged somewhere new:\n{}\n\nIf the difference is a \
+         legitimate encoding choice, add it to KNOWN_ENCODER_DIVERGENCES with \
+         the reason. If it is not, one of the two encoders is wrong.",
+        unexpected.join("\n")
+    );
+    // Only the listed stanzas actually present are expected to diverge: the
+    // captured corpus is optional, and a checkout without it must still pass.
+    let present: Vec<_> = KNOWN_ENCODER_DIVERGENCES
+        .iter()
+        .filter(|(known, _)| names.iter().any(|name| name == known))
+        .collect();
+    assert_eq!(
+        seen.len(),
+        present.len(),
+        "a listed divergence stopped happening — remove it rather than leave it \
+         claiming something that is no longer true"
+    );
 }
 
 #[test]
@@ -224,11 +287,10 @@ fn the_envelopes_still_differ_in_what_they_declare() {
 }
 
 #[test]
-fn nothing_diverges_at_either_layer() {
-    // `agrees()` tolerates an L0 difference; `is_identical()` does not. The
-    // stronger one holds here, so assert the stronger one — a report that
-    // quietly starts carrying frame differences would still `agree`, and this
-    // is what notices.
+fn every_divergence_is_at_l0_and_none_is_a_fault() {
+    // The split the suite is built on, now carrying weight: frames differ,
+    // derived events do not. A difference that reached L1 would mean one of the
+    // two engines reads the wire wrongly — that is the finding this exists for.
     let ours = whatsapp_rust_envelopes();
     let theirs = zapo_envelopes();
     let ours_refs: Vec<&[u8]> = ours.iter().map(Vec::as_slice).collect();
@@ -240,16 +302,28 @@ fn nothing_diverges_at_either_layer() {
         table(),
     );
 
-    let found: Vec<_> = report
+    let at_l1: Vec<_> = report
         .divergences()
-        .map(|divergence| format!("  [{:?}] {divergence}", divergence.layer()))
+        .filter(|divergence| divergence.layer() == Layer::L1)
+        .map(|divergence| format!("  {divergence}"))
         .collect();
     assert!(
-        report.is_identical(),
-        "expected nothing at all:\n{}",
-        found.join("\n")
+        at_l1.is_empty(),
+        "the engines read the same bytes differently:\n{}",
+        at_l1.join("\n")
     );
+    assert!(report.agrees());
     assert_eq!(report.compared(), ours.len(), "every stanza was compared");
+    let names: Vec<_> = corpus().into_iter().map(|(name, _)| name).collect();
+    let expected = KNOWN_ENCODER_DIVERGENCES
+        .iter()
+        .filter(|(known, _)| names.iter().any(|name| name == known))
+        .count();
+    assert_eq!(
+        report.divergences().count(),
+        expected,
+        "every difference is one of the known encoder choices"
+    );
 }
 
 #[test]

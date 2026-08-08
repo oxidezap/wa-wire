@@ -66,9 +66,25 @@ function adapterEnvelope(node: BinaryNode): Uint8Array {
     return encodeEnvelope(stanza)
 }
 
-const names = readdirSync(CORPUS)
-    .filter((name) => name.endsWith('.bin'))
-    .sort()
+/** Both the written corpus and anything captured, in one sorted list. */
+function corpusFiles(): string[] {
+    const files: string[] = []
+    for (const dir of ['', 'captured']) {
+        const full = dir ? join(CORPUS, dir) : CORPUS
+        let entries: string[]
+        try {
+            entries = readdirSync(full)
+        } catch {
+            continue
+        }
+        for (const name of entries) {
+            if (name.endsWith('.bin')) files.push(dir ? join(dir, name) : name)
+        }
+    }
+    return files.sort()
+}
+
+const names = corpusFiles()
 if (names.length === 0) {
     throw new Error(`no corpus in ${CORPUS} — run \`cargo run --example emit-corpus\``)
 }

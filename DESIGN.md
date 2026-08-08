@@ -1462,6 +1462,7 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-057 | Engine agreement is asserted at `is_identical`, not `agrees` | The suite tolerates an L0 difference because two encodings are both valid — but on this corpus there is nothing to tolerate. Asserting the weaker property would let a future encoder change start producing different bytes silently | 15 |
 | D-058 | Capture takes its endpoint as configuration and knows nothing about the server | A tool that names one server becomes a dependency on it. An endpoint, an optional pairing hook and a TLS-verification feature cover a local test server and a real one with the same code | 16 |
 | D-059 | Captured frames are not scrubbed | A scrubber that misses a field is worse than none, because it invites trusting the output. Capture from a test account and review what gets committed | 16 |
+| D-060 | Encoder divergences are listed by name, not counted | A count going up says nothing about whether the new difference is a valid encoding choice or one engine being wrong. A named list makes each one a reviewed decision | 16 |
 
 ---
 
@@ -1487,14 +1488,24 @@ Portability is enforced too: the contract builds with no allocator and for
   connecting, which makes a capture depend on a network the server has nothing
   to do with and pins it to whatever is live at the time. `with_version_override`
   skips the lookup entirely.
-- **Not yet exercised end to end.** Against a local test server the handshake
-  completes, the server sends one 634-byte reply, and it is never decoded — no
-  stanza, no error, nothing. Pinning the version did not change it, so the
-  lookup was not the blocker. Silence rather than a decode error points at
-  framing: a client waiting for the rest of a frame the server considers
-  finished would look exactly like this. That is server-side, so the corpus is
-  still the hand-written one and the agreement result in rev 15 stands
-  unchanged.
+- **The blocker was mine, not the server's.** `Client::connect()` completes the
+  handshake and returns; the loop that reads frames off the socket lives inside
+  `Client::run()`. A capture built on `connect` alone watches the server's bytes
+  reach the transport and never get decoded — which is exactly the silence
+  observed. Switching to `run` captured 67 stanzas immediately.
+- **Real traffic found what the hand-written corpus could not** (D-060). The two
+  encoders produce identical bytes for all 13 written stanzas, which made the
+  suite's tolerance for L0 differences look theoretical. Across 67 captured
+  stanzas they diverge three times, on choices the format genuinely leaves open:
+  - `from="s.whatsapp.net"` — `whatsapp-rust` writes a JID with no user,
+    `zapo` writes the dictionary token (twice);
+  - a childless `<list>` — `whatsapp-rust` writes an explicit empty body,
+    `zapo` omits it.
+
+  **Every derived event still matches.** This is the property the project exists
+  to guarantee, and it is now measured against two real implementations rather
+  than asserted. The three are named in `KNOWN_ENCODER_DIVERGENCES` so a fourth
+  is a decision rather than a counter moving.
 
 ### rev 15 — 2026-08-07
 
