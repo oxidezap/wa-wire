@@ -35,6 +35,7 @@
 //! | `l0.inbound.auth-phase` | yes — `success`, `failure` and `xmlstreamend` all reach it |
 //! | `l0.zero-copy-frame` | yes — the decode buffer is already retained |
 //! | `l0.plaintext` | yes — `Event::DecryptedPayload` reports each one after Signal |
+//! | `l0.plaintext.cause` | yes — `Event::EncDecryptFailed` reports why one produced nothing |
 //! | `l0.outbound.observed` | yes — `Event::SentFrame` reports each stanza that went to the wire |
 //! | `l0.outbound` | on `Sender`, not here — this plugin observes and does not send |
 //! | `l0.takeover` | in [`takeover`], not here — `RawNode` observes; the pipeline runs regardless |
@@ -57,6 +58,7 @@
 use std::sync::{Arc, Mutex};
 
 use wa_wire_adapter::{
+    PlaintextStatus,
     AdapterInfo, Capability, CapabilitySet, RawStanza, RequestError, RequestFuture, SendError,
     SendFuture, StanzaRequester, StanzaSender, StanzaSink, Violation,
 };
@@ -66,9 +68,11 @@ use whatsapp_rust::plugins::{
     ClientPlugin, PluginCapability, PluginContext, PluginCoreEventSubscription, PluginFuture,
     PluginManifest,
 };
-use whatsapp_rust::types::events::{Event, EventHandler, EventInterest, EventKind};
+use whatsapp_rust::types::events::{
+    EncDecryptFailureReason, Event, EventHandler, EventInterest, EventKind,
+};
 
-use crate::plaintext::{DecryptedEnc, PlaintextJoiner};
+use crate::plaintext::{DecryptedEnc, FailedEnc, PlaintextJoiner};
 
 /// The events this adapter needs to produce L0-plain.
 ///
@@ -78,6 +82,7 @@ fn interest() -> EventInterest {
     EventInterest::of(&[
         EventKind::RawNode,
         EventKind::DecryptedPayload,
+        EventKind::EncDecryptFailed,
         EventKind::SentFrame,
     ])
 }
@@ -100,11 +105,46 @@ pub const CAPABILITIES: CapabilitySet = CapabilitySet::NONE
     .with(Capability::L0InboundAuthPhase)
     .with(Capability::L0OutboundObserved)
     .with(Capability::L0Plaintext)
+    .with(Capability::L0PlaintextCause)
     .with(Capability::ZeroCopyFrame);
 
 /// This adapter's declaration.
 pub const INFO: AdapterInfo<'static> =
     AdapterInfo::new(PLUGIN_ID, ADAPTER_VERSION, ENGINE_VERSION, CAPABILITIES);
+
+/// What the boundary can say about an `<enc>` the engine could not decrypt.
+///
+/// The engine names fifteen reasons; the contract has three ways to say a
+/// payload is absent, frozen in version 1. So this is a narrowing, and the
+/// interesting part is where it loses something.
+///
+/// - **Attempted and failed** — a bad MAC, a missing session, an unknown
+///   pre-key — is [`DecryptFailed`](PlaintextStatus::DecryptFailed), which is
+///   exactly what that status claims.
+/// - **Recognised and undecryptable as it stands** —- an `<enc>` whose type
+///   this build does not implement, or one carrying no type or no content —
+///   is [`Unsupported`](PlaintextStatus::Unsupported).
+/// - **Deliberately skipped** is the one that does not fit.
+///   [`NotAttempted`](wacore::types::events::EncDecryptFailureReason::NotAttempted)
+///   means the engine could have tried and chose not to, usually because the
+///   session `<enc>` that carried the sender key failed first. No frozen status
+///   says that, and inventing one is a version 2 change, so it reports as
+///   [`Unobserved`](PlaintextStatus::Unobserved) — which is true and says less
+///   than the engine knew.
+fn status_for(reason: EncDecryptFailureReason) -> PlaintextStatus {
+    use EncDecryptFailureReason as Reason;
+
+    match reason {
+        Reason::NotAttempted => PlaintextStatus::Unobserved,
+        Reason::MalformedNode | Reason::UnsupportedEncType => PlaintextStatus::Unsupported,
+        // Everything else reached a cipher, or reached the state a cipher
+        // needed. `decryption_was_attempted` is the engine's own reading of
+        // that line, and it agrees with this arm by construction: the two
+        // reasons above are the ones it calls not-attempted, and `NotAttempted`
+        // is handled first.
+        _ => PlaintextStatus::DecryptFailed,
+    }
+}
 
 /// Forwards every decoded stanza to a sink.
 ///
@@ -299,6 +339,16 @@ where
                     return;
                 };
                 VerifyingSink(sink).accept(RawStanza::outbound(&unpacked));
+            }),
+            Event::EncDecryptFailed(failed) => self.with_both(|joiner, sink| {
+                joiner.accept_failure(
+                    &FailedEnc {
+                        message_id: failed.info.id.clone(),
+                        enc_index: failed.enc_index,
+                        status: status_for(failed.reason),
+                    },
+                    &mut VerifyingSink(sink),
+                );
             }),
             Event::DecryptedPayload(payload) => self.with_both(|joiner, sink| {
                 joiner.accept_plaintext(

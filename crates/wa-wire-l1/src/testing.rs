@@ -15,6 +15,7 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
+use wa_wire_codec::token::DOMAIN_TYPE_PN;
 use wa_wire_codec::{NodeRef, Parser, TokenTable};
 
 const LIST_8: u8 = 248;
@@ -25,6 +26,7 @@ const BINARY_32: u8 = 254;
 const JID_PAIR: u8 = 250;
 const JID_USER: u8 = 247;
 const NIBBLE_8: u8 = 255;
+const HEX_8: u8 = 251;
 
 /// Servers a fixture JID can name. Slot 0 is the `LIST_EMPTY` placeholder, as
 /// in every real table.
@@ -33,6 +35,26 @@ const SERVER_PN_TAG: u8 = 1;
 /// The group server, which is a token in the real dictionary too — entry 45 —
 /// so a group JID is not a fixture-only shape.
 const SERVER_GROUP_TAG: u8 = 4;
+
+/// Two nibbles to a byte, behind the tag that says which alphabet they are.
+fn pack(tag: u8, nibbles: &[u8]) -> Vec<u8> {
+    let odd = nibbles.len() % 2 == 1;
+    let mut packed = Vec::with_capacity(nibbles.len().div_ceil(2));
+    for pair in nibbles.chunks(2) {
+        // A trailing half-byte is padded with 0x0F, which `odd` marks.
+        let high = pair.first().copied().unwrap_or(0);
+        let low = pair.get(1).copied().unwrap_or(0x0F);
+        packed.push((high << 4) | low);
+    }
+
+    let mut encoded = alloc::vec![tag];
+    // A fixture longer than a byte's worth of packed bytes is a fixture that
+    // has stopped being a fixture; truncating says so on read-back.
+    let header = u8::try_from(packed.len()).unwrap_or(u8::MAX);
+    encoded.push(if odd { header | 0x80 } else { header });
+    encoded.extend_from_slice(&packed);
+    encoded
+}
 
 /// The byte a token is written as, if this tiny table carries it.
 fn token_byte(value: &str) -> Option<u8> {
@@ -161,7 +183,13 @@ impl FixtureBuilder {
     pub fn device_jid_attr(mut self, key: &str, user: &str, device: u8) -> Self {
         // `JID_USER` is domain type, then device, then the user part — the
         // order the parser reads them in.
-        let mut encoded = alloc::vec![JID_USER, SERVER_PN_TAG, device];
+        //
+        // The domain type is a byte the parser resolves into a server, not a
+        // token index. Writing `SERVER_PN_TAG` here — the token for
+        // `s.whatsapp.net`, correct three lines up where a token is what the
+        // pair form takes — produced a `@lid` device JID instead, and every
+        // test built on this read one while believing otherwise.
+        let mut encoded = alloc::vec![JID_USER, DOMAIN_TYPE_PN, device];
         encoded.extend_from_slice(&binary(user.as_bytes()));
         self.attrs.push((binary(key.as_bytes()), encoded));
         self
@@ -189,22 +217,33 @@ impl FixtureBuilder {
                 _ => None,
             })
             .collect();
-        let odd = nibbles.len() % 2 == 1;
-        let mut packed = Vec::with_capacity(nibbles.len().div_ceil(2));
-        for pair in nibbles.chunks(2) {
-            // A trailing half-byte is padded with 0x0F, which `odd` marks.
-            let high = pair.first().copied().unwrap_or(0);
-            let low = pair.get(1).copied().unwrap_or(0x0F);
-            packed.push((high << 4) | low);
-        }
+        self.attrs
+            .push((binary(key.as_bytes()), pack(NIBBLE_8, &nibbles)));
+        self
+    }
 
-        let mut encoded = alloc::vec![NIBBLE_8];
-        // A fixture longer than a byte's worth of packed bytes is a fixture
-        // that has stopped being a fixture; truncating says so on read-back.
-        let header = u8::try_from(packed.len()).unwrap_or(u8::MAX);
-        encoded.push(if odd { header | 0x80 } else { header });
-        encoded.extend_from_slice(&packed);
-        self.attrs.push((binary(key.as_bytes()), encoded));
+    /// Add an attribute packed into the hexadecimal alphabet.
+    ///
+    /// What an encoder does with a message id, which WhatsApp writes as
+    /// uppercase hexadecimal: sixteen characters become eight bytes. Without
+    /// this the builder could only spell such an id out, and a reader that
+    /// handled only the spelled-out form would look correct.
+    #[must_use]
+    pub fn hex_attr(mut self, key: &str, value: &str) -> Self {
+        let nibbles: Vec<u8> = value
+            .chars()
+            .filter_map(|character| match character {
+                '0'..='9' => Some((character as u8).wrapping_sub(b'0')),
+                'A'..='F' => Some((character as u8).wrapping_sub(b'A').wrapping_add(10)),
+                // Lowercase is not the alphabet: the hex form is uppercase, and
+                // accepting either here would hide a fixture that packs
+                // something the wire never would.
+                _ => None,
+            })
+            .collect();
+
+        self.attrs
+            .push((binary(key.as_bytes()), pack(HEX_8, &nibbles)));
         self
     }
 

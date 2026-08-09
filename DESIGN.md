@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 54
+> **Last revised:** rev 55
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -542,7 +542,13 @@ matter to whoever is choosing an engine and neither is something a consumer can
 require of the boundary at setup. A capability is a promise about what crosses;
 these are facts about what is on the other side of it.
 
-**One row is `❌` everywhere, and is named anyway.** No adapter reports *why* an
+**That row is no longer `❌` everywhere.** `whatsapp-rust` provides it as of
+rev 55, through `Event::EncDecryptFailed` (upstream #1261) — the per-`<enc>`
+counterpart of `Event::DecryptedPayload`, numbered by the same enumeration, so
+the two events index one stanza and not two. The other three still report
+`Unobserved` for everything.
+
+**The original note, kept because the reasoning is what named the capability.** No adapter reports *why* an
 `<enc>` produced nothing, so every entry says `Unobserved`. `PlaintextStatus`
 has carried `DecryptFailed` and `Unsupported` since the format was written,
 which means the format anticipated a distinction the vocabulary did not name.
@@ -2038,6 +2044,41 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 55 — 2026-08-09
+
+- **`l0.plaintext.cause` has a provider.** It was the one capability frozen into
+  contract version 1 with no implementation anywhere, and the published README
+  says so. `Event::EncDecryptFailed` landed upstream, so the `whatsapp-rust`
+  adapter now reports why an `<enc>` produced nothing instead of only that it
+  did not.
+- **Fifteen reasons into three statuses, and the narrowing is where it is
+  interesting.** Attempted-and-failed is `DecryptFailed`; recognised-but-
+  undecryptable is `Unsupported`; and `NotAttempted` — the engine could have
+  tried and chose not to — has no frozen status that says it, so it reports as
+  `Unobserved`. That is true and says less than the engine knew, and naming it
+  properly would be a version 2 change. A test walks all fifteen and requires
+  each side of the engine's own `decryption_was_attempted` line to land on the
+  matching side here, so a reason added upstream cannot drift into the wrong
+  half through the catch-all arm.
+- **A cause never displaces a plaintext.** The engine reports both for one
+  `<enc>` when the bytes existed and would not parse, and the bytes are the more
+  useful half: a consumer holding them can decide for itself.
+- **The narrow-read sweep found two more.** Reading a value while assuming one
+  encoding is the class that produced the `@newsletter` defect, and the sweep is
+  now a test rather than a reading: the same stanza written every way the format
+  allows must derive one event, compared with `semantic_eq` because the frames
+  necessarily differ.
+- `Fixture::device_jid_attr` wrote `SERVER_PN_TAG` as the domain-type byte.
+  That constant is the *token index* for `s.whatsapp.net`, correct three lines
+  above where the pair form takes a token, and domain type 1 is `lid` — so every
+  fixture built with it carried a `@lid` device JID while its test read a phone
+  number. No assertion depended on the server, which is why 180 tests passed
+  over it.
+- The builder could not write a hex-packed value at all: `packed_attr` filters
+  to the nibble alphabet and **drops** what it cannot encode, so a hexadecimal
+  message id came out as the digits it happened to contain. `hex_attr` writes
+  the form WhatsApp actually uses for ids, and both now share one packer.
 
 ### rev 54 — 2026-08-09
 

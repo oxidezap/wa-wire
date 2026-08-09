@@ -244,6 +244,11 @@ fn the_declaration_matches_what_this_adapter_actually_does() {
         "SentFrame reports each stanza that went to the wire"
     );
 
+    assert!(
+        INFO.has(Capability::L0PlaintextCause),
+        "EncDecryptFailed says why an <enc> produced nothing"
+    );
+
     // Not claimed. Observing what was sent and being able to send are separate
     // capabilities on purpose, and this plugin only has the first.
     assert!(
@@ -645,4 +650,61 @@ fn an_unpackable_sent_frame_is_dropped() {
     };
     handler.handle_event(event);
     assert_eq!(*captured.lock().expect("sink lock"), 0);
+}
+
+/// Every reason the engine can give maps somewhere, and the two halves of the
+/// engine's own `decryption_was_attempted` line up with the two halves here.
+///
+/// The mapping ends in a catch-all so a reason added upstream still resolves
+/// rather than failing to compile — which means nothing would notice it landing
+/// in the wrong half. This is what notices.
+#[test]
+fn every_failure_reason_maps_the_way_the_engine_reads_it() {
+    use whatsapp_rust::types::events::EncDecryptFailureReason as Reason;
+
+    const EVERY: [Reason; 15] = [
+        Reason::MalformedNode,
+        Reason::UnsupportedEncType,
+        Reason::MalformedCiphertext,
+        Reason::NoSession,
+        Reason::NoSenderKey,
+        Reason::UnknownPreKey,
+        Reason::UntrustedIdentity,
+        Reason::BadMac,
+        Reason::InvalidMessage,
+        Reason::NoMessageSecret,
+        Reason::LocalCryptoFailure,
+        Reason::SignalError,
+        Reason::StorageFailure,
+        Reason::PlaintextUnusable,
+        Reason::NotAttempted,
+    ];
+
+    for reason in EVERY {
+        let status = crate::status_for(reason);
+        if reason.decryption_was_attempted() {
+            assert_eq!(
+                status,
+                PlaintextStatus::DecryptFailed,
+                "{reason:?} reached a cipher, so the status must claim it did"
+            );
+        } else {
+            assert_ne!(
+                status,
+                PlaintextStatus::DecryptFailed,
+                "{reason:?} never reached a cipher, so the status must not claim it did"
+            );
+        }
+    }
+
+    // The one the frozen vocabulary cannot carry: the engine could have tried
+    // and chose not to, and no status says that.
+    assert_eq!(
+        crate::status_for(Reason::NotAttempted),
+        PlaintextStatus::Unobserved
+    );
+    assert_eq!(
+        crate::status_for(Reason::UnsupportedEncType),
+        PlaintextStatus::Unsupported
+    );
 }

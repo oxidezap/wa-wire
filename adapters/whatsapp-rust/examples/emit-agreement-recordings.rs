@@ -195,7 +195,7 @@ fn check_replays_this_corpus(
 
 /// One engine's declaration, restated here because three of the four cannot be
 /// linked into a Rust program.
-struct Engine {
+struct Declared {
     id: &'static str,
     version: &'static str,
     engine_version: &'static str,
@@ -207,8 +207,8 @@ fn main() {
     let digest = corpus_digest();
     let names: Vec<String> = corpus().into_iter().map(|(name, _)| name).collect();
 
-    let engines = vec![
-        Engine {
+    let engines: Vec<Declared> = vec![
+        Declared {
             id: "whatsapp-rust",
             version: "0.1.0",
             engine_version: "0.7",
@@ -220,7 +220,7 @@ fn main() {
                 .with(Capability::ZeroCopyFrame),
             envelopes: whatsapp_rust_reencoded(),
         },
-        Engine {
+        Declared {
             id: "zapo",
             version: "0.1.0",
             engine_version: "1.7",
@@ -231,7 +231,7 @@ fn main() {
                 .with(Capability::DrainHook),
             envelopes: zapo_reencoded(),
         },
-        Engine {
+        Declared {
             id: "hypermeow",
             version: "0.1.0",
             engine_version: "0.0.0+frame-bytes-and-plaintext-hooks",
@@ -242,7 +242,7 @@ fn main() {
                 .with(Capability::ZeroCopyFrame),
             envelopes: replayed("hypermeow", "reencoded"),
         },
-        Engine {
+        Declared {
             id: "baileys",
             version: "0.1.0",
             engine_version: "7.0.0-rc14",

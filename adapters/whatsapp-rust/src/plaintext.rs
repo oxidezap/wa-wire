@@ -49,7 +49,7 @@
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
-use wa_wire_adapter::{NodePathBuf, Plaintext, RawStanza, StanzaSink};
+use wa_wire_adapter::{NodePathBuf, Plaintext, PlaintextStatus, RawStanza, StanzaSink};
 use whatsapp_rust::OwnedNodeRef;
 use whatsapp_rust::bytes::Bytes;
 
@@ -68,6 +68,20 @@ impl Default for PlaintextJoiner {
     }
 }
 
+/// One `<enc>` the engine could not turn into a plaintext, and why.
+///
+/// The counterpart of [`DecryptedEnc`], reported from the same loop and
+/// numbered the same way, which is what lets one slot take either.
+#[derive(Debug, Clone)]
+pub struct FailedEnc {
+    /// The stanza id this belongs to.
+    pub message_id: String,
+    /// Which `<enc>` of the stanza it was, counting from zero.
+    pub enc_index: usize,
+    /// What the boundary can say about it.
+    pub status: PlaintextStatus,
+}
+
 /// One decrypted payload, as the engine reports it.
 #[derive(Debug, Clone)]
 pub struct DecryptedEnc {
@@ -83,8 +97,9 @@ pub struct DecryptedEnc {
 struct Pending {
     message_id: String,
     frame: Bytes,
-    /// One slot per `<enc>`, in stanza order. `None` until its plaintext lands.
-    slots: Vec<Option<Bytes>>,
+    /// One slot per `<enc>`, in stanza order. Empty until the engine settles it
+    /// one way or the other.
+    slots: Vec<Slot>,
     /// Index of each `<enc>` among the root's children, so a slot can be
     /// addressed without re-walking the frame.
     child_indices: Vec<u16>,
@@ -94,15 +109,33 @@ struct Pending {
     given_up: bool,
 }
 
+/// What became of one `<enc>`.
+#[derive(Debug, Clone)]
+enum Slot {
+    /// Nothing has arrived for it yet.
+    Waiting,
+    /// Signal produced these bytes.
+    Payload(Bytes),
+    /// The engine said it produced none, and why.
+    Cause(PlaintextStatus),
+}
+
+impl Slot {
+    /// Whether the engine has said anything about this `<enc>`.
+    const fn is_settled(&self) -> bool {
+        !matches!(self, Self::Waiting)
+    }
+}
+
 impl Pending {
     /// Whether this stanza is finished and only waiting for its turn.
     fn is_complete(&self) -> bool {
-        self.given_up || self.slots.iter().all(Option::is_some)
+        self.given_up || self.slots.iter().all(Slot::is_settled)
     }
 
-    /// Whether every slot was filled, as against given up on.
+    /// Whether every slot was settled, as against given up on.
     fn is_whole(&self) -> bool {
-        self.slots.iter().all(Option::is_some)
+        self.slots.iter().all(Slot::is_settled)
     }
 }
 
@@ -211,7 +244,32 @@ impl PlaintextJoiner {
             // conservative half of that: it still emits, just without this one.
             return;
         };
-        *slot = Some(decrypted.payload.clone());
+        *slot = Slot::Payload(decrypted.payload.clone());
+        self.drain(sink);
+    }
+
+    /// Take one `<enc>` the engine could not decrypt, with the cause it gave.
+    ///
+    /// A cause never displaces a plaintext. The engine reports both for the
+    /// same `<enc>` when the bytes existed and would not parse, and the bytes
+    /// are the more useful half — a consumer holding them can decide for
+    /// itself, where a consumer holding only "unusable" cannot.
+    pub fn accept_failure<S: StanzaSink>(&mut self, failed: &FailedEnc, sink: &mut S) {
+        let Some(position) = self
+            .pending
+            .iter()
+            .position(|pending| pending.message_id == failed.message_id)
+        else {
+            return;
+        };
+        let pending = &mut self.pending[position];
+        let Some(slot) = pending.slots.get_mut(failed.enc_index) else {
+            // Same disagreement as above, handled the same way.
+            return;
+        };
+        if matches!(slot, Slot::Waiting) {
+            *slot = Slot::Cause(failed.status);
+        }
         self.drain(sink);
     }
 
@@ -272,7 +330,7 @@ impl PlaintextJoiner {
         Some(Pending {
             message_id: message_id.into_owned(),
             frame: node.backing_bytes(),
-            slots: vec![None; child_indices.len()],
+            slots: vec![Slot::Waiting; child_indices.len()],
             child_indices,
             age: 0,
             given_up: false,
@@ -312,10 +370,13 @@ fn emit<S: StanzaSink>(pending: &Pending, sink: &mut S) {
     let mut plaintexts = Vec::with_capacity(pending.slots.len());
     for (slot, path) in pending.slots.iter().zip(&paths) {
         plaintexts.push(match slot {
-            Some(payload) => Plaintext::ok(path.as_path(), payload),
-            // Not `failed`: this adapter watches plaintexts appear and is never
-            // told why one did not, so it reports the absence and no cause.
-            None => Plaintext::unobserved(path.as_path()),
+            Slot::Payload(payload) => Plaintext::ok(path.as_path(), payload),
+            Slot::Cause(PlaintextStatus::Unsupported) => Plaintext::unsupported(path.as_path()),
+            Slot::Cause(_) => Plaintext::failed(path.as_path()),
+            // Nothing arrived, for or against. The engine reports both halves,
+            // so this is the case where neither reached us — the adapter
+            // stopped watching, or the stanza was given up on.
+            Slot::Waiting => Plaintext::unobserved(path.as_path()),
         });
     }
 

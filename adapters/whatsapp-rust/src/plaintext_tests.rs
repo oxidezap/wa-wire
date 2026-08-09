@@ -73,6 +73,14 @@ fn message_with(id: &str, enc_types: &[&str]) -> Node {
         .build()
 }
 
+fn failure(id: &str, enc_index: usize, status: PlaintextStatus) -> FailedEnc {
+    FailedEnc {
+        message_id: id.to_owned(),
+        enc_index,
+        status,
+    }
+}
+
 fn plaintext(id: &str, enc_index: usize, payload: &[u8]) -> DecryptedEnc {
     DecryptedEnc {
         message_id: id.to_owned(),
@@ -448,4 +456,79 @@ fn the_declaration_holds_for_a_stanza_carrying_plaintext() {
     let envelope = EnvelopeRef::decode(&sink.envelopes[0]).expect("decodes");
     assert!(envelope.flags().is_verbatim(), "zero-copy still holds");
     assert!(crate::INFO.has(wa_wire_adapter::Capability::L0Plaintext));
+}
+
+// --- causes ------------------------------------------------------------------
+
+/// The cause the engine gave reaches the envelope, rather than flattening into
+/// "nothing arrived".
+#[test]
+fn a_reported_failure_crosses_as_a_cause() {
+    let mut joiner = PlaintextJoiner::new();
+    let mut sink = Capture::default();
+
+    joiner.accept_frame(&owned(&message_with("M1", &["msg", "pkmsg"])), &mut sink);
+    joiner.accept_plaintext(&plaintext("M1", 0, b"hello"), &mut sink);
+    joiner.accept_failure(&failure("M1", 1, PlaintextStatus::DecryptFailed), &mut sink);
+
+    assert_eq!(sink.envelopes.len(), 1);
+    assert_eq!(
+        sink.entries(0),
+        [
+            (vec![0], PlaintextStatus::Ok, b"hello".to_vec()),
+            (vec![1], PlaintextStatus::DecryptFailed, Vec::new()),
+        ],
+        "the second <enc> says why, not merely that nothing came"
+    );
+}
+
+/// A failure settles a slot, so the stanza does not wait out its lookahead.
+#[test]
+fn a_failure_completes_the_stanza_like_a_payload_does() {
+    let mut joiner = PlaintextJoiner::new();
+    let mut sink = Capture::default();
+
+    joiner.accept_frame(&owned(&message_with("M1", &["msg"])), &mut sink);
+    assert!(sink.envelopes.is_empty(), "held while the <enc> is unsettled");
+
+    joiner.accept_failure(&failure("M1", 0, PlaintextStatus::Unsupported), &mut sink);
+
+    assert_eq!(sink.envelopes.len(), 1, "settled, so it went out at once");
+    assert_eq!(
+        sink.entries(0),
+        [(vec![0], PlaintextStatus::Unsupported, Vec::new())]
+    );
+    assert_eq!(joiner.abandoned(), 0, "and was not given up on");
+}
+
+/// The engine reports both halves for one `<enc>` when the bytes existed and
+/// would not parse. The bytes are the more useful half.
+#[test]
+fn a_cause_never_displaces_a_plaintext() {
+    let mut joiner = PlaintextJoiner::new();
+    let mut sink = Capture::default();
+
+    joiner.accept_frame(&owned(&message_with("M1", &["msg"])), &mut sink);
+    joiner.accept_plaintext(&plaintext("M1", 0, b"hello"), &mut sink);
+    joiner.accept_failure(&failure("M1", 0, PlaintextStatus::DecryptFailed), &mut sink);
+
+    assert_eq!(
+        sink.entries(0),
+        [(vec![0], PlaintextStatus::Ok, b"hello".to_vec())]
+    );
+}
+
+/// Nothing at all is still `Unobserved`, which is what that status is for.
+#[test]
+fn an_enc_the_engine_never_mentions_stays_unobserved() {
+    let mut joiner = PlaintextJoiner::new();
+    let mut sink = Capture::default();
+
+    joiner.accept_frame(&owned(&message_with("M1", &["msg"])), &mut sink);
+    joiner.flush(&mut sink);
+
+    assert_eq!(
+        sink.entries(0),
+        [(vec![0], PlaintextStatus::Unobserved, Vec::new())]
+    );
 }
