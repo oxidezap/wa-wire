@@ -117,6 +117,18 @@ impl<'a> AdapterInfo<'a> {
         {
             return Err(Violation::OutboundWithoutCapability);
         }
+        // A cause is a claim about a failure, and only an adapter that reports
+        // failures can make one. Without the capability an entry says
+        // `Unobserved` — no payload arrived, cause unknown — which is what
+        // every adapter has said so far.
+        if !self.has(Capability::L0PlaintextCause)
+            && stanza
+                .plaintexts
+                .iter()
+                .any(|entry| entry.status.claims_a_cause())
+        {
+            return Err(Violation::CauseWithoutCapability);
+        }
         Ok(())
     }
 }
@@ -142,6 +154,14 @@ pub enum Violation {
         /// How many arrived.
         count: usize,
     },
+    /// A plaintext named a cause from an adapter that does not claim to know
+    /// one.
+    ///
+    /// `DecryptFailed` and `Unsupported` say why a payload is missing.
+    /// `Unobserved` says only that it is. An adapter reporting the first two
+    /// without declaring it can tell them apart is guessing, and a gate reading
+    /// the recording cannot know that.
+    CauseWithoutCapability,
     /// An outbound stanza arrived from an adapter that does not claim to
     /// observe the outbound path.
     OutboundWithoutCapability,
@@ -159,6 +179,10 @@ impl fmt::Display for Violation {
             ),
             Self::OutboundWithoutCapability => f.write_str(
                 "adapter delivered an outbound stanza without declaring l0.outbound.observed",
+            ),
+            Self::CauseWithoutCapability => f.write_str(
+                "adapter named a cause for a missing plaintext without declaring \
+                 l0.plaintext.cause",
             ),
         }
     }
@@ -310,5 +334,48 @@ mod tests {
         assert_eq!(info(&[]), info(&[]));
         assert_ne!(info(&[]), info(&[Capability::Takeover]));
         assert!(!alloc::format!("{:?}", info(&[])).is_empty());
+    }
+
+    /// A cause is a claim, and only an adapter that can tell causes apart may
+    /// make one.
+    ///
+    /// `Unobserved` says a payload did not arrive. `DecryptFailed` says Signal
+    /// refused it. Under the first, a build whose messages stopped decrypting
+    /// looks exactly like one whose adapter stopped observing — the failure and
+    /// the blind spot are the same absence, and a gate cannot tell them apart.
+    ///
+    /// Every adapter reports `Unobserved` today, and the format has carried the
+    /// other two since it was written. Naming the capability is what lets one
+    /// of them start saying more without a reader having to guess whether the
+    /// silence was ignorance.
+    #[test]
+    fn a_cause_needs_the_capability_that_claims_one() {
+        let path = NodePathBuf::new();
+        let watching = info(&[Capability::L0InboundTap, Capability::L0Plaintext]);
+
+        // What every adapter says today, and always may.
+        let unobserved = [Plaintext::unobserved(path.as_path())];
+        assert_eq!(
+            watching.verify(&RawStanza::inbound(b"f").with_plaintexts(&unobserved)),
+            Ok(())
+        );
+
+        // A cause, from an adapter that never claimed to know one.
+        let blamed = [Plaintext::failed(path.as_path())];
+        assert_eq!(
+            watching.verify(&RawStanza::inbound(b"f").with_plaintexts(&blamed)),
+            Err(Violation::CauseWithoutCapability)
+        );
+
+        // And with the claim declared, it stands.
+        let knowing = info(&[
+            Capability::L0InboundTap,
+            Capability::L0Plaintext,
+            Capability::L0PlaintextCause,
+        ]);
+        assert_eq!(
+            knowing.verify(&RawStanza::inbound(b"f").with_plaintexts(&blamed)),
+            Ok(())
+        );
     }
 }

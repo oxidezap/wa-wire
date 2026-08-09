@@ -31,6 +31,16 @@ pub enum PlaintextStatus {
 }
 
 impl PlaintextStatus {
+    /// Whether this status says *why* a payload is missing.
+    ///
+    /// `Unobserved` says only that it is, which is all an adapter watching
+    /// payloads appear can know. The other two are claims about a cause, and
+    /// an adapter making one has to declare that it can tell them apart.
+    #[must_use]
+    pub const fn claims_a_cause(self) -> bool {
+        matches!(self, Self::DecryptFailed | Self::Unsupported)
+    }
+
     /// Pack into the on-wire status byte.
     #[must_use]
     pub const fn to_byte(self) -> u8 {

@@ -35,6 +35,26 @@ pub enum Capability {
     L0OutboundObserved,
     /// Raw request/response against a stanza, correlated by the engine.
     L0Request,
+    /// Says *why* an `<enc>` produced no plaintext, not merely that none
+    /// arrived.
+    ///
+    /// [`PlaintextStatus`] has carried `DecryptFailed` and `Unsupported` since
+    /// the format was written, and no adapter has ever emitted either: all
+    /// four watch payloads appear and are never told why one did not, so they
+    /// report [`Unobserved`] and no cause.
+    ///
+    /// The distinction is what a gate needs. Under `Unobserved`, a candidate
+    /// build whose messages stopped decrypting looks exactly like one whose
+    /// adapter stopped observing — the failure and the blind spot are the same
+    /// absence. Every engine knows the difference internally and reports it
+    /// somewhere else, on an event no adapter consumes.
+    ///
+    /// Named before publication rather than after, because the format
+    /// anticipated it and only the vocabulary did not.
+    ///
+    /// [`PlaintextStatus`]: crate::PlaintextStatus
+    /// [`Unobserved`]: crate::PlaintextStatus::Unobserved
+    L0PlaintextCause,
     /// Emits the payloads it decrypted alongside the frame, so a consumer gets
     /// L0-plain rather than only L0-wire.
     ///
@@ -55,13 +75,14 @@ pub enum Capability {
 
 impl Capability {
     /// Every capability this contract version defines.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::L0InboundTap,
         Self::L0InboundAuthPhase,
         Self::L0Outbound,
         Self::L0OutboundObserved,
         Self::L0Request,
         Self::L0Plaintext,
+        Self::L0PlaintextCause,
         Self::Takeover,
         Self::ZeroCopyFrame,
         Self::DrainHook,
@@ -77,6 +98,7 @@ impl Capability {
             Self::L0OutboundObserved => "l0.outbound.observed",
             Self::L0Request => "l0.request",
             Self::L0Plaintext => "l0.plaintext",
+            Self::L0PlaintextCause => "l0.plaintext.cause",
             Self::Takeover => "l0.takeover",
             Self::ZeroCopyFrame => "l0.zero-copy-frame",
             Self::DrainHook => "lifecycle.drain-hook",
@@ -102,6 +124,7 @@ impl Capability {
             Self::ZeroCopyFrame => 6,
             Self::DrainHook => 7,
             Self::L0OutboundObserved => 8,
+            Self::L0PlaintextCause => 9,
         }
     }
 }
@@ -114,7 +137,7 @@ impl fmt::Display for Capability {
 
 /// A set of capabilities, packed into a bitmask.
 ///
-/// `u16` because there are nine and there were eight. Widening it is a
+/// `u16` because there are ten and there were eight. Widening it is a
 /// source-level change and not a wire one: a recording declares capabilities by
 /// *name* and keeps the ones it does not recognise as bytes, so a reader from
 /// before the ninth still round-trips a recording that claims it. That is why

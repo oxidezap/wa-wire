@@ -6,7 +6,7 @@
  * setup, from this list, instead of discovering it as missing traffic.
  */
 
-import { Direction, FrameOrigin, type Stanza } from './envelope.js'
+import { Direction, FrameOrigin, PlaintextStatus, type Stanza } from './envelope.js'
 
 /** One thing an adapter may or may not be able to do. */
 export const Capability = {
@@ -32,6 +32,21 @@ export const Capability = {
     L0Request: 'l0.request',
     /** Emits the payloads it decrypted alongside the frame. */
     L0Plaintext: 'l0.plaintext',
+    /**
+     * Says *why* an `<enc>` produced no plaintext, not merely that none
+     * arrived.
+     *
+     * `PlaintextStatus` has carried `DecryptFailed` and `Unsupported` since the
+     * format was written, and no adapter has ever emitted either: all four
+     * watch payloads appear and are never told why one did not, so they report
+     * `Unobserved` and no cause.
+     *
+     * The distinction is what a gate needs. Under `Unobserved`, a candidate
+     * build whose messages stopped decrypting looks exactly like one whose
+     * adapter stopped observing — the failure and the blind spot are the same
+     * absence.
+     */
+    L0PlaintextCause: 'l0.plaintext.cause',
     /**
      * Suppresses the engine's own dispatch, leaving it as transport and acks.
      *
@@ -130,6 +145,21 @@ export function verify(info: AdapterInfo, stanza: Stanza): string | undefined {
     // left, which is why this names the other one.
     if (!declares(info, Capability.L0OutboundObserved) && stanza.direction === Direction.Outbound) {
         return 'delivered an outbound stanza without declaring l0.outbound.observed'
+    }
+
+    // A cause is a claim about a failure, and only an adapter that reports
+    // failures can make one. Without the capability an entry says `Unobserved`
+    // — no payload arrived, cause unknown — which is what every adapter has
+    // said so far.
+    if (
+        !declares(info, Capability.L0PlaintextCause) &&
+        stanza.plaintexts?.some(
+            (entry) =>
+                entry.status === PlaintextStatus.DecryptFailed ||
+                entry.status === PlaintextStatus.Unsupported
+        )
+    ) {
+        return 'named a cause for a missing plaintext without declaring l0.plaintext.cause'
     }
 
     return undefined

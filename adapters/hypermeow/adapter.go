@@ -72,6 +72,11 @@ const (
 	L0Request Capability = "l0.request"
 	// L0Plaintext emits the payloads the engine decrypted alongside the frame.
 	L0Plaintext Capability = "l0.plaintext"
+	// L0PlaintextCause says *why* an `<enc>` produced no plaintext, not
+	// merely that none arrived. Without it an entry says `Unobserved`, under
+	// which a build whose messages stopped decrypting looks exactly like one
+	// whose adapter stopped observing.
+	L0PlaintextCause Capability = "l0.plaintext.cause"
 	// Takeover suppresses the engine's own dispatch.
 	Takeover Capability = "l0.takeover"
 	// ZeroCopyFrame supplies the engine's original frame bytes.
@@ -200,6 +205,17 @@ func (info AdapterInfo) Verify(envelope Envelope) error {
 	}
 	if !info.Has(L0OutboundObserved) && envelope.Direction == Outbound {
 		return &Violation{Reason: "delivered an outbound stanza without declaring l0.outbound.observed"}
+	}
+	// A cause is a claim about a failure, and only an adapter that reports
+	// failures can make one.
+	if !info.Has(L0PlaintextCause) {
+		for _, plaintext := range envelope.Plaintexts {
+			if plaintext.Status == StatusDecryptFailed || plaintext.Status == StatusUnsupported {
+				return &Violation{
+					Reason: "named a cause for a missing plaintext without declaring l0.plaintext.cause",
+				}
+			}
+		}
 	}
 	return nil
 }

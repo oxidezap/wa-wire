@@ -124,12 +124,13 @@ func TestTheVocabularyIsCompleteEvenWhereTheAdapterIsNot(t *testing.T) {
 		L0OutboundObserved,
 		L0Request,
 		L0Plaintext,
+		L0PlaintextCause,
 		Takeover,
 		ZeroCopyFrame,
 		DrainHook,
 	}
-	if len(all) != 9 {
-		t.Fatalf("contract version 1 defines nine capabilities, this names %d", len(all))
+	if len(all) != 10 {
+		t.Fatalf("contract version 1 defines ten capabilities, this names %d", len(all))
 	}
 	seen := make(map[Capability]bool, len(all))
 	for _, capability := range all {

@@ -53,14 +53,20 @@ which would make the project worse than useless.
 
 ## Capabilities are declared, never inferred
 
-`Capability::ALL` has eight members, and an adapter says which it has at setup.
+`Capability::ALL` has ten members, and an adapter says which it has at setup.
 A capability the consumer asked for and the adapter lacks is a setup error —
 loud, at startup — not a runtime surprise or a silent degradation.
 
-The set is a versioned surface rather than a list to append to. That is why
-"reports what the session sent" is not among them even though one engine can now
-do it: naming a ninth is a contract decision, recorded as D-102 in
-[`DESIGN.md`](../../DESIGN.md#decision-log) and not yet taken.
+The set is a versioned surface rather than a list to append to: adding one after
+publication is a version bump, so the vocabulary was audited before freezing.
+
+Two of the ten have no provider. `l0.outbound.observed` has one engine that
+could and an adapter that does not yet, and `l0.plaintext.cause` has none at
+all — every adapter reports `Unobserved` for a missing payload, and the format
+has carried `DecryptFailed` and `Unsupported` since it was written. A name
+without a provider costs a line; the same name added later costs a version, and
+until then a gate cannot tell a build that stopped decrypting from an adapter
+that stopped watching.
 
 ## Scope
 

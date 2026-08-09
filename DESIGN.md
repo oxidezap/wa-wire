@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 43
+> **Last revised:** rev 44
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -522,11 +522,25 @@ bytes nor the plaintexts. Rows marked *(PR #5)* are unavailable on `main`.
 | L0 **out**, observed | ✅ `Event::SentFrame` (leased) | ❌ | ❌ | ❌ |
 | L0 out, sent | ✅ `send_node` | ✅ `sendNode` | ✅ `sendNode` | ⚠️ `DangerousInternals` |
 | Raw request/response | ✅ `wait_for_node` | ✅ `query` | ✅ `query` | ⚠️ `DangerousInternals` |
-| Per-`<enc>` plaintext | ✅ upstream #1240 | ❌ | ❌ | ✅ *(PR #5)* |
+| Per-`<enc>` plaintext | ✅ upstream #1240 | ❌ | ✅ *(local)* | ✅ *(PR #5)* |
+| Why a payload is missing | ❌ | ❌ | ❌ | ❌ |
 | Plugin host | ✅ capability bitflags | ✅ tuple-typed | ❌ | ❌ |
 | Drain hook | ✅ `task_drain_timeout` | ✅ `registerDispose` | ❌ | ❌ |
-| Zero-copy frame bytes | ✅ **already retained** — `Yoke<NodeRef, BytesCart>` + `backing_bytes()` | one-line patch at `decoder.ts:344` | one-line patch at `noise-handler.ts:196` | ✅ *(PR #5)* |
+| Zero-copy frame bytes | ✅ **already retained** — `Yoke<NodeRef, BytesCart>` + `backing_bytes()` | one-line patch at `decoder.ts:344` | ✅ *(local)* | ✅ *(PR #5)* |
 | Runtime portability | native + wasm32 | node/bun/deno/browser | node (hard `ws`) | native |
+
+**Two rows have no capability identifier, deliberately.** *Plugin host* is how
+an adapter installs and *runtime portability* is where its engine runs: both
+matter to whoever is choosing an engine and neither is something a consumer can
+require of the boundary at setup. A capability is a promise about what crosses;
+these are facts about what is on the other side of it.
+
+**One row is `❌` everywhere, and is named anyway.** No adapter reports *why* an
+`<enc>` produced nothing — all four watch payloads appear and are never told —
+so every entry says `Unobserved`. `PlaintextStatus` has carried `DecryptFailed`
+and `Unsupported` since the format was written, which means the format
+anticipated a distinction the vocabulary did not name. `l0.plaintext.cause`
+names it (D-130), before publication rather than after.
 
 **Takeover is `⚠️` rather than `✅` where it is partial, and the partiality is
 the honest reading, not a shortfall.** `whatsapp-rust` never offers `success`,
@@ -1983,10 +1997,38 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-127 | `pending` counts what waits on payloads; `queued` counts what has not left | Once stanzas leave in order the two stop being the same number, and a caller asking "is anything outstanding?" means the first while a caller asking "has everything drained?" means the second. One name for both would answer whichever question the reader did not ask | 42 |
 | D-128 | Conformance compares what each engine **re-encodes**, not what it forwards | Three of the four adapters are zero-copy and forward the corpus bytes untouched, so comparing those compares nothing: three identical streams agree by construction and the run is green while proving that a copy is a copy. Re-encoding is where four implementations can differ, and on this corpus two of them differ on five stanzas of fourteen | 43 |
 | D-129 | Each engine replays the corpus in its own process and writes envelopes as files | A container would carry the claims a gate needs — which traffic, which adapter, whether the file is whole — and the comparison supplies all of them itself. `zapo` goes through one only because it had one | 43 |
+| D-130 | `l0.plaintext.cause` is named before publication, though nothing provides it yet | `PlaintextStatus` has carried `DecryptFailed` and `Unsupported` since the format was written and no adapter has ever emitted either — the format anticipated a distinction the vocabulary did not name. Under `Unobserved`, a build whose messages stopped decrypting is indistinguishable from one whose adapter stopped observing, which is the failure mode this project keeps finding. Adding it after publication is a contract version bump; adding it now costs a line | 44 |
+| D-131 | A capability is a promise about what crosses the boundary, not a fact about the engine behind it | *Plugin host* and *runtime portability* are rows in the matrix and are not capabilities: they matter to whoever is choosing an engine, and a consumer cannot require either of them at setup. Naming them would put things in the vocabulary that `require` could never usefully check | 44 |
 
 ---
 
 ## Changelog
+
+### rev 44 — 2026-08-08
+
+Audit of the capability vocabulary, publication being the point after which
+adding one is a contract version bump.
+
+- **One capability was missing, and the format already knew it** (D-130).
+  `PlaintextStatus` has carried `DecryptFailed` and `Unsupported` since RFC-008
+  and no adapter has ever emitted either: all four watch payloads appear and
+  are never told why one did not, so every entry says `Unobserved`.
+  - That absence is the failure mode this project keeps running into. Under
+    `Unobserved`, a candidate build whose messages stopped decrypting looks
+    exactly like one whose adapter stopped observing — the failure and the
+    blind spot are the same silence, and the gate cannot separate them.
+  - `l0.plaintext.cause` names it, and `verify` refuses a cause from an adapter
+    that has not declared it. Nothing provides it yet, which is the point:
+    naming it now costs a line and naming it later costs a version.
+- **Two matrix rows are deliberately not capabilities** (D-131). *Plugin host*
+  and *runtime portability* are facts about an engine rather than promises
+  about what crosses, and `require` could never usefully check either.
+- **The matrix's Baileys column was two revisions stale**: per-`<enc>`
+  plaintext and zero-copy frames both landed with the adapter in rev 41.
+- Nothing else came up. Takeover partiality is not a second capability — the
+  five stanzas `whatsapp-rust` withholds are the ones no engine can safely hand
+  over, so "complete takeover" would name something nobody should ask for.
+  Media, session handoff and the Layer 3 host are out of v1 by RFC.
 
 ### rev 43 — 2026-08-08
 
