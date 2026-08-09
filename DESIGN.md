@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 51
+> **Last revised:** rev 52
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -2038,6 +2038,45 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 52 — 2026-08-09
+
+- **The four engines had only ever been asked to agree about five of the
+  sixteen shapes the derivation models.** Agreement is as wide as the corpus,
+  and the corpus reached `IncomingMsgParser`, `IncomingMsgReceiptParser`,
+  `CallParser`, `SendMsgAckSyncParser` and `ParsePublishViewResponseSuccess`.
+  The other eleven were exercised only by generated unit tests, which are
+  written against one implementation and so cannot disagree with anything.
+- **Twelve stanzas were added and fifteen shapes are now reached**, each the
+  leanest stanza that falls to its shape rather than to a richer sibling.
+  `tests/corpus_coverage.rs` asserts it, so a spec refresh that adds a shape
+  arrives as a failure naming it.
+- **Widening the corpus found an ordering defect, which is the better find.**
+  D-041 orders a tag's shapes most-specific first, and the shape-level sort key
+  was `(guards, total fields)` — total, not required. `CallParser` demands two
+  attributes and mentions seven; `CallOfferNoticeParser` demands four. The
+  wide-but-lax shape sorted first and took every `<call>`, so
+  `CallOfferNoticeParser` could never derive. The mixin-variant sort right
+  beside it (D-107) had the rule right — `(guards, required, total)` — and the
+  shape sort was missing the middle term. Fixed, and the two now agree.
+- **One shape is unreachable and is now declared** rather than silently missing.
+  `ParseNewsletterResponseSuccess` demands `t` through both alternatives of its
+  union, and `SendMsgAckSyncParser` demands `t` and nothing else, so it is tried
+  first and always matches. The outgoing generator has had `UNREACHABLE_OUTGOING`
+  since rev 33; the incoming side had no equivalent.
+- **Declared rather than computed, on purpose.** A subset test over required
+  fields would also flag `CallReceiptParser`, which shares its required pair
+  with `IncomingMsgReceiptParser` and is reachable anyway: a `type` outside the
+  message-receipt enum makes the earlier shape reject. Reachability turns on
+  what a field accepts, not only on whether it is demanded, and a heuristic that
+  missed that would excuse a real gap.
+- **A change that was reverted, because the fix was worse than the gap.**
+  Hoisting literals pinned by every alternative of a required union into the
+  shape's guards would have made `ParseNewsletterResponseSuccess` reachable —
+  and would also have reclassified every ordinary `<ack class="message" t="…">`
+  as a newsletter response. The real client separates those by which request the
+  response answers, which `derive` cannot see (D-010). Reaching one obscure
+  shape is not worth misreading the most common ack.
 
 ### rev 51 — 2026-08-09
 

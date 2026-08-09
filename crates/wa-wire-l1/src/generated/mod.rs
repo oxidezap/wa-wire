@@ -4609,11 +4609,11 @@ pub fn derive<'a>(node: &NodeRef<'a>) -> Result<Event<'a>, DeriveError> {
         {
             return Ok(Event::ParsePublishViewResponseSuccess(inner));
         }
-        if let Ok(inner) = SendMsgAckSyncParser::derive(node) {
-            return Ok(Event::SendMsgAckSyncParser(inner));
-        }
         if let Ok(inner) = Ack::derive(node) {
             return Ok(Event::Ack(inner));
+        }
+        if let Ok(inner) = SendMsgAckSyncParser::derive(node) {
+            return Ok(Event::SendMsgAckSyncParser(inner));
         }
         if let Ok(inner) = ParseNewsletterResponseSuccess::derive(node) {
             return Ok(Event::ParseNewsletterResponseSuccess(inner));
@@ -4624,11 +4624,11 @@ pub fn derive<'a>(node: &NodeRef<'a>) -> Result<Event<'a>, DeriveError> {
         return Err(DeriveError::NoMatchingShape { tag: "ack" });
     }
     if node.tag().eq_str("call") {
-        if let Ok(inner) = CallParser::derive(node) {
-            return Ok(Event::CallParser(inner));
-        }
         if let Ok(inner) = CallOfferNoticeParser::derive(node) {
             return Ok(Event::CallOfferNoticeParser(inner));
+        }
+        if let Ok(inner) = CallParser::derive(node) {
+            return Ok(Event::CallParser(inner));
         }
         if let Ok(inner) = CallOfferPlaceholder::derive(node) {
             return Ok(Event::CallOfferPlaceholder(inner));
@@ -4645,11 +4645,11 @@ pub fn derive<'a>(node: &NodeRef<'a>) -> Result<Event<'a>, DeriveError> {
         return Err(DeriveError::NoMatchingShape { tag: "message" });
     }
     if node.tag().eq_str("receipt") {
-        if let Ok(inner) = IncomingMsgReceiptParser::derive(node) {
-            return Ok(Event::IncomingMsgReceiptParser(inner));
-        }
         if let Ok(inner) = RetryRequestParser::derive(node) {
             return Ok(Event::RetryRequestParser(inner));
+        }
+        if let Ok(inner) = IncomingMsgReceiptParser::derive(node) {
+            return Ok(Event::IncomingMsgReceiptParser(inner));
         }
         if let Ok(inner) = CallReceiptParser::derive(node) {
             return Ok(Event::CallReceiptParser(inner));
@@ -4661,6 +4661,29 @@ pub fn derive<'a>(node: &NodeRef<'a>) -> Result<Event<'a>, DeriveError> {
 
 /// Tags this build can derive.
 pub const KNOWN_TAGS: [&str; 4] = ["ack", "call", "message", "receipt"];
+
+/// Every shape this derivation models, by name.
+///
+/// The names [`Event`]'s variants carry. Exported so a caller can check
+/// coverage against the derivation rather than against a copied list.
+pub const SHAPE_NAMES: [&str; 16] = [
+    "Ack",
+    "CallOfferNoticeParser",
+    "CallOfferPlaceholder",
+    "CallParser",
+    "CallReceiptParser",
+    "IncomingMsgParser",
+    "IncomingMsgParserForAckOnly",
+    "IncomingMsgReceiptParser",
+    "ParseNewsletterResponseNegative",
+    "ParseNewsletterResponseSuccess",
+    "ParsePostNewsletterStatusResponseNegative",
+    "ParsePostNewsletterStatusResponseSuccess",
+    "ParsePublishViewResponseSuccess",
+    "ReadReceiptAckParser",
+    "RetryRequestParser",
+    "SendMsgAckSyncParser",
+];
 
 /// Fields the generator could not express, named rather than dropped in
 /// silence.

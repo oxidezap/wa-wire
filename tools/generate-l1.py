@@ -1119,13 +1119,29 @@ def main() -> None:
         pascal(e["shape"].get("parserName") or e["tag"]): len(e["shape"]["fields"])
         for e in entries
     }
+    # Required fields decide before total ones. A shape that demands four
+    # things is more specific than one that mentions seven and demands two,
+    # and the wide-but-lax shape accepts every stanza the strict one does —
+    # so trying it first makes the strict one unreachable. This is the same
+    # rule `ordered_variants` applies to mixin alternatives (D-107); it was
+    # missing here, where D-041 says it first.
+    required_counts = {
+        pascal(e["shape"].get("parserName") or e["tag"]): sum(
+            1 for f in e["shape"]["fields"] if f.get("required")
+        )
+        for e in entries
+    }
 
     by_tag: dict[str, list[tuple[str, str]]] = {}
     for variant, struct, tag in variants:
         by_tag.setdefault(tag, []).append((variant, struct))
     for shapes in by_tag.values():
         shapes.sort(
-            key=lambda s: (len(guards.get(s[1], [])), field_counts.get(s[1], 0)),
+            key=lambda s: (
+                len(guards.get(s[1], [])),
+                required_counts.get(s[1], 0),
+                field_counts.get(s[1], 0),
+            ),
             reverse=True,
         )
 
@@ -1161,6 +1177,23 @@ def main() -> None:
     ]
     lines += [f"    {rust_str(tag)}," for tag in sorted(by_tag)]
     lines += ["];", ""]
+
+    # Every shape by name, so a reader can ask what the derivation models
+    # without matching on the event enum. The conformance corpus checks itself
+    # against this: a shape nothing replays is one four engines have never been
+    # asked to agree about.
+    shape_names = sorted(struct for _, struct, _ in variants)
+    lines += [
+        "",
+        "/// Every shape this derivation models, by name.",
+        "///",
+        "/// The names [`Event`]'s variants carry. Exported so a caller can check",
+        "/// coverage against the derivation rather than against a copied list.",
+        f"pub const SHAPE_NAMES: [&str; {len(shape_names)}] = [",
+    ]
+    lines += [f"    {rust_str(name)}," for name in shape_names]
+    lines += ["];"]
+    lines += [""]
 
     # What the generator could not express, named rather than omitted.
     lines += [

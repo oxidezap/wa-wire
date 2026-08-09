@@ -81,7 +81,7 @@ pub mod semantic;
 pub mod testing;
 
 pub use error::{DeriveError, Field};
-pub use generated::{Event, KNOWN_TAGS, PROVENANCE, UNMODELLED_FIELDS, derive};
+pub use generated::{Event, KNOWN_TAGS, PROVENANCE, SHAPE_NAMES, UNMODELLED_FIELDS, derive};
 pub use outgoing::{
     MERGED_OUTGOING, OUTGOING_TAGS, OutgoingEvent, UNMODELLED_OUTGOING, UNREACHABLE_OUTGOING,
     derive_outgoing,

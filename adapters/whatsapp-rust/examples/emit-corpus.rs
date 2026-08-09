@@ -214,6 +214,132 @@ fn corpus() -> Vec<(&'static str, Node)> {
                 .attr("type", "read")
                 .build(),
         ),
+        // Below: one stanza per L1 shape the corpus did not reach. The four
+        // engines only ever agreed about five of the sixteen the derivation
+        // models, because agreement is only tested over what the corpus
+        // contains. Each of these is the leanest stanza that falls to its
+        // shape rather than to a richer sibling.
+        (
+            "15-receipt-retry",
+            NodeBuilder::new("receipt")
+                .attr("id", "RCPT-RETRY-1")
+                .attr("from", "5511999998888@s.whatsapp.net")
+                .attr("type", "retry")
+                .attr("t", "1700000020")
+                .children([
+                    NodeBuilder::new("retry")
+                        .attr("id", "RCPT-RETRY-1")
+                        .attr("count", "1")
+                        .build(),
+                    NodeBuilder::new("registration")
+                        .bytes(vec![0x00, 0x00, 0x00, 0x07])
+                        .build(),
+                ])
+                .build(),
+        ),
+        (
+            // `type="offer"` is not one of the message-receipt types, so that
+            // shape rejects it and this falls to the call one. The two demand
+            // the same two attributes and are told apart by nothing else.
+            "16-receipt-call",
+            NodeBuilder::new("receipt")
+                .attr("id", "RCPT-CALL-1")
+                .attr("from", "5511999998888@s.whatsapp.net")
+                .attr("type", "offer")
+                .children([NodeBuilder::new("offer").build()])
+                .build(),
+        ),
+        (
+            // No `id` and no `class`, so the generic ack shape cannot claim it,
+            // and the sync fields are what this one is for.
+            "26-ack-sync",
+            NodeBuilder::new("ack")
+                .attr("t", "1700000028")
+                .attr("sync", "1")
+                .attr("count", "3")
+                .build(),
+        ),
+        (
+            "17-call-offer-notice",
+            NodeBuilder::new("call")
+                .attr("id", "CALL-NOTICE-1")
+                .attr("from", "5511999998888@s.whatsapp.net")
+                .attr("t", "1700000021")
+                .children([NodeBuilder::new("offer_notice")
+                    .attr("call-creator", "5511999998888:1@s.whatsapp.net")
+                    .attr("call-id", "CALLID-1")
+                    .attr("type", "offer")
+                    .attr("media", "audio")
+                    .build()])
+                .build(),
+        ),
+        (
+            // A `<call>` with nothing on it at all: the shape that exists for
+            // exactly this, and the one a richer sibling would swallow.
+            "18-call-placeholder",
+            NodeBuilder::new("call").attr("t", "1700000022").build(),
+        ),
+        (
+            "19-ack-plain",
+            NodeBuilder::new("ack")
+                .attr("id", "ACK-PLAIN-1")
+                .attr("class", "notification")
+                .attr("type", "w:gp2")
+                .build(),
+        ),
+        (
+            "20-ack-read-receipt",
+            NodeBuilder::new("ack")
+                .children([NodeBuilder::new("readreceipts").build()])
+                .build(),
+        ),
+        (
+            "21-ack-newsletter-success",
+            NodeBuilder::new("ack")
+                .attr("id", "ACK-NL-1")
+                .attr("class", "message")
+                .attr("t", "1700000023")
+                .attr("response_server_id", "17")
+                .build(),
+        ),
+        (
+            "22-ack-newsletter-negative",
+            NodeBuilder::new("ack")
+                .attr("id", "ACK-NL-NEG-1")
+                .attr("class", "message")
+                .attr("t", "1700000024")
+                .attr("error", "404")
+                .build(),
+        ),
+        (
+            "23-ack-status-success",
+            NodeBuilder::new("ack")
+                .attr("id", "ACK-ST-1")
+                .attr("class", "status")
+                .attr("t", "1700000025")
+                .build(),
+        ),
+        (
+            "24-ack-status-negative",
+            NodeBuilder::new("ack")
+                .attr("id", "ACK-ST-NEG-1")
+                .attr("class", "status")
+                .attr("t", "1700000026")
+                .attr("error", "500")
+                .build(),
+        ),
+        (
+            // Enough to be acknowledged and not enough to be decrypted: no
+            // `<enc>`, so the full message shape cannot claim it.
+            "25-message-ack-only",
+            NodeBuilder::new("message")
+                .attr("id", "MSG-ACKONLY-1")
+                .attr("from", "5511999998888@s.whatsapp.net")
+                .attr("type", "text")
+                .attr("offline", "0")
+                .attr("t", "1700000027")
+                .build(),
+        ),
     ]
 }
 
