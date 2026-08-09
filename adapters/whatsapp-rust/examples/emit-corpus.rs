@@ -20,6 +20,7 @@
 use std::path::PathBuf;
 
 use whatsapp_rust::wacore_binary::builder::NodeBuilder;
+use whatsapp_rust::wacore_binary::jid::{Jid, Server};
 use whatsapp_rust::wacore_binary::marshal;
 use whatsapp_rust::wacore_binary::node::Node;
 
@@ -329,6 +330,55 @@ fn corpus() -> Vec<(&'static str, Node)> {
                 .build(),
         ),
         (
+            // The `lid` domain is a byte on the wire, not a suffix on a string.
+            // An encoder that writes `user@lid` as text moves the distinction
+            // into the string and loses the byte that carried it.
+            "27-receipt-lid",
+            NodeBuilder::new("receipt")
+                .attr("id", "RCPT-LID-1")
+                .attr("from", "199999999999999@lid")
+                .attr("type", "read")
+                .attr("t", "1700000029")
+                .build(),
+        ),
+        (
+            // Past 255 bytes the length field widens, and where an encoder puts
+            // that boundary is its own reading of the format.
+            "29-message-long-body",
+            NodeBuilder::new("message")
+                .attr("id", "MSG-LONG-1")
+                .attr("from", "5511999998888@s.whatsapp.net")
+                .attr("recipient", "5511777776666@s.whatsapp.net")
+                .attr("type", "text")
+                .attr("t", "1700000031")
+                .children([NodeBuilder::new("enc")
+                    .attr("v", "2")
+                    .attr("type", "msg")
+                    // 300 bytes: over the one-byte length and nowhere near the
+                    // next boundary, so it isolates this one.
+                    .bytes(vec![0xA5; 300])
+                    .build()])
+                .build(),
+        ),
+        (
+            // Past 255 children the list header widens: the same boundary
+            // question one level up.
+            "30-receipt-long-list",
+            NodeBuilder::new("receipt")
+                .attr("id", "RCPT-LONGLIST-1")
+                .attr("from", "5511999998888@s.whatsapp.net")
+                .attr("type", "read")
+                .attr("t", "1700000032")
+                .children([NodeBuilder::new("list")
+                    .children((0..300u32).map(|index| {
+                        NodeBuilder::new("item")
+                            .attr("id", format!("{index:04}"))
+                            .build()
+                    }))
+                    .build()])
+                .build(),
+        ),
+        (
             // Enough to be acknowledged and not enough to be decrypted: no
             // `<enc>`, so the full message shape cannot claim it.
             "25-message-ack-only",
@@ -348,6 +398,46 @@ fn main() -> std::io::Result<()> {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../crates/wa-wire-conformance/corpus");
     std::fs::create_dir_all(&dir)?;
 
+/// Stanzas the replay corpus cannot yet carry, and who cannot read them.
+///
+/// A corpus frame has to be readable by every engine, or the agreement run has
+/// nothing to compare. These are not: they were written to widen the encodings
+/// under test and found a decoder defect instead, which is what a corpus is
+/// for. Kept as files rather than as prose so the fix has something to be
+/// checked against, in a directory the replays do not walk.
+fn blocked() -> Vec<(&'static str, &'static str, Node)> {
+    vec![(
+        "28-message-interop",
+        "whatsmeow, Baileys and zapo all read a trailing server token that an \
+         interop JID does not carry, and desynchronise on the attribute after \
+         it. The client writes tag, user, u16 device, u16 integrator and stops \
+         (`WA/Wap.js`, the JID_INTEROP arm); the Messenger arm beside it is the \
+         one that writes a server.",
+        NodeBuilder::new("message")
+            .attr("id", "MSG-INTEROP-1")
+            // Built as a JID rather than parsed from text: an integrator has no
+            // place in any other form, so a string would drop it silently.
+            .attr(
+                "from",
+                Jid {
+                    user: "5511999998888".into(),
+                    server: Server::Interop,
+                    agent: 0,
+                    device: 3,
+                    integrator: 42,
+                },
+            )
+            .attr("type", "text")
+            .attr("t", "1700000030")
+            .children([NodeBuilder::new("enc")
+                .attr("v", "2")
+                .attr("type", "msg")
+                .bytes(b"interop-ciphertext".to_vec())
+                .build()])
+            .build(),
+    )]
+}
+
     // Removed first, so a renamed entry does not leave its old file behind for
     // the readers to pick up as an extra stanza.
     for entry in std::fs::read_dir(&dir)? {
@@ -365,6 +455,21 @@ fn main() -> std::io::Result<()> {
         let path = dir.join(format!("{name}.bin"));
         std::fs::write(&path, frame)?;
         println!("{}: {} bytes", path.display(), frame.len());
+    }
+
+    let blocked_dir = dir.join("blocked");
+    std::fs::create_dir_all(&blocked_dir)?;
+    for entry in std::fs::read_dir(&blocked_dir)? {
+        let path = entry?.path();
+        if path.extension().is_some_and(|ext| ext == "bin") {
+            std::fs::remove_file(path)?;
+        }
+    }
+    for (name, why, node) in blocked() {
+        let encoded = marshal::marshal(&node).expect("stanza marshals");
+        let path = blocked_dir.join(format!("{name}.bin"));
+        std::fs::write(&path, &encoded[1..])?;
+        println!("{}: blocked — {}", path.display(), &why[..60.min(why.len())]);
     }
     Ok(())
 }

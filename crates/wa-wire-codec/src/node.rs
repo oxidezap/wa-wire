@@ -570,10 +570,11 @@ fn parse_jid_interop<'a>(
     let user = parse_jid_user_part(reader, table)?;
     let device = reader.u16()?;
     let integrator = reader.u16()?;
-    // The trailing server token is fixed for interop JIDs, but it is on the
-    // wire and must be consumed.
-    let server_tag = reader.u8()?;
-    parse_token(reader, table, server_tag)?;
+    // No trailing server token, unlike the Messenger form right below. The
+    // client writes `tag, user, u16 device, u16 integrator` and stops
+    // (`WA/Wap.js`, the `JID_INTEROP` arm); the Messenger arm beside it does
+    // write one. Consuming a token that is not there swallows the next
+    // attribute's key and desynchronises the rest of the frame.
     Ok(Jid::interop(user, device, integrator))
 }
 

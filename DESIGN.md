@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 52
+> **Last revised:** rev 53
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -2038,6 +2038,37 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 53 — 2026-08-09
+
+- **Rev 52 widened the corpus by what the derivation reads; this widens it by
+  what an encoder writes.** Agreement between four engines is only informative
+  where they could disagree, and three of the four forward the corpus bytes
+  untouched — so what the comparison reads is each engine's *re-encoding*, and
+  an encoder only chooses where the protocol admits a choice. A corpus of plain
+  ASCII attributes asks nothing.
+- `tests/corpus_encodings.rs` counts **encodings rather than stanzas**: token
+  against spelled-out, packed nibbles, packed hexadecimal, the four JID forms,
+  a body past the one-byte length and a child list past the one-byte count.
+  Six were already present; four were not.
+- **Writing one of them found a decoder defect in three of the four engines.**
+  An interop JID is `tag, user, u16 device, u16 integrator` and stops
+  (`WA/Wap.js`, the `JID_INTEROP` arm; the Messenger arm beside it is the one
+  that writes a trailing server token). `wa-wire-codec` consumed a server token
+  that is not there, and so do `whatsmeow` and `zapo`; Baileys reads one
+  speculatively and rewinds only if it throws, which did not save it here
+  because the next byte was a valid token. All four swallow the following
+  attribute's key and desynchronise the rest of the frame.
+- **Ours is fixed, with the client cited.** The test that covered it had been
+  written against the same wrong layout — a frame ending at the JID, where
+  reading one byte too many costs nothing. It now carries an attribute after
+  the JID, so the same mistake is a parse failure.
+- **The frame is kept, in `corpus/blocked/`.** A replayed corpus needs every
+  engine to read every frame; this one three cannot. The replays walk the
+  corpus root and `captured/` and skip directories, so it stays out of the
+  agreement run and in the repository, where a fix has something to be checked
+  against. `corpus_encodings` reads both directories: the encoding is still one
+  this project must handle.
 
 ### rev 52 — 2026-08-09
 

@@ -530,17 +530,23 @@ fn a_user_jid_on_the_primary_device_omits_the_device() {
 
 #[test]
 fn interop_jids_carry_device_and_integrator() {
+    // No trailing server token: the client writes tag, user, device, integrator
+    // and stops. This frame carries a second attribute after the JID precisely
+    // so that reading one byte too many is a parse failure rather than a
+    // silently wrong device — which is how the layout was got wrong before.
     let frame = Frame::new(Slot::Token(1))
         .attr(
             Slot::Token(4),
-            Slot::Raw(vec![JID_INTEROP, 1, 0x00, 0x07, 0x00, 0x2A, 6]),
+            Slot::Raw(vec![JID_INTEROP, 1, 0x00, 0x07, 0x00, 0x2A]),
         )
+        .attr(Slot::Token(5), Slot::Token(6))
         .bytes();
     let node = parser().parse(&frame).expect("parses");
     let jid = node.attr("from").and_then(Value::as_jid).expect("a jid");
     assert_eq!(jid.device(), 7);
     assert_eq!(jid.integrator(), Some(42));
     assert_eq!(jid.to_string(), "42-message:7@interop");
+    assert_eq!(node.attrs().count(), 2, "the attribute after it survived");
 }
 
 #[test]
