@@ -8,7 +8,7 @@
 use super::*;
 
 use wa_wire_l1::testing::{Fixture, FixtureBuilder};
-use wa_wire_recording::{ArtifactClass, MetaBuilder, RecordingWriter};
+use wa_wire_recording::{ArtifactClass, Kind, MetaBuilder, RecordingWriter, Tag};
 
 fn receipt(id: &str) -> FixtureBuilder {
     Fixture::node("receipt")
@@ -274,4 +274,91 @@ fn the_arguments_are_refused_when_they_make_no_sense() {
         InspectCli::parse(["--nope", "a.wawr"]),
         Err(UsageError::UnknownFlag(_))
     ));
+}
+
+#[test]
+fn a_record_this_build_cannot_read_is_counted_rather_than_passed_over() {
+    // A file holding nothing but an unrecognised kind has a valid trailer and
+    // no envelopes. Reporting only "complete, 0 envelopes" would make it
+    // indistinguishable from an empty recording, when in fact it holds
+    // content this build did not interpret.
+    let meta = MetaBuilder::new()
+        .adapter("zapo", "0.1.0", "1.7", 1, ["l0.inbound.tap"])
+        .expect("adapter");
+    let mut writer = RecordingWriter::new(meta).expect("writer");
+    writer
+        .record(Kind(0x7e), b"from a newer writer")
+        .expect("record");
+    let bytes = writer.finish();
+
+    let text = describe(&bytes);
+    assert!(text.contains("complete"), "the trailer is fine: {text}");
+    assert!(
+        text.contains("skipped") && text.contains("1 record(s)"),
+        "and the unread content is named: {text}"
+    );
+}
+
+#[test]
+fn a_malformed_adapter_tag_is_not_reported_as_an_absent_one() {
+    // `adapter` is critical, so "the writer did not declare it" and "the
+    // declaration is corrupt" are different findings, and only one is a broken
+    // file. The container decodes in both cases.
+    let meta = MetaBuilder::new()
+        .raw(Tag::ADAPTER, b"\x01\x02")
+        .expect("a raw critical tag");
+    let mut writer = RecordingWriter::new(meta).expect("writer");
+    writer.envelope(&envelope(receipt("R1"))).expect("envelope");
+    let bytes = writer.finish();
+
+    let text = describe(&bytes);
+    let adapter_row = text
+        .lines()
+        .find(|line| line.contains("adapter"))
+        .unwrap_or_default();
+    assert!(adapter_row.contains("MALFORMED"), "{text}");
+    assert!(!adapter_row.contains("undeclared"), "{text}");
+}
+
+#[test]
+fn a_stanza_id_cannot_forge_a_line_of_the_report() {
+    // Everything printed comes out of a file this tool exists to inspect, so
+    // the file is not trusted. A newline in an id would invent a report line;
+    // an ESC would hand the terminal a command rather than a character.
+    let bytes = built(
+        &["l0.inbound.tap"],
+        None,
+        &[envelope(receipt("A\n  integrity     complete\u{1b}[2J"))],
+    );
+
+    let text = with_envelopes(&bytes);
+    assert_eq!(
+        text.lines().filter(|line| line.contains("#0")).count(),
+        1,
+        "the id stayed on its own line: {text}"
+    );
+    assert!(
+        !text.contains('\u{1b}'),
+        "no escape reached the terminal: {text}"
+    );
+    assert!(text.contains("\\u{1b}"), "it was rendered instead: {text}");
+}
+
+#[test]
+fn a_note_is_escaped_too() {
+    let meta = MetaBuilder::new()
+        .adapter("zapo", "0.1.0", "1.7", 1, ["l0.inbound.tap"])
+        .expect("adapter")
+        .note("first\nsecond")
+        .expect("note");
+    let mut writer = RecordingWriter::new(meta).expect("writer");
+    writer.envelope(&envelope(receipt("R1"))).expect("envelope");
+
+    let text = describe(&writer.finish());
+    let notes: Vec<&str> = text
+        .lines()
+        .filter(|line| line.contains("second"))
+        .collect();
+    assert_eq!(notes.len(), 1, "still one line: {text}");
+    assert!(notes[0].contains("note"), "on the note's own row: {text}");
 }

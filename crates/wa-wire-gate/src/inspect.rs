@@ -15,7 +15,7 @@ use std::fmt::Write as _;
 
 use wa_wire_codec::Parser;
 use wa_wire_contract::{Direction, EnvelopeRef, FrameOrigin, PlaintextStatus};
-use wa_wire_recording::{ArtifactClass, Integrity, ReadError, RecordingRef};
+use wa_wire_recording::{ArtifactClass, Integrity, ReadError, RecordingRef, Tag};
 
 use crate::{Dictionary, UsageError, content_counts, direction_counts, exit, table};
 
@@ -94,21 +94,27 @@ fn field(text: &mut String, name: &str, value: &str) {
 }
 
 fn render_identity(text: &mut String, recording: &RecordingRef<'_>, dictionary: &Dictionary) {
-    let adapter = recording.adapter();
-    match adapter {
+    match recording.adapter() {
         Some(meta) => {
             field(
                 text,
                 "adapter",
-                &format!(
+                &escaped(&format!(
                     "{} {} · engine {}",
                     meta.id, meta.version, meta.engine_version
-                ),
+                )),
             );
             field(text, "contract", &format!("v{}", meta.contract_version));
         }
-        // Undeclared rather than unknown: the tag is not critical, so a
-        // recording without it is still one this build may read.
+        // `adapter` is a critical tag, so absent and unreadable are separate
+        // findings and only one of them is a corrupt file. The container
+        // decodes either way, which is why the raw tag has to be looked for
+        // rather than inferred from `adapter()` returning nothing.
+        None if recording.value(Tag::ADAPTER).is_some() => field(
+            text,
+            "adapter",
+            "MALFORMED — the tag is present and its payload does not parse",
+        ),
         None => field(text, "adapter", "undeclared"),
     }
 
@@ -119,24 +125,24 @@ fn render_identity(text: &mut String, recording: &RecordingRef<'_>, dictionary: 
             .artifact_class()
             .map_or("unclassified", ArtifactClass::name),
     );
-    field(text, "dictionary", &dictionary.describe());
+    field(text, "dictionary", &escaped(&dictionary.describe()));
 
     if let Some(provenance) = recording.provenance() {
         field(
             text,
             "spec",
-            &format!(
+            &escaped(&format!(
                 "WhatsApp {} · manifest {} · generator {}",
                 provenance.whatsapp_version, provenance.manifest_hash, provenance.generator_version
-            ),
+            )),
         );
     }
 
     if let Some((from, to)) = recording.transform() {
-        field(text, "transform", &format!("{from} → {to}"));
+        field(text, "transform", &escaped(&format!("{from} → {to}")));
     }
     if let Some(digest) = recording.input_digest() {
-        field(text, "input digest", &readable_digest(digest));
+        field(text, "input digest", &escaped(&readable_digest(digest)));
     }
     if let Some(at) = recording.created_at() {
         // The number the file carries, labelled with the unit the format
@@ -145,7 +151,7 @@ fn render_identity(text: &mut String, recording: &RecordingRef<'_>, dictionary: 
         field(text, "created", &format!("{at} ms since the Unix epoch"));
     }
     if let Some(note) = recording.note() {
-        field(text, "note", note);
+        field(text, "note", &escaped(note));
     }
 }
 
@@ -229,6 +235,27 @@ fn render_counts(text: &mut String, recording: &RecordingRef<'_>) {
         );
     }
 
+    let skipped = recording.skipped_records();
+    if skipped > 0 {
+        field(
+            text,
+            "skipped",
+            &format!(
+                "{skipped} record(s) of a kind this build does not read — the file holds more \
+                 than this report describes"
+            ),
+        );
+    }
+
+    let unknown_tags = recording.unknown_critical_tags();
+    if unknown_tags > 0 {
+        field(
+            text,
+            "unknown meta",
+            &format!("{unknown_tags} critical tag(s) this build cannot read"),
+        );
+    }
+
     let counts = content_counts(recording);
     if !counts.is_empty() {
         let rendered: Vec<String> = counts
@@ -253,7 +280,7 @@ fn render_capabilities(text: &mut String, recording: &RecordingRef<'_>) {
         return;
     }
 
-    field(text, "capabilities", &declared.join(", "));
+    field(text, "capabilities", &escaped(&declared.join(", ")));
 
     let unknown: Vec<&str> = declared
         .iter()
@@ -264,7 +291,7 @@ fn render_capabilities(text: &mut String, recording: &RecordingRef<'_>) {
         field(
             text,
             "",
-            &format!("unknown to this build: {}", unknown.join(", ")),
+            &escaped(&format!("unknown to this build: {}", unknown.join(", "))),
         );
     }
 }
@@ -308,9 +335,9 @@ fn stanza_label(parser: Option<&Parser<'_>>, frame: &[u8]) -> String {
 
     match parser.parse(frame) {
         Ok(node) => {
-            let tag = node.tag().as_str().unwrap_or("?");
+            let tag = escaped(node.tag().as_str().unwrap_or("?"));
             match node.attr("id").and_then(wa_wire_codec::Value::as_str) {
-                Some(id) => format!("<{tag} id={id}>"),
+                Some(id) => format!("<{tag} id={}>", escaped(id)),
                 None => format!("<{tag}>"),
             }
         }
@@ -346,6 +373,37 @@ fn readable_digest(bytes: &[u8]) -> String {
         Ok(text) if text.chars().all(|c| c.is_ascii_graphic() || c == ' ') => text.to_owned(),
         _ => hex(bytes),
     }
+}
+
+/// Render a string from the recording so it cannot forge the report.
+///
+/// Everything printed here comes out of a file this tool exists to inspect, so
+/// the file is not trusted. A stanza id carrying a newline would forge a line
+/// of the report; one carrying `ESC [` would send the terminal a control
+/// sequence, which is a command rather than a character. Both are valid UTF-8
+/// and neither survives this.
+///
+/// Escapes C0, DEL and C1 — the ranges a terminal acts on rather than draws —
+/// and leaves ordinary text, including non-Latin scripts, exactly as it is.
+fn escaped(value: &str) -> String {
+    if !value.chars().any(needs_escaping) {
+        // The overwhelming case, and worth not allocating for.
+        return value.to_owned();
+    }
+
+    let mut out = String::with_capacity(value.len());
+    for character in value.chars() {
+        if needs_escaping(character) {
+            let _ = write!(out, "\\u{{{:x}}}", character as u32);
+        } else {
+            out.push(character);
+        }
+    }
+    out
+}
+
+fn needs_escaping(character: char) -> bool {
+    character.is_control() || matches!(character, '\u{7f}'..='\u{9f}')
 }
 
 fn hex(bytes: &[u8]) -> String {

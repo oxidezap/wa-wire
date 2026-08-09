@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 50
+> **Last revised:** rev 51
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -2038,6 +2038,41 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 51 — 2026-08-09
+
+- **The freshness guard rev 49 introduced could be walked past.** The emitter
+  checked that each engine's replay had the right *number* of stanzas and then
+  stamped today's corpus digest onto it. A replay left over from a corpus that
+  changed without changing its file count passed that check and was written out
+  looking current — the staleness the digest exists to catch, laundered by the
+  tool meant to catch it. Each stream is now compared against the corpus itself
+  before it is written: an engine's re-encoding may differ in bytes and not in
+  what it derives, so a stream that derives something else is a replay of
+  something else. Verified by swapping two of `hypermeow`'s envelopes and
+  watching the emitter refuse.
+- **The frozen recordings named no dictionary**, so the comparison read them
+  with whatever table this build carries. A token table that moves after a
+  freeze would put the same wrong tokens on both sides and agree. Each recording
+  now records the table it was written against, and a build carrying a different
+  one refuses rather than compares.
+- **Comparability is read out of each file rather than asserted over both.**
+  `Comparability::declared` states that a recording is whole, carries no unknown
+  critical tag and skipped no record — three things a file says about itself.
+  A future recording with an unrecognised record kind would have had those
+  records dropped and the comparison would have passed on the part it did read.
+- **The inspector was quiet about what it did not read.** A recording holding
+  only an unknown record kind reported "complete, 0 envelopes", which is what an
+  empty one reports. Skipped records and unknown critical tags are now counted
+  in the summary.
+- **`adapter` is a critical tag, and the code said it was not.** A present but
+  unparseable declaration reported as "undeclared", which is a different finding
+  and not a corrupt file. The two are now separate.
+- **A recording is not trusted, which is the point of opening one.** Every value
+  printed from a file is escaped: a stanza id carrying a newline forged a line
+  of the report, and one carrying `ESC [` handed the terminal a command rather
+  than a character. Both are valid UTF-8, and a tool for looking at hostile
+  files was rendering them verbatim.
 
 ### rev 50 — 2026-08-09
 

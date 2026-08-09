@@ -129,6 +129,11 @@ impl Replay {
 
         AdapterInfo::new(meta.id, meta.version, meta.engine_version, capabilities)
     }
+
+    /// What the file declares about whether it may be compared at all.
+    fn comparability(&self) -> Comparability<'_> {
+        Comparability::of(&self.decoded())
+    }
 }
 
 fn every_engine() -> Vec<Replay> {
@@ -159,6 +164,22 @@ fn every_committed_recording_is_whole_and_replays_the_current_corpus() {
             recording.unknown_critical_tags(),
             0,
             "{engine}: a critical tag this build cannot read makes it incomparable"
+        );
+        assert_eq!(
+            recording.skipped_records(),
+            0,
+            "{engine}: a record of a kind this build does not read would leave the \
+             comparison passing on the part it did read"
+        );
+        // Frozen bytes decoded against a table that has since moved would put
+        // the same wrong tokens on both sides and agree. The recording names
+        // the dictionary it was written against; this build has to be carrying
+        // that one.
+        assert_eq!(
+            recording.dictionary(),
+            Some(wa_wire_codec::tokens::SOURCE_DIGEST),
+            "{engine}: written against a different token dictionary than this build \
+             carries; re-run emit-agreement-recordings"
         );
         assert_eq!(
             recording.envelope_count(),
@@ -194,18 +215,21 @@ fn every_engine_derives_the_same_events_from_the_same_traffic() {
     let engines = every_engine();
     assert_eq!(engines.len(), 4, "the definition of done asks for four");
 
-    let digest = corpus_digest();
-    let declared = Comparability::declared(&digest, ArtifactClass::Replayed);
     let names: Vec<String> = corpus().into_iter().map(|(name, _)| name).collect();
 
     for (index, left) in engines.iter().enumerate() {
         for right in engines.iter().skip(index.saturating_add(1)) {
             let (left_envelopes, right_envelopes) = (left.envelopes(), right.envelopes());
             let (left_info, right_info) = (left.info(), right.info());
+            // Read out of each file rather than asserted over both. Declaring
+            // comparability here would state that the recordings are whole,
+            // carry no unknown critical tag and skipped no record — three
+            // things a file says about itself and a caller cannot know.
+            let (left_declared, right_declared) = (left.comparability(), right.comparability());
 
             let report = compare(
-                &Recording::new(left_info, &left_envelopes).with_comparability(declared),
-                &Recording::new(right_info, &right_envelopes).with_comparability(declared),
+                &Recording::new(left_info, &left_envelopes).with_comparability(left_declared),
+                &Recording::new(right_info, &right_envelopes).with_comparability(right_declared),
                 Tables::shared(wa_wire_codec::tokens::TABLE),
             );
 
