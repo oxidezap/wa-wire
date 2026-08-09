@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 49
+> **Last revised:** rev 50
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -543,11 +543,29 @@ require of the boundary at setup. A capability is a promise about what crosses;
 these are facts about what is on the other side of it.
 
 **One row is `❌` everywhere, and is named anyway.** No adapter reports *why* an
-`<enc>` produced nothing — all four watch payloads appear and are never told —
-so every entry says `Unobserved`. `PlaintextStatus` has carried `DecryptFailed`
-and `Unsupported` since the format was written, which means the format
-anticipated a distinction the vocabulary did not name. `l0.plaintext.cause`
-names it (D-130), before publication rather than after.
+`<enc>` produced nothing, so every entry says `Unobserved`. `PlaintextStatus`
+has carried `DecryptFailed` and `Unsupported` since the format was written,
+which means the format anticipated a distinction the vocabulary did not name.
+`l0.plaintext.cause` names it (D-130), before publication rather than after.
+
+**It is not that the engines are silent.** `whatsapp-rust` dispatches
+`Event::UndecryptableMessage`, and reading it closely is what settled this
+(D-133). It carries the message, `is_unavailable`, an `unavailable_type` and a
+`decrypt_fail_mode` — and `decrypt_fail_mode` is the server's `show`/`hide`
+display hint, not a reason. Two properties rule it out for this row: it is
+dispatched **per message rather than per `<enc>`**, so a fan-out stanza cannot
+have its failures attributed; and it is **deduplicated per `(chat, id)` and
+suppressed on resends**, so the second time a stanza arrives undecryptable
+there is no event at all. An adapter wiring it into a plaintext entry would
+produce a `DecryptFailed` that is right sometimes and quietly missing others,
+which is worse than the `Unobserved` it reports today — a gate can act on a
+status that is always honest and cannot act on one that is usually honest.
+
+What would close it is the symmetric counterpart of `Event::DecryptedPayload`
+(upstream #1240): a failure event carrying `enc_index` and a cause, dispatched
+from the same loop, which already has `enc_index` in scope. Every failure
+branch in that loop needs one, so it is an engine change with its own review
+rather than an adapter change.
 
 **Takeover is `⚠️` rather than `✅` where it is partial, and the partiality is
 the honest reading, not a shortfall.** `whatsapp-rust` never offers `success`,
@@ -2015,10 +2033,31 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-130 | `l0.plaintext.cause` is named before publication, though nothing provides it yet | `PlaintextStatus` has carried `DecryptFailed` and `Unsupported` since the format was written and no adapter has ever emitted either — the format anticipated a distinction the vocabulary did not name. Under `Unobserved`, a build whose messages stopped decrypting is indistinguishable from one whose adapter stopped observing, which is the failure mode this project keeps finding. Adding it after publication is a contract version bump; adding it now costs a line | 44 |
 | D-131 | A capability is a promise about what crosses the boundary, not a fact about the engine behind it | *Plugin host* and *runtime portability* are rows in the matrix and are not capabilities: they matter to whoever is choosing an engine, and a consumer cannot require either of them at setup. Naming them would put things in the vocabulary that `require` could never usefully check | 44 |
 | D-132 | Publication freezes contract version 1 as *fixed*, not as *final* | New capability identifiers, new reserved flag bits and new metadata tags may still appear: a reader that meets one keeps it rather than refusing, because the format was built to carry what it cannot resolve. What needs version 2 is moving a field, changing what one means, or removing anything — the three a reader cannot survive by ignoring | 45 |
+| D-133 | `l0.plaintext.cause` stays without a provider rather than being wired to `Event::UndecryptableMessage` | That event is per message, deduplicated per `(chat, id)` and suppressed on resends, and its `decrypt_fail_mode` is a display hint rather than a cause. A status that is right sometimes and absent otherwise is worse than one that is uniformly `Unobserved`: a gate can act on the second and not on the first | 50 |
 
 ---
 
 ## Changelog
+
+### rev 50 — 2026-08-09
+
+- **The tenth capability's justification was wrong, and it was mine.** The
+  matrix said no adapter reports why an `<enc>` produced nothing because the
+  engines never say. `whatsapp-rust` does say: `Event::UndecryptableMessage`
+  has existed all along.
+- **It still cannot serve** (D-133), for reasons worth writing down so nobody
+  investigates this twice. It is dispatched per message rather than per `<enc>`,
+  so a fan-out stanza's failures cannot be attributed. It is deduplicated per
+  `(chat, id)` and suppressed on resends, so the second arrival produces no
+  event. And `decrypt_fail_mode` is the server's `show`/`hide` display hint, not
+  a cause. Wired into a plaintext entry it would give a `DecryptFailed` that is
+  right sometimes and silently missing otherwise, which is worse than the
+  uniform `Unobserved` today — a gate can act on a status that is always honest.
+- **What would close it** is the symmetric counterpart of
+  `Event::DecryptedPayload`: a failure event carrying `enc_index` and a cause,
+  from the same loop, which already has `enc_index` in scope. Every failure
+  branch needs one, so it is an engine change with its own review rather than
+  something an adapter can arrange.
 
 ### rev 49 — 2026-08-09
 
