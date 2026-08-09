@@ -35,7 +35,9 @@ Nothing to unregister: a caller that wants to stop stops passing the callbacks.
 
 ## What it needs from Baileys
 
-Two observation points, both added for this and neither present upstream:
+Two observation points, proposed upstream in
+[WhiskeySockets/Baileys#2762](https://github.com/WhiskeySockets/Baileys/pull/2762)
+and open as of rev 47, so this is a branch and not yet a fact about the engine:
 
 | Hook | What it carries | Why it did not exist |
 | --- | --- | --- |
@@ -106,6 +108,6 @@ npm install
 npm test
 ```
 
-Expects a `Baileys` checkout beside `wa-wire`, built (`pnpm build`) so the
-observation points are in its `lib/`. The engine is a `file:` dependency rather
-than a version: the hooks are local changes and nowhere published.
+Expects a `Baileys` checkout beside `wa-wire`, on the branch above and built
+(`pnpm build`) so the observation points are in its `lib/`. The engine is a
+`file:` dependency rather than a version until the PR lands.

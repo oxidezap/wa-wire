@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 46
+> **Last revised:** rev 47
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1766,9 +1766,9 @@ No L2. No Layer 3 host.
 1. `wa-wire-contract` published, with the RFC-008 format specified and frozen.
    **Done in rev 45**, at 0.1.0 — [on crates.io](https://crates.io/crates/wa-wire-contract).
 2. Four adapters emitting L0-plain: `whatsapp-rust`, `zapo`, `Baileys`,
-   `hypermeow`. **Done as of rev 41.** Two are built against local engine
-   changes: `hypermeow` against an open upstream PR, `Baileys` against
-   observation points that exist only in a working tree.
+   `hypermeow`. **Done as of rev 41.** Two are built against engine changes
+   still in review: [polymorfa/hypermeow#5](https://github.com/polymorfa/hypermeow/pull/5)
+   and [WhiskeySockets/Baileys#2762](https://github.com/WhiskeySockets/Baileys/pull/2762).
 3. L1 derivation generated from `whatspec`, host-side, single implementation.
    **Done.** Inbound stanzas in rev 11, payloads in rev 27 — generated rather
    than written since rev 28 corrected where the numbers come from — and
@@ -2006,6 +2006,28 @@ Portability is enforced too: the contract builds with no allocator and for
 
 ## Changelog
 
+### rev 47 — 2026-08-08
+
+- **The Baileys hooks are upstream** as
+  [WhiskeySockets/Baileys#2762](https://github.com/WhiskeySockets/Baileys/pull/2762),
+  against `develop`. Both engine-side dependencies are now open PRs rather than
+  one PR and one working tree, which is the difference between a fourth adapter
+  someone else can build and one only this machine can.
+- **Reviewing the patch for upstreaming found a copy I had added.**
+  `transport.decrypt` already returns a `Buffer`, so the `Buffer.from(result)`
+  wrapping it copied every inbound frame, whether or not anyone was observing.
+  Measured at +15% and +2KB per frame; removed. `decodeBinaryNodeWithBuffer`
+  itself is within 1% of `decodeBinaryNode`, which is what it should be, since
+  it does the same work and returns an intermediate that already existed.
+- The first benchmark said the new function was 55% *faster*, which is not
+  something a function doing identical work can be. It was V8 tier-up
+  penalising whichever case ran first. Warming every case before measuring any,
+  then taking a median over alternating rounds, gave -0.7%. Worth remembering
+  the next time a number here looks good.
+- The patch went from 153 lines to 95: a 28-line helper folded into its call
+  site, a duplicated type signature replaced by an import, and the commentary
+  cut to what a reader of that file would need.
+
 ### rev 46 — 2026-08-08
 
 - **The published README said `l0.outbound.observed` had no provider. It has
@@ -2122,7 +2144,9 @@ adding one is a contract version bump.
 - **The fourth engine.** `Baileys` needed two observation points and had
   neither: the buffer a node was decoded from fell out of scope in
   `processData`, and nothing carried a plaintext outside the parse that
-  consumed it. Both are local changes to a working tree, not a PR.
+  consumed it. Both are proposed in
+  [WhiskeySockets/Baileys#2762](https://github.com/WhiskeySockets/Baileys/pull/2762),
+  open as of rev 47.
   - `decodeBinaryNodeWithBuffer` is the whole of the first: the same work
     `decodeBinaryNode` does, handing back the decompressed bytes as well.
   - The second fires **before the protobuf is parsed**, and fires for a payload
