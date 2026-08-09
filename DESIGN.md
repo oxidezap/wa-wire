@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 53
+> **Last revised:** rev 54
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -2038,6 +2038,38 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 54 — 2026-08-09
+
+- **Rev 53 said three engines misparse an interop JID. They do not, and the
+  claim is withdrawn.** It rested on reading the client's *writer*
+  (`WA/Wap.js`, `ne()`), which emits `tag, user, u16 device, u16 integrator`
+  and stops. The client's *reader* is `be()` in the same file, and it takes
+  user, device, integrator and then a string it discards. Both are the client;
+  the two directions of this JID genuinely differ, and `whatsapp-rust`'s own
+  marshal tests say so in as many words. For inbound traffic the reader is the
+  authority, so the trailing server token is there and consuming it is correct.
+  `whatsmeow`, `zapo`, Baileys, `whatsapp-rust` and rev 52's `wa-wire-codec`
+  all agree; rev 53 broke ours to match a writer it should not have been
+  reading. Reverted.
+- The `hypermeow` failure said `expected "interop", got "type"` — the decoder
+  *validating* the token it had just read. That was the answer, and it was
+  read as the symptom.
+- **Chasing it did find a real defect, ours alone.** A JID's user is read with
+  the general value reader; its **server** was read as a dictionary token only.
+  `newsletter`, `bot`, `interop` and `hosted.lid` are in none of the five
+  dictionaries, so each arrives spelled out — and a `@newsletter` JID, which is
+  ordinary current traffic, could not be parsed at all. The client reads that
+  position with `decodeString`, which takes either, and so does every other
+  engine.
+- **A test had that backwards and locked it in.** `a_jid_server_must_be_a_token`
+  used a spelled-out server as the *counterexample* and asserted the parse
+  fails. It now asserts `@newsletter` parses, with a second test for a server
+  that is not text at all.
+- The corpus carries a `@newsletter` message rather than an interop one. An
+  interop frame cannot represent inbound traffic here, because it is generated
+  by an engine's writer and no writer emits the inbound form — which is the
+  same asymmetry, met from the other side.
 
 ### rev 53 — 2026-08-09
 

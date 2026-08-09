@@ -530,14 +530,14 @@ fn a_user_jid_on_the_primary_device_omits_the_device() {
 
 #[test]
 fn interop_jids_carry_device_and_integrator() {
-    // No trailing server token: the client writes tag, user, device, integrator
-    // and stops. This frame carries a second attribute after the JID precisely
-    // so that reading one byte too many is a parse failure rather than a
-    // silently wrong device — which is how the layout was got wrong before.
+    // A second attribute after the JID, so that reading one byte too few or
+    // too many is a parse failure rather than a silently wrong device. The
+    // trailing server token is on the wire inbound even though the outbound
+    // form omits it, and a frame ending at the JID cannot tell the two apart.
     let frame = Frame::new(Slot::Token(1))
         .attr(
             Slot::Token(4),
-            Slot::Raw(vec![JID_INTEROP, 1, 0x00, 0x07, 0x00, 0x2A]),
+            Slot::Raw(vec![JID_INTEROP, 1, 0x00, 0x07, 0x00, 0x2A, 6]),
         )
         .attr(Slot::Token(5), Slot::Token(6))
         .bytes();
@@ -756,17 +756,42 @@ fn a_jid_inside_a_jid_user_slot_is_rejected() {
 }
 
 #[test]
-fn a_jid_server_must_be_a_token() {
+fn a_jid_server_that_is_not_in_a_dictionary_is_spelled_out() {
+    // `newsletter`, `bot`, `interop` and `hosted.lid` are in none of the five
+    // dictionaries, so each arrives as a string. Refusing those refuses
+    // ordinary current traffic, and the client reads this position with
+    // `decodeString`, which takes either.
     let frame = Frame::new(Slot::Token(1))
         .attr(
             Slot::Token(4),
-            Slot::Raw(vec![JID_PAIR, LIST_EMPTY, BINARY_8, 1, b'x']),
+            Slot::Raw(
+                [
+                    &[JID_PAIR, NIBBLE_8, 0x01, 0x12][..],
+                    &[BINARY_8, 10],
+                    b"newsletter",
+                ]
+                .concat(),
+            ),
         )
         .bytes();
-    // BINARY_8 is not a token tag, so the table lookup fails.
+
+    let node = parser().parse(&frame).expect("parses");
+    let jid = node.attr("from").and_then(Value::as_jid).expect("a jid");
+    assert_eq!(jid.server(), "newsletter");
+}
+
+#[test]
+fn a_jid_server_that_is_not_text_is_refused() {
+    let frame = Frame::new(Slot::Token(1))
+        .attr(
+            Slot::Token(4),
+            Slot::Raw(vec![JID_PAIR, LIST_EMPTY, BINARY_8, 1, 0xFF]),
+        )
+        .bytes();
+
     assert!(matches!(
         parser().parse(&frame),
-        Err(ParseError::UnknownToken { .. })
+        Err(ParseError::NonStringAttr)
     ));
 }
 

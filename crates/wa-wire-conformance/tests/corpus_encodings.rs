@@ -43,8 +43,8 @@ enum Form {
     JidWithDevice,
     /// A JID on the `lid` domain rather than the phone-number one.
     JidLid,
-    /// A JID carrying an integrator, which only interop JIDs do.
-    JidInterop,
+    /// A JID whose server is in no dictionary, so it is spelled out.
+    JidSpelledOutServer,
     /// A body whose length needs more than one byte.
     LongBody,
     /// A node with more children than a one-byte count can hold.
@@ -81,8 +81,9 @@ const REQUIRED: [(Form, &str); 10] = [
          encoder writing `user@lid` as text moves that into the string",
     ),
     (
-        Form::JidInterop,
-        "an integrator has no place in any other form",
+        Form::JidSpelledOutServer,
+        "`newsletter`, `bot`, `interop` and `hosted.lid` are in none of the five \
+         dictionaries, so a reader that only resolves tokens refuses them",
     ),
     (
         Form::LongBody,
@@ -95,20 +96,10 @@ const REQUIRED: [(Form, &str); 10] = [
     ),
 ];
 
-/// Every frame, including the ones no replay walks.
-///
-/// `corpus/blocked/` holds frames at least one engine cannot decode. They are
-/// out of the replay because an agreement run needs every engine to read every
-/// frame, and in here because the encoding they carry is still one this
-/// project has to be able to read. The interop JID got there by being written:
-/// three of the four engines desynchronise on it, which is a finding rather
-/// than a reason to stop testing the form.
 fn corpus() -> Vec<(String, Vec<u8>)> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("corpus");
-    let mut paths: Vec<PathBuf> = [root.clone(), root.join("blocked")]
-        .iter()
-        .filter_map(|dir| std::fs::read_dir(dir).ok())
-        .flatten()
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(&root)
+        .expect("the corpus directory reads")
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| path.extension().is_some_and(|ext| ext == "bin"))
@@ -146,9 +137,16 @@ fn note(found: &mut BTreeSet<Form>, value: Value<'_>) {
             });
         }
         Value::Jid(jid) => {
-            if jid.integrator().is_some() {
-                found.insert(Form::JidInterop);
-            } else if jid.server() == "lid" {
+            // Asked of the table rather than listed here, so the set follows
+            // the dictionaries instead of a copy of them.
+            let in_dictionary = (0..=u8::MAX)
+                .filter_map(|tag| wa_wire_codec::tokens::TABLE.single_byte(tag))
+                .any(|token| token == jid.server());
+            if !in_dictionary {
+                found.insert(Form::JidSpelledOutServer);
+            }
+
+            if jid.server() == "lid" {
                 found.insert(Form::JidLid);
             } else if jid.device() > 0 {
                 found.insert(Form::JidWithDevice);

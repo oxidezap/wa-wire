@@ -529,13 +529,30 @@ fn parse_jid_user_part<'a>(
     }
 }
 
+/// A JID's server, in any form the wire may carry it.
+///
+/// Not every server is in a dictionary. `newsletter`, `bot`, `interop` and
+/// `hosted.lid` are in none of the five, so each arrives spelled out — and a
+/// reader that only resolves tokens refuses a `@newsletter` JID, which is
+/// ordinary current traffic. The client reads this position with
+/// `decodeString` (`WA/Wap.js`, `ge()`), which takes a token or a string
+/// indifferently, and so does every other engine.
+fn parse_server<'a>(reader: &mut Reader<'a>, table: TokenTable<'a>) -> Result<&'a str, ParseError> {
+    let tag = reader.u8()?;
+    match parse_value(reader, table, tag)? {
+        Value::Token(token) => Ok(token),
+        Value::Bytes(bytes) => core::str::from_utf8(bytes).map_err(|_| ParseError::NonStringAttr),
+        // A server is neither digits nor hexadecimal, and a JID cannot be one.
+        Value::Packed(_) | Value::Jid(_) | Value::Nil => Err(ParseError::UnexpectedTag { tag }),
+    }
+}
+
 fn parse_jid_pair<'a>(
     reader: &mut Reader<'a>,
     table: TokenTable<'a>,
 ) -> Result<Jid<'a>, ParseError> {
     let user = parse_jid_user_part(reader, table)?;
-    let server_tag = reader.u8()?;
-    let server = parse_token(reader, table, server_tag)?;
+    let server = parse_server(reader, table)?;
     Ok(Jid::pair(user, server))
 }
 
@@ -570,11 +587,16 @@ fn parse_jid_interop<'a>(
     let user = parse_jid_user_part(reader, table)?;
     let device = reader.u16()?;
     let integrator = reader.u16()?;
-    // No trailing server token, unlike the Messenger form right below. The
-    // client writes `tag, user, u16 device, u16 integrator` and stops
-    // (`WA/Wap.js`, the `JID_INTEROP` arm); the Messenger arm beside it does
-    // write one. Consuming a token that is not there swallows the next
-    // attribute's key and desynchronises the rest of the frame.
+    // The trailing server token is on the wire *inbound* and must be consumed.
+    //
+    // The two directions of this JID genuinely differ, which is easy to get
+    // backwards. The client's reader takes user, device, integrator and then a
+    // string it discards (`WA/Wap.js`, `be()`); its writer emits user, device,
+    // integrator and stops (`ne()`, the `JID_INTEROP` arm). Reading the writer
+    // and concluding the token does not exist breaks every inbound interop JID
+    // by one attribute. `whatsapp-rust`, `whatsmeow`, `zapo` and Baileys all
+    // read it, and `whatsapp-rust`'s own marshal tests say why they must.
+    parse_server(reader, table)?;
     Ok(Jid::interop(user, device, integrator))
 }
 
@@ -584,8 +606,7 @@ fn parse_jid_messenger<'a>(
 ) -> Result<Jid<'a>, ParseError> {
     let user = parse_jid_user_part(reader, table)?;
     let device = reader.u16()?;
-    let server_tag = reader.u8()?;
-    parse_token(reader, table, server_tag)?;
+    parse_server(reader, table)?;
     Ok(Jid::messenger(user, device))
 }
 

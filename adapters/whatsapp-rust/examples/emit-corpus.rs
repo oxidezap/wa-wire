@@ -20,7 +20,6 @@
 use std::path::PathBuf;
 
 use whatsapp_rust::wacore_binary::builder::NodeBuilder;
-use whatsapp_rust::wacore_binary::jid::{Jid, Server};
 use whatsapp_rust::wacore_binary::marshal;
 use whatsapp_rust::wacore_binary::node::Node;
 
@@ -342,6 +341,25 @@ fn corpus() -> Vec<(&'static str, Node)> {
                 .build(),
         ),
         (
+            // `newsletter` is in none of the five dictionaries, so its server
+            // arrives spelled out where `s.whatsapp.net` arrives as one byte.
+            // A reader that only resolves tokens refuses this, and `bot`,
+            // `interop` and `hosted.lid` with it.
+            "28-message-newsletter",
+            NodeBuilder::new("message")
+                .attr("id", "MSG-NL-1")
+                .attr("from", "120363000000000000@newsletter")
+                .attr("recipient", "5511777776666@s.whatsapp.net")
+                .attr("type", "text")
+                .attr("t", "1700000030")
+                .children([NodeBuilder::new("enc")
+                    .attr("v", "2")
+                    .attr("type", "msg")
+                    .bytes(b"newsletter-ciphertext".to_vec())
+                    .build()])
+                .build(),
+        ),
+        (
             // Past 255 bytes the length field widens, and where an encoder puts
             // that boundary is its own reading of the format.
             "29-message-long-body",
@@ -398,46 +416,6 @@ fn main() -> std::io::Result<()> {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../crates/wa-wire-conformance/corpus");
     std::fs::create_dir_all(&dir)?;
 
-/// Stanzas the replay corpus cannot yet carry, and who cannot read them.
-///
-/// A corpus frame has to be readable by every engine, or the agreement run has
-/// nothing to compare. These are not: they were written to widen the encodings
-/// under test and found a decoder defect instead, which is what a corpus is
-/// for. Kept as files rather than as prose so the fix has something to be
-/// checked against, in a directory the replays do not walk.
-fn blocked() -> Vec<(&'static str, &'static str, Node)> {
-    vec![(
-        "28-message-interop",
-        "whatsmeow, Baileys and zapo all read a trailing server token that an \
-         interop JID does not carry, and desynchronise on the attribute after \
-         it. The client writes tag, user, u16 device, u16 integrator and stops \
-         (`WA/Wap.js`, the JID_INTEROP arm); the Messenger arm beside it is the \
-         one that writes a server.",
-        NodeBuilder::new("message")
-            .attr("id", "MSG-INTEROP-1")
-            // Built as a JID rather than parsed from text: an integrator has no
-            // place in any other form, so a string would drop it silently.
-            .attr(
-                "from",
-                Jid {
-                    user: "5511999998888".into(),
-                    server: Server::Interop,
-                    agent: 0,
-                    device: 3,
-                    integrator: 42,
-                },
-            )
-            .attr("type", "text")
-            .attr("t", "1700000030")
-            .children([NodeBuilder::new("enc")
-                .attr("v", "2")
-                .attr("type", "msg")
-                .bytes(b"interop-ciphertext".to_vec())
-                .build()])
-            .build(),
-    )]
-}
-
     // Removed first, so a renamed entry does not leave its old file behind for
     // the readers to pick up as an extra stanza.
     for entry in std::fs::read_dir(&dir)? {
@@ -457,19 +435,5 @@ fn blocked() -> Vec<(&'static str, &'static str, Node)> {
         println!("{}: {} bytes", path.display(), frame.len());
     }
 
-    let blocked_dir = dir.join("blocked");
-    std::fs::create_dir_all(&blocked_dir)?;
-    for entry in std::fs::read_dir(&blocked_dir)? {
-        let path = entry?.path();
-        if path.extension().is_some_and(|ext| ext == "bin") {
-            std::fs::remove_file(path)?;
-        }
-    }
-    for (name, why, node) in blocked() {
-        let encoded = marshal::marshal(&node).expect("stanza marshals");
-        let path = blocked_dir.join(format!("{name}.bin"));
-        std::fs::write(&path, &encoded[1..])?;
-        println!("{}: blocked — {}", path.display(), &why[..60.min(why.len())]);
-    }
     Ok(())
 }
