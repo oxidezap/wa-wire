@@ -10,6 +10,22 @@ Independent implementations reading one input find bugs that no single
 implementation's own tests can, because a bug and its test are usually written
 by the same person on the same afternoon. **Divergence is the signal.**
 
+## Four engines, frozen
+
+`recordings/*.wawr` holds one engine's re-encoded corpus stream each, and
+[`tests/engine_agreement.rs`](tests/engine_agreement.rs) compares all six pairs
+on every push. No engine is needed to run it: comparing needs four byte streams
+and a token table.
+
+Producing them does need all four, so they are refreshed by
+`cargo run --example emit-agreement-recordings` in the `whatsapp-rust` adapter.
+Each file carries the corpus digest, so a recording of traffic that has since
+changed is refused rather than compared.
+
+What this catches is our own side moving — a derivation or codec change that
+makes four engines stop agreeing. What it cannot catch is an engine moving,
+since a committed recording is a photograph of one.
+
 ## Two layers that fail differently
 
 - **L0** — the frame bytes each engine forwarded. Byte-identical frames mean the

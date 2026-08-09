@@ -173,6 +173,24 @@ cd adapters/baileys   && npx tsx scripts/replay-corpus.ts
 cd adapters/zapo      && npx tsx scripts/emit-recording.ts
 ```
 
+### Refreshing the frozen copy
+
+The same comparison runs in CI, over one committed recording per engine, in
+[`wa-wire-conformance`](../../crates/wa-wire-conformance). Comparing needs no
+engine; producing the streams does, which is the whole reason there are two
+runs. After the replays above:
+
+```console
+cd adapters/whatsapp-rust && cargo run --example emit-agreement-recordings
+```
+
+That writes `crates/wa-wire-conformance/recordings/*.wawr` — 16KB for all four.
+Each carries the corpus digest, so a recording of traffic that has since changed
+is refused rather than passed, and the failure names this command.
+
+**Run it whenever an engine moves.** The CI copy catches our own derivation
+drifting; only this live run catches an engine's encoder changing under us.
+
 It compares what each engine **re-encodes**, not what it forwards. Three of the
 four adapters are zero-copy and forward the corpus bytes untouched, so comparing
 those compares nothing — three identical streams agree by construction. Each
