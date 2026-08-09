@@ -52,6 +52,32 @@
 //! # Ok::<(), Box<dyn core::error::Error>>(())
 //! ```
 //!
+//! # What publication froze
+//!
+//! Contract version 1 is fixed as of 0.1.0: the envelope layout, the ten
+//! capability identifiers, and the meaning of every field an envelope carries.
+//! An adapter written against this can be linked by a host built against it
+//! and neither has to ask the other's version.
+//!
+//! Fixed rather than final. What may still happen inside version 1:
+//!
+//! - **new capability identifiers**, which an older reader keeps as unknown
+//!   text rather than refusing — a recording declares them by name and
+//!   preserves the ones it cannot resolve;
+//! - **new reserved-flag bits and new metadata tags**, the latter carrying a
+//!   critical bit that says whether skipping one is safe;
+//! - anything additive that an existing reader can ignore without being wrong.
+//!
+//! What would need version 2: moving a field, changing what one means, or
+//! removing anything. `ContractVersion::check` compares by equality for that
+//! reason — a differing major means the layout may differ, and guessing is how
+//! silent corruption starts.
+//!
+//! **A WhatsApp-side protocol change never bumps this.** L0 is total: the frame
+//! crosses verbatim, so at L0 there is nothing for a protocol change to break.
+//! Which WhatsApp build a derivation came from is [`Provenance`], tracked
+//! separately and expected to move often.
+//!
 //! # Two version axes
 //!
 //! [`ContractVersion`] versions *this* boundary; [`Provenance`] records which

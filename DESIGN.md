@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 44
+> **Last revised:** rev 45
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1764,6 +1764,7 @@ No L2. No Layer 3 host.
 ### Definition of done for v1
 
 1. `wa-wire-contract` published, with the RFC-008 format specified and frozen.
+   **Done in rev 45**, at 0.1.0.
 2. Four adapters emitting L0-plain: `whatsapp-rust`, `zapo`, `Baileys`,
    `hypermeow`. **Done as of rev 41.** Two are built against local engine
    changes: `hypermeow` against an open upstream PR, `Baileys` against
@@ -1999,10 +2000,29 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-129 | Each engine replays the corpus in its own process and writes envelopes as files | A container would carry the claims a gate needs — which traffic, which adapter, whether the file is whole — and the comparison supplies all of them itself. `zapo` goes through one only because it had one | 43 |
 | D-130 | `l0.plaintext.cause` is named before publication, though nothing provides it yet | `PlaintextStatus` has carried `DecryptFailed` and `Unsupported` since the format was written and no adapter has ever emitted either — the format anticipated a distinction the vocabulary did not name. Under `Unobserved`, a build whose messages stopped decrypting is indistinguishable from one whose adapter stopped observing, which is the failure mode this project keeps finding. Adding it after publication is a contract version bump; adding it now costs a line | 44 |
 | D-131 | A capability is a promise about what crosses the boundary, not a fact about the engine behind it | *Plugin host* and *runtime portability* are rows in the matrix and are not capabilities: they matter to whoever is choosing an engine, and a consumer cannot require either of them at setup. Naming them would put things in the vocabulary that `require` could never usefully check | 44 |
+| D-132 | Publication freezes contract version 1 as *fixed*, not as *final* | New capability identifiers, new reserved flag bits and new metadata tags may still appear: a reader that meets one keeps it rather than refusing, because the format was built to carry what it cannot resolve. What needs version 2 is moving a field, changing what one means, or removing anything — the three a reader cannot survive by ignoring | 45 |
 
 ---
 
 ## Changelog
+
+### rev 45 — 2026-08-08
+
+- **`wa-wire-contract` 0.1.0 is published**, and the definition of done is
+  closed. Contract version 1 is fixed: the envelope layout, the ten capability
+  identifiers, and what every field an envelope carries means.
+- **Fixed is not final** (D-132), and the difference is worth stating where
+  someone depending on this will read it. Additive change stays inside version
+  1 — new capability names, new reserved flag bits, new metadata tags — because
+  the format was built to carry what a reader cannot resolve: a recording
+  declares capabilities by name and preserves the unknown ones, and a metadata
+  tag says with its critical bit whether skipping it is safe. Version 2 is for
+  the three things a reader cannot survive by ignoring: a field that moved, a
+  field that changed meaning, a field that went away.
+- The crate gained the manifest a listing needs — keywords, categories, a
+  README link — and nothing else. It has no dependencies, and packaging it
+  builds it outside the workspace, which is the only real check that a consumer
+  can use it at all.
 
 ### rev 44 — 2026-08-08
 

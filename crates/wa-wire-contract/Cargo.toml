@@ -1,12 +1,18 @@
 [package]
 name = "wa-wire-contract"
 version = "0.1.0"
-description = "Normative boundary format and negotiation types for the wa-wire contract"
+description = "The wa-wire boundary: one WhatsApp stanza crossing between an engine and its consumer, verbatim"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/wa-wire-contract"
+keywords = ["whatsapp", "protocol", "interoperability", "no-std"]
+# `network-programming` for what it describes, `no-std` for where it runs, and
+# `encoding` because the whole crate is one format and its codec.
+categories = ["network-programming", "encoding", "no-std"]
 
 [features]
 default = ["alloc"]

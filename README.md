@@ -72,7 +72,7 @@ is parsed exactly once, host-side, and only if something subscribed to L1.
 
 | Crate | What it is |
 | --- | --- |
-| [`wa-wire-contract`](crates/wa-wire-contract) | the normative envelope format and negotiation types |
+| [`wa-wire-contract`](crates/wa-wire-contract) | the normative envelope format and negotiation types — [published](https://crates.io/crates/wa-wire-contract), contract version 1 frozen |
 | [`wa-wire-codec`](crates/wa-wire-codec) | parser for WhatsApp's binary-node encoding, over pluggable token tables |
 | [`wa-wire-adapter`](crates/wa-wire-adapter) | what an adapter must provide, and the plumbing every Rust adapter shares |
 | [`wa-wire-proto`](crates/wa-wire-proto) | parser for the protobuf wire format, over the payloads the boundary carries |

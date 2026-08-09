@@ -40,6 +40,20 @@ which is why the agreement between this crate's path and the codec's walk is
 [asserted in a test](../wa-wire-codec/tests/envelope_integration.rs) rather than
 assumed.
 
+## What publication froze
+
+Contract version 1 is fixed as of 0.1.0: the envelope layout, the ten
+capability identifiers, and the meaning of every field an envelope carries.
+
+Fixed rather than final. Additive change stays inside version 1 — new
+capability names, new reserved flag bits, new metadata tags — because the
+format was built to carry what a reader cannot resolve: a recording declares
+capabilities by name and keeps the unknown ones, and a metadata tag says with
+its critical bit whether skipping it is safe.
+
+Version 2 is for the three things a reader cannot survive by ignoring: a field
+that moved, a field that changed meaning, a field that went away.
+
 ## Two version axes that must not be confused
 
 | Axis | Versions | Changes when |
