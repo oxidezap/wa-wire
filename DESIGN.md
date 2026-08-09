@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 47
+> **Last revised:** rev 48
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -509,10 +509,17 @@ explicitly, never silently degraded.**
 
 ### Current state (verified 2026-08-08)
 
-`hypermeow` is read at
-[polymorfa/hypermeow#5](https://github.com/polymorfa/hypermeow/pull/5), still
-open — its `main` has the raw-node hook (upstream #3) but neither the frame
-bytes nor the plaintexts. Rows marked *(PR #5)* are unavailable on `main`.
+Two engines are read at an open PR rather than at a released version.
+`hypermeow` at [#5](https://github.com/polymorfa/hypermeow/pull/5): its `main`
+has the raw-node hook (upstream #3) but neither the frame bytes nor the
+plaintexts. `Baileys` at
+[WhiskeySockets/Baileys#2762](https://github.com/WhiskeySockets/Baileys/pull/2762):
+its `develop` has neither. Rows marked with a PR number are unavailable
+without it.
+
+Line numbers into an engine are checked by `tools/check-docs.py` against
+whatever is checked out beside this repository, which is how the `Unmarshal`
+citation below was found pointing sixty lines short.
 
 | Capability | whatsapp-rust | zapo | Baileys | hypermeow |
 | --- | --- | --- | --- | --- |
@@ -522,11 +529,11 @@ bytes nor the plaintexts. Rows marked *(PR #5)* are unavailable on `main`.
 | L0 **out**, observed | ✅ `Event::SentFrame` (leased) | ❌ | ❌ | ❌ |
 | L0 out, sent | ✅ `send_node` | ✅ `sendNode` | ✅ `sendNode` | ⚠️ `DangerousInternals` |
 | Raw request/response | ✅ `wait_for_node` | ✅ `query` | ✅ `query` | ⚠️ `DangerousInternals` |
-| Per-`<enc>` plaintext | ✅ upstream #1240 | ❌ | ✅ *(local)* | ✅ *(PR #5)* |
+| Per-`<enc>` plaintext | ✅ upstream #1240 | ❌ | ✅ *(PR #2762)* | ✅ *(PR #5)* |
 | Why a payload is missing | ❌ | ❌ | ❌ | ❌ |
 | Plugin host | ✅ capability bitflags | ✅ tuple-typed | ❌ | ❌ |
 | Drain hook | ✅ `task_drain_timeout` | ✅ `registerDispose` | ❌ | ❌ |
-| Zero-copy frame bytes | ✅ **already retained** — `Yoke<NodeRef, BytesCart>` + `backing_bytes()` | one-line patch at `decoder.ts:344` | ✅ *(local)* | ✅ *(PR #5)* |
+| Zero-copy frame bytes | ✅ **already retained** — `Yoke<NodeRef, BytesCart>` + `backing_bytes()` | one-line patch at `decoder.ts:344` | ✅ *(PR #2762)* | ✅ *(PR #5)* |
 | Runtime portability | native + wasm32 | node/bun/deno/browser | node (hard `ws`) | native |
 
 **Two rows have no capability identifier, deliberately.** *Plugin host* is how
@@ -555,12 +562,10 @@ upstream #1260 no engine had it. A recording that captures only the inbound side
 holds one half of a conversation — see [RFC-010](#rfc-010--recording-container),
 which today records exactly that half.
 
-**The contract does not name this capability yet**, and the row is about engines
-rather than about us. `Capability::ALL` has eight members and none of them is
-"observe what was sent"; adding one is a contract change, which
-[RFC-009](#rfc-009--contract-versioning-and-provenance) says is deliberate and rare. This table
-records what an engine *could* provide, which is the input to that decision and
-not the decision.
+**The contract names it** as `l0.outbound.observed` (D-102), and
+`Capability::ALL` has ten members as of the 0.1.0 freeze. The row stays about
+engines rather than about us: it records what an engine *could* provide, which
+was the input to that decision and not the decision.
 
 **Zero-copy was re-assessed in rev 7** (see RFC-008). The rev 1 entry — "no
 engine has it" — was wrong for `whatsapp-rust`: `OwnedNodeRef` is
@@ -1100,7 +1105,12 @@ original and no copy — there is a spec and two implementers.
 
 ## RFC-008 — Boundary wire format
 
-**Status:** **ACCEPTED** (rev 7)
+**Status:** **ACCEPTED** (rev 7), **published and frozen** in rev 45 as
+contract version 1, shipped in
+[`wa-wire-contract` 0.1.1](https://crates.io/crates/wa-wire-contract). What is
+fixed is the envelope layout, the ten capability identifiers, and what every
+field means. Additive change stays inside version 1; moving a field, changing
+what one means, or removing one needs version 2 (D-132).
 
 ### The observation that decides the whole RFC
 
@@ -1145,7 +1155,7 @@ L0-wire payload is the **unpacked binary-node buffer** — after decompression,
 without the leading format byte — i.e. exactly what each engine's decoder
 consumes. `whatsapp-rust` documents this precisely at
 `wacore/binary/src/node.rs:907-909`; `whatsmeow` performs the same `Unpack`
-before `Unmarshal` (`client.go:824-830`).
+before `Unmarshal` (`client.go:876-882`).
 
 ### Envelope layout
 
@@ -1242,7 +1252,10 @@ Two properties of the encoding turned out to carry the design:
 
 ## RFC-009 — Contract versioning and provenance
 
-**Status:** **ACCEPTED** (rev 7)
+**Status:** **ACCEPTED** (rev 7), **in force** since rev 45: contract version 1
+is frozen and the crate is at 0.1.1. The two axes this RFC separates are now
+separate in public — a WhatsApp-side change moves provenance and never the
+contract version.
 
 The substrate changes without notice and third parties will depend on the
 contract. Without a compatibility rule agreed *before* v1, the first breaking
@@ -2005,6 +2018,39 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 48 — 2026-08-09
+
+- **`tools/check-docs.py`**, wired into CI. The same defect appeared three times
+  in one day in three different files — a count of capabilities the code had
+  moved past — and one of them reached crates.io, where a published README
+  cannot be edited. Every instance was true when written and every one was
+  caught by a person re-reading. The checks are the subset of that prose a
+  machine can settle: capability names and counts against `capability.rs`, RFC
+  cross-references, internal anchors, `path:line` citations, and whether the
+  published version is mentioned at all. Each was verified by breaking the
+  document and watching it fail.
+- **It immediately found what it was written for.** RFC-002 still said
+  `Capability::ALL` has eight members and that the contract "does not name this
+  capability yet" — it names it, as `l0.outbound.observed`, and the freeze made
+  that ten. The matrix still called the Baileys hooks local; they are
+  [#2762](https://github.com/WhiskeySockets/Baileys/pull/2762). RFC-008 and
+  RFC-009 did not say they had been published, which for the two RFCs the
+  freeze is about is the fact most worth stating.
+- **Citations into an engine are checked against that engine's release branch**,
+  not the working tree. The first run read our own PR branch and called two
+  correct citations stale. One was genuinely stale: `Unmarshal` in `hypermeow`
+  moved to `client.go:876-882` while the document still said 824-830.
+- Three heuristics were wrong before they were right, and the failures are the
+  interesting part. Pairing every backticked snippet on a line with every
+  citation on it read one engine's evidence against another's file; a citation
+  belongs to the snippet immediately before it. Matching a snippet verbatim
+  missed `backing_bytes()` against `fn backing_bytes(&self)`; identifiers work.
+  And naming one default branch per repository failed on Baileys, whose
+  `origin/HEAD` still points at a `master` from before the monorepo layout.
+- The check also had to learn that a changelog is allowed to be wrong. Quoting
+  the old count in the entry above tripped it, so what a revision asserts is
+  now read separately from what it records having fixed.
 
 ### rev 47 — 2026-08-08
 

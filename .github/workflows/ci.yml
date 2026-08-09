@@ -78,6 +78,22 @@ jobs:
   # any engine present — which matters most for the Go one, since it has no
   # Rust to check itself against.
 
+  docs:
+    name: the design document agrees with the code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      # Citations into an engine need that engine beside this repository, and
+      # none is checked out here. Those are reported and skipped; what runs is
+      # everything settled from this repository alone, which is the class of
+      # defect that reached crates.io.
+      - name: Check DESIGN.md
+        run: python3 tools/check-docs.py
+
   generated:
     name: generated code is fresh
     runs-on: ubuntu-latest
