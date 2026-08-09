@@ -72,6 +72,7 @@ real rather than cosmetic.
 | `l0.plaintext` | yes | **no** |
 | `l0.inbound.auth-phase` | yes | **no** |
 | `l0.takeover` | **no** | yes |
+| `l0.outbound.observed` | yes — `Event::SentFrame` | yes — `Event::SentFrame` |
 | `l0.outbound` | on `Sender` | on `Sender` |
 | `l0.request` | on `Sender` | on `Sender` |
 | `lifecycle.drain-hook` | **no** | **no** |
@@ -140,20 +141,22 @@ too, and a takeover consumer holds the stanza rather than waiting for payloads.
 Nothing in the engine says when incoming handlers have finished, so a consumer
 cannot know its queue is quiet. Absent rather than approximated.
 
-### What the engine can now do and this adapter does not
+### Both halves of the session
 
 `Event::SentFrame` ([#1260](https://github.com/oxidezap/whatsapp-rust/pull/1260))
 reports each marshaled stanza as it was handed to the Noise encryption — the
-outbound counterpart of `Event::RawNode`, leased the same way.
+outbound counterpart of `Event::RawNode`, leased the same way. This adapter
+surfaces it, which is why a recording made here has both directions in it.
 
-This adapter does not surface it, because the contract has no capability for it:
-`l0.outbound` means *can send*, not *reports what was sent*, and the eight
-capabilities are a versioned surface rather than a list to append to. Naming a
-ninth is a contract decision, recorded as D-102 and not yet taken.
+It needed a capability name of its own. `l0.outbound` means *can send*, not
+*reports what was sent*, and a consumer that wants a full transcript is asking
+for the second. That is `l0.outbound.observed`, taken as D-102 and frozen with
+the rest of contract version 1.
 
-Worth stating plainly rather than leaving as an absence: a recording made
-through this adapter contains what the session received and nothing it replied,
-and that is now a choice rather than a limit.
+`SentFrame` carries the **packed** buffer — the format byte still on the front,
+where `RawNode` hands over one `unpack` has already stripped. Forwarding it
+as-is would put a frame in the recording that every reader misparses by one
+byte, so the adapter unpacks it and drops what it cannot.
 
 ## Four engines, one corpus
 

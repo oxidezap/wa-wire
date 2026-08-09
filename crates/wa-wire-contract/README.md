@@ -74,13 +74,12 @@ loud, at startup — not a runtime surprise or a silent degradation.
 The set is a versioned surface rather than a list to append to: adding one after
 publication is a version bump, so the vocabulary was audited before freezing.
 
-Two of the ten have no provider. `l0.outbound.observed` has one engine that
-could and an adapter that does not yet, and `l0.plaintext.cause` has none at
-all — every adapter reports `Unobserved` for a missing payload, and the format
-has carried `DecryptFailed` and `Unsupported` since it was written. A name
-without a provider costs a line; the same name added later costs a version, and
-until then a gate cannot tell a build that stopped decrypting from an adapter
-that stopped watching.
+One of the ten has no provider. `l0.plaintext.cause` — every adapter reports
+`Unobserved` for a missing payload, though the format has carried
+`DecryptFailed` and `Unsupported` since it was written. A name without a
+provider costs a line; the same name added later costs a version, and until one
+exists a gate cannot tell a build that stopped decrypting from an adapter that
+stopped watching.
 
 ## Scope
 

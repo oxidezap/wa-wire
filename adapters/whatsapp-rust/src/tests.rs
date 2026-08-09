@@ -239,10 +239,16 @@ fn the_declaration_matches_what_this_adapter_actually_does() {
         "DecryptedPayload reports each one after Signal"
     );
 
-    // Not claimed, because the engine does not offer them at this point.
+    assert!(
+        INFO.has(Capability::L0OutboundObserved),
+        "SentFrame reports each stanza that went to the wire"
+    );
+
+    // Not claimed. Observing what was sent and being able to send are separate
+    // capabilities on purpose, and this plugin only has the first.
     assert!(
         !INFO.has(Capability::L0Outbound),
-        "the engine has no raw outbound observer"
+        "this plugin observes and does not send"
     );
     assert!(
         !INFO.has(Capability::Takeover),

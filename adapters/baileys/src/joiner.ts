@@ -24,10 +24,9 @@
  * came first, and a recording compared position by position would report that
  * as a divergence in whichever engine happened to be slower.
  *
- * The `zapo` and `whatsapp-rust` adapters emit unheld stanzas immediately and
- * do reorder. They were written before this was understood; the Go adapter and
- * this one queue. Worth reconciling — three adapters ordering differently is a
- * difference the engines are not responsible for.
+ * All four adapters queue. Two did not until rev 42 — `zapo` and
+ * `whatsapp-rust` emitted an unheld stanza the moment it arrived — and a test
+ * reads all four joiners to keep them agreeing.
  *
  * # What this adapter does not have to do
  *

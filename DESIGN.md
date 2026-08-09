@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 45
+> **Last revised:** rev 46
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1764,7 +1764,7 @@ No L2. No Layer 3 host.
 ### Definition of done for v1
 
 1. `wa-wire-contract` published, with the RFC-008 format specified and frozen.
-   **Done in rev 45**, at 0.1.0.
+   **Done in rev 45**, at 0.1.0 — [on crates.io](https://crates.io/crates/wa-wire-contract).
 2. Four adapters emitting L0-plain: `whatsapp-rust`, `zapo`, `Baileys`,
    `hypermeow`. **Done as of rev 41.** Two are built against local engine
    changes: `hypermeow` against an open upstream PR, `Baileys` against
@@ -2005,6 +2005,25 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 46 — 2026-08-08
+
+- **The published README said `l0.outbound.observed` had no provider. It has
+  one.** `adapters/whatsapp-rust` declares it and has since the capability was
+  named — `Event::SentFrame` is subscribed, unpacked and forwarded. Only
+  `l0.plaintext.cause` is a name without an implementation.
+- The claim survived because **nothing tested it**. `CAPABILITIES` documents
+  itself as asserted entry by entry, and the declaration test checked five of
+  the six: the one added most recently was the one nobody wrote an assertion
+  for. Now asserted, which is what should have caught this instead of a reading.
+- Two more statements had gone stale against the code they describe. The
+  `whatsapp-rust` README still said the contract had eight capabilities and that
+  naming a ninth for `SentFrame` was "not yet taken" — taken as D-102, and the
+  adapter's own capability table was missing the row. The Baileys joiner still
+  said `zapo` and `whatsapp-rust` reorder, which rev 42 fixed.
+- The shape is the one this project keeps finding: **prose about a capability is
+  not a test of it.** Every one of the three was a sentence describing code that
+  had moved underneath it, and the fix for the first was an assertion.
 
 ### rev 45 — 2026-08-08
 
