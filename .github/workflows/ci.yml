@@ -65,18 +65,22 @@ jobs:
   # here would make the contract's CI depend on someone else's release cadence.
   # Each adapter carries its own test command; see its README.
   #
-  # The four-engine conformance run is outside it for the same reason, and by
-  # the same trade: it needs all four engines present at once. It lives in
-  # `adapters/whatsapp-rust/tests/engine_agreement.rs` and is run by hand after
-  # each adapter's replay command. What CI can check without an engine is that
-  # the boundary format still agrees across the three languages, which is
-  # below.
+  # The four-engine agreement does run here, over committed recordings:
+  # `crates/wa-wire-conformance/tests/engine_agreement.rs` reads one `.wawr` per
+  # engine and compares all six pairs. That catches our own side moving — a
+  # change to the derivation or the codec that makes four streams stop agreeing
+  # — which is the half that changes most often and the half nothing watched.
   #
-  # What does run here is the cross-language check: the fixtures the zapo and
-  # hypermeow adapters write are committed, and `cargo test -p wa-wire-conformance`
-  # reads them. That catches the three encoders drifting apart without needing
-  # any engine present — which matters most for the Go one, since it has no
-  # Rust to check itself against.
+  # Producing those recordings still needs all four engines at once, so
+  # `adapters/whatsapp-rust/tests/engine_agreement.rs` keeps the live run and
+  # `emit-agreement-recordings` refreshes the frozen one. A recording of a
+  # corpus that has since changed is refused rather than passed, so a stale file
+  # cannot read as agreement.
+  #
+  # The cross-language fixture check runs here too: the ones the zapo and
+  # hypermeow adapters write are committed and read by the same crate. That
+  # catches the three encoders drifting apart, which matters most for the Go
+  # one, since it has no Rust to check itself against.
 
   docs:
     name: the design document agrees with the code

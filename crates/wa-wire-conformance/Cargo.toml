@@ -17,6 +17,9 @@ wa-wire-recording = { path = "../wa-wire-recording", version = "0.1.0", default-
 
 [dev-dependencies]
 wa-wire-proto = { path = "../wa-wire-proto", version = "0.1.0" }
+# The four-engine agreement rebuilds each adapter's declaration out of its own
+# recording rather than restating it here.
+wa-wire-adapter = { path = "../wa-wire-adapter", version = "0.1.0" }
 wa-wire-recording = { path = "../wa-wire-recording", version = "0.1.0" }
 wa-wire-l1 = { path = "../wa-wire-l1", version = "0.1.0", features = ["testing"] }
 # The cross-language fixtures are re-encoded by zapo with the real

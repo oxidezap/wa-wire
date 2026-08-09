@@ -1,5 +1,34 @@
 # wa-wire-gate
 
+Two tools over the recording format: one compares, one looks.
+
+## `wa-wire-inspect` — what is in this file?
+
+```sh
+wa-wire-inspect recording.wawr
+wa-wire-inspect --envelopes recording.wawr
+```
+
+The format is published and frozen, and until this existed the only way to open
+a `.wawr` was to write Rust against `wa-wire-recording`. A format nobody can
+open is a format nobody can check.
+
+It reports what the file *says*, including where that disagrees with itself. A
+trailer whose count does not match, bytes appended after it, a dictionary this
+build does not carry, a capability identifier from a newer adapter: each is
+printed rather than resolved. A reader opens a recording precisely when
+something is wrong with it, so normalising those away would hide the reason
+someone looked.
+
+A recording that decodes exits zero even when its integrity does not hold — the
+tool was asked what the file contains and it answered. Only a file it cannot
+read at all exits `66`.
+
+Without the dictionary a stanza is reported as its byte length rather than a
+tag, since a tag decoded against the wrong table would read as a fact.
+
+## `wa-wire-gate` — may this candidate ship?
+
 Compare two recordings and say whether the candidate may ship.
 
 ```sh

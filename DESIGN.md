@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 48
+> **Last revised:** rev 49
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1790,7 +1790,8 @@ No L2. No Layer 3 host.
    `REQUEST_SCOPED_ASSERTIONS` are a design limit rather than a backlog.
 4. Conformance suite (RFC-005) green: identical L0 in → identical L1 out across
    all four engines. **Green for all four as of rev 43**, over six pairwise
-   comparisons of one corpus.
+   comparisons of one corpus, and **in CI since rev 49** over one committed
+   recording per engine.
 5. Capability matrix machine-readable and enforced at setup. **Done in rev 20.**
    All five upgrade-gate criteria are measured as of rev 29: stanzas not lost,
    frames still parsing, the same L1, plaintext coverage held, and a
@@ -2018,6 +2019,35 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 49 — 2026-08-09
+
+- **`wa-wire-inspect`**, a second binary beside the gate. The format is
+  published and frozen, and until now the only way to open a `.wawr` was to
+  write Rust against `wa-wire-recording`. A format nobody can open is a format
+  nobody can check, which is the argument that put the gate beside the
+  comparator in the first place. It reports what the file *says*, including
+  where that disagrees with itself: a trailer whose count does not match, bytes
+  appended after it, a dictionary this build does not carry, a capability
+  identifier from a newer adapter. A reader opens a recording precisely when
+  something is wrong with it, so resolving those away would hide the reason
+  they looked.
+- **The four-engine agreement now runs in CI.** Producing four streams needs
+  four engines checked out at once, which is why it was manual; *comparing*
+  them needs four byte streams and a token table. Each engine's re-encoded
+  stream is frozen into a recording (16KB for all four) and
+  `wa-wire-conformance` compares all six pairs on every push.
+- **What that catches is our half.** A change to `wa-wire-l1` or the codec that
+  makes four engines stop agreeing was, until today, caught by nobody until
+  someone ran the manual command. What it cannot catch is an engine moving,
+  since a committed recording is a photograph — that still needs the live run.
+  The corpus digest travels inside each file, so a recording of traffic that has
+  since changed is refused rather than passed. Verified by adding a corpus file
+  and watching the run fail with the command to fix it.
+- **A green comparison is not evidence that the comparison could fail.** One
+  test hands the comparator a stream with two stanzas out of order and requires
+  it to object, on this corpus, with this data. Without it, four identical
+  streams would satisfy every other assertion in the file.
 
 ### rev 48 — 2026-08-09
 

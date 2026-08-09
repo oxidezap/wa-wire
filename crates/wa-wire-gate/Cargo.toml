@@ -12,6 +12,18 @@ authors.workspace = true
 # stay `no_std` and dependency-free.
 publish = false
 
+[[bin]]
+name = "wa-wire-gate"
+path = "src/main.rs"
+
+# A second tool rather than a subcommand: the gate takes two positional paths
+# and inspect takes one, so folding them together would make each one's usage
+# describe the other's arguments. They share the library, which is where the
+# rendering they have in common lives.
+[[bin]]
+name = "wa-wire-inspect"
+path = "src/inspect_main.rs"
+
 [dependencies]
 wa-wire-adapter = { path = "../wa-wire-adapter", version = "0.1.0" }
 wa-wire-codec = { path = "../wa-wire-codec", version = "0.1.0", features = [

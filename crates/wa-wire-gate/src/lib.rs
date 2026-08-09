@@ -46,6 +46,10 @@ use wa_wire_contract::{ContractVersion, Direction, EnvelopeRef};
 use wa_wire_l1::content::derive_content;
 use wa_wire_recording::RecordingRef;
 
+mod inspect;
+
+pub use inspect::{Detail, INSPECT_USAGE, InspectCli, Report as InspectReport, inspect};
+
 /// How many findings are printed before the rest are summarised.
 pub const DEFAULT_MAX_FINDINGS: usize = 20;
 
