@@ -10,10 +10,25 @@ never changed.
 
 `wa-wire` makes the thing they already share — the wire itself — the interface.
 
-> **Status: early implementation.** The design is settled and recorded in
-> [`DESIGN.md`](DESIGN.md), which carries ten accepted RFCs, a
-> decision log, and a per-revision changelog. The v1 scope is L0 + L1; there is
-> no Layer 3 host yet.
+> **Status: v1 is published.** Seven crates are on crates.io and the contract's
+> version 1 is frozen. The design is recorded in [`DESIGN.md`](DESIGN.md), which
+> carries ten accepted RFCs, a decision log and a per-revision changelog. The
+> v1 scope is L0 + L1: there is no Layer 3 host, and sending is the consumer's.
+
+```toml
+[dependencies]
+wa-wire-l1 = "0.1"                                      # stanza in, typed event out
+wa-wire-codec = { version = "0.1", features = ["bundled-tokens"] }
+```
+
+```rust
+let node = Parser::new(tokens::TABLE).parse(frame)?;
+let event = derive(&node)?;   // the same event every conforming engine derives
+```
+
+Two adapters are ready to use, and two are built against engine changes still
+in review — see [the matrix](DESIGN.md#rfc-002--capability-matrix) for which
+capability each one has.
 
 ## The idea
 
@@ -70,24 +85,32 @@ is parsed exactly once, host-side, and only if something subscribed to L1.
 
 ## Crates
 
-| Crate | What it is |
-| --- | --- |
-| [`wa-wire-contract`](crates/wa-wire-contract) | the normative envelope format and negotiation types — [published](https://crates.io/crates/wa-wire-contract), contract version 1 frozen |
-| [`wa-wire-codec`](crates/wa-wire-codec) | parser for WhatsApp's binary-node encoding, over pluggable token tables |
-| [`wa-wire-adapter`](crates/wa-wire-adapter) | what an adapter must provide, and the plumbing every Rust adapter shares |
-| [`wa-wire-proto`](crates/wa-wire-proto) | parser for the protobuf wire format, over the payloads the boundary carries |
-| [`wa-wire-l1`](crates/wa-wire-l1) | typed canonical events: the stanza from whatspec, the payload from `waE2E.proto` |
-| [`wa-wire-recording`](crates/wa-wire-recording) | envelopes at rest, with the provenance that decides whether two files may be compared |
-| [`wa-wire-conformance`](crates/wa-wire-conformance) | replays recordings through every engine and requires them to agree |
-| [`wa-wire-gate`](crates/wa-wire-gate) | the command: two recordings in, a verdict out |
-| [`wa-wire-example-consumer`](crates/wa-wire-example-consumer) | a consumer written once and run against any engine, proving the boundary holds |
-| [`wa-wire-alloc-check`](crates/wa-wire-alloc-check) | counts allocations, so the crates that claim not to allocate prove it |
+Seven are on crates.io; the version links there, the name links to the source.
+
+| Crate | | What it is |
+| --- | --- | --- |
+| [`wa-wire-contract`](crates/wa-wire-contract) | [0.1.2](https://crates.io/crates/wa-wire-contract) | the normative envelope format and negotiation types — contract version 1, frozen |
+| [`wa-wire-codec`](crates/wa-wire-codec) | [0.1.0](https://crates.io/crates/wa-wire-codec) | parser for WhatsApp's binary-node encoding, over pluggable token tables |
+| [`wa-wire-adapter`](crates/wa-wire-adapter) | [0.1.0](https://crates.io/crates/wa-wire-adapter) | what an adapter must provide, and the plumbing every Rust adapter shares |
+| [`wa-wire-proto`](crates/wa-wire-proto) | [0.1.0](https://crates.io/crates/wa-wire-proto) | parser for the protobuf wire format, over the payloads the boundary carries |
+| [`wa-wire-l1`](crates/wa-wire-l1) | [0.1.0](https://crates.io/crates/wa-wire-l1) | typed canonical events: the stanza from whatspec, the payload from `waE2E.proto` |
+| [`wa-wire-recording`](crates/wa-wire-recording) | [0.1.0](https://crates.io/crates/wa-wire-recording) | envelopes at rest, with the provenance that decides whether two files may be compared |
+| [`wa-wire-conformance`](crates/wa-wire-conformance) | [0.1.0](https://crates.io/crates/wa-wire-conformance) | replays recordings through every engine and requires them to agree |
+| [`wa-wire-gate`](crates/wa-wire-gate) | — | two commands: `wa-wire-gate` compares two recordings, `wa-wire-inspect` opens one |
+| [`wa-wire-example-consumer`](crates/wa-wire-example-consumer) | — | a consumer written once and run against any engine, proving the boundary holds |
+| [`wa-wire-alloc-check`](crates/wa-wire-alloc-check) | — | counts allocations, so the crates that claim not to allocate prove it |
 
 The libraries are `no_std` with no dependencies beyond each other, and none of
-them allocates while reading. Two are deliberately not: `wa-wire-gate` is a tool
-rather than a library, and `wa-wire-alloc-check` installs a global allocator,
-which is a `std` thing to do. Both are `publish = false` and say why in their
-own manifests.
+them allocates while reading. The three with no version are not published and
+say why in their own manifests: `wa-wire-gate` is a pair of tools rather than a
+library, `wa-wire-example-consumer` exists to be read, and
+`wa-wire-alloc-check` installs a global allocator, which is a `std` thing to do.
+
+Two crates ship less than the repository holds. `wa-wire-l1` leaves out the 4MB
+of vendored `whatspec` JSON, which is generator input — the derivation travels
+as the generated Rust. `wa-wire-conformance` leaves out the corpus, the frozen
+recordings and its integration tests, each of which reads a file that a
+dependent has no use for.
 
 | Adapter | Engine | Modes |
 | --- | --- | --- |

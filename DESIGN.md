@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 56
+> **Last revised:** rev 57
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1800,9 +1800,18 @@ No L2. No Layer 3 host.
 
 ### Definition of done for v1
 
+**All six are met, and as of rev 57 the result is installable rather than only
+green.** Seven crates are on crates.io, all seven built on docs.rs, and a crate
+depending on nothing but the registry compiles against them.
+
+What that does *not* mean is on the criterion below it: two of the four adapters
+still need an engine change that is in review, so the four-engine agreement is
+reproducible here and not yet by a stranger.
+
 1. `wa-wire-contract` published, with the RFC-008 format specified and frozen.
    **Done in rev 45**, at 0.1.0 — [on crates.io](https://crates.io/crates/wa-wire-contract),
-   0.1.2 as of rev 56, when the last capability without a provider got one.
+   0.1.2 as of rev 56, when the last capability without a provider got one. The
+   other six followed in rev 57.
 2. Four adapters emitting L0-plain: `whatsapp-rust`, `zapo`, `Baileys`,
    `hypermeow`. **Done as of rev 41.** Two are built against engine changes
    still in review: [polymorfa/hypermeow#5](https://github.com/polymorfa/hypermeow/pull/5)
@@ -2045,6 +2054,22 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 57 — 2026-08-09
+
+- **The seven crates are published.** `wa-wire-contract` 0.1.2 and the other six
+  at 0.1.0, all seven built on docs.rs. Verified the way a stranger would: a new
+  crate with no `path` and no workspace, depending on the registry alone,
+  resolves and compiles. That is the difference the definition of done could not
+  state before — every criterion was met while the thing itself was a repository.
+- The README carried the old world: one crate marked published and the rest not,
+  and no way in. It now lists each version against the registry, opens with the
+  two lines that get a stanza to a typed event, and says which two adapters need
+  an engine change first.
+- **What publication did not settle** is worth keeping in view rather than
+  celebrating past. `hypermeow` and Baileys still read their hooks from an open
+  PR, so the central claim — four engines, one corpus, the same events — is
+  reproducible here and nowhere else. Nothing in this repository can close that.
 
 ### rev 56 — 2026-08-09
 
