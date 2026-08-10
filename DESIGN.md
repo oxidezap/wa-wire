@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 59
+> **Last revised:** rev 60
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1928,12 +1928,34 @@ a host that moves a session across it is claiming something no one checked.
 Found by trying to measure, and neither is in the loss matrix because neither is
 about state.
 
+**`zapo` is now the only one.** The paragraph below described two engines; one
+of them was fixed.
+
 - **`zapo` cannot drop its transport.** The harness reports it outright:
   *"zapo does not support dropping its transport, which reconnect requires"*.
   Phase 3 is `detach`, a clean disconnect that is not a logout, and `zapo` has
   no way to express it. It can be a handoff **source** only if the process
   exits, which is a different design from the one RFC-003 describes.
-- **`whatsapp-rust` does not come back**, and rev 59 found why. `disconnect()`
+- ~~**`whatsapp-rust` does not come back**~~ — **fixed upstream in rev 60.**
+  `Client::pause()` and `Client::resume()` landed as
+  [#1265](https://github.com/oxidezap/whatsapp-rust/pull/1265), with the
+  misleading log line fixed separately as
+  [#1264](https://github.com/oxidezap/whatsapp-rust/pull/1264). `pause` is a
+  detach that is not a stop: no `Disconnected` is dispatched because the
+  application ended the connection, the account stays registered, and other
+  devices see nothing. `resume` tells the run loop to reconnect with no backoff
+  owed for an offline window the application chose.
+
+  **Measured at 43 ms**, twenty cycles, p50 42.99 and p95 44.78, timed from
+  `pause` to a dispatched `Connected`. That is the phase 3 → phase 5 cost, and
+  it is six times cheaper than the same engine's cold `ready` because a resume
+  skips what pairing and first sync do.
+
+  Its doc states the loss RFC-003 needs stated: *"Nothing is carried across the
+  pause that a network drop would not also have taken."*
+
+  What rev 59 described is what was fixed, and the paragraph is kept below
+  because the shape of the gap is the same one `zapo` still has. `disconnect()`
   writes `is_running = false` and fires the shutdown notifier: it is a terminal
   stop, not a pause. The run loop then prints *"Expected disconnect (e.g., 515),
   reconnecting immediately…"* and, on the next line, *"Client run loop has shut
@@ -1946,10 +1968,9 @@ about state.
   a stop**, which is a different problem from the one the symptom suggested. It
   can be a **source** and not a target.
 
-Together these remove four of the twelve routes until one engine or the other
-changes, and they land on the two extremes of the window measurement — the
-slowest to become ready and the one that cannot become ready twice. Both are
-engine work, not host work, and neither was visible from reading the RFCs.
+Together these removed four of the twelve routes. Two are back as of rev 60,
+leaving the three that need `zapo` as a source. Both were engine work rather
+than host work, and neither was visible from reading the RFCs.
 
 #### Definition of done for v2
 
@@ -2201,6 +2222,25 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 60 — 2026-08-10
+
+- **`whatsapp-rust` can be a handoff target.** `Client::pause()` and
+  `Client::resume()` merged upstream as #1265, and the log line that announced a
+  reconnect the shutdown forbade as #1264 — the two halves rev 59 said the
+  question would split into, with the reading it could not choose between
+  resolved as (A): `disconnect()` is terminal by design, the log was the defect,
+  and the missing thing was a detach.
+- **Measured rather than assumed: 43 ms**, twenty cycles, p50 42.99 and p95
+  44.78, timed from `pause` to a dispatched `Connected`. Six times cheaper than
+  the same engine's cold `ready` of 273 ms, which is what a resume skipping
+  pairing and first sync should look like.
+- `pause`'s doc states the loss in the terms RFC-003 asks for: nothing is
+  carried across it that a network drop would not also have taken. That is a
+  route cost declared by the engine rather than inferred by us.
+- **Two of the four blocked routes are back**, and `zapo` is now the only engine
+  that cannot perform a phase — it still has no way to drop its transport, so it
+  cannot `detach`. Three routes need it as a source and remain unavailable.
 
 ### rev 59 — 2026-08-10
 
