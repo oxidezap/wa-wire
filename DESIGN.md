@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 57
+> **Last revised:** rev 58
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1777,13 +1777,33 @@ v1 is **L0 + L1 only**. Consumers send raw stanzas. L2 deferred to v2 (D-019).
 Takeover **is** in v1, and `whatsapp-rust` gets the patch (D-020). Scope
 clarified by D-021: takeover suppresses *dispatch*, never *crypto*.
 
-### OQ-7 — Handoff window — *provisional: no SLA claimed*
-Unmeasured, per engine pair. **Provisional decision:** claim no availability SLA
-for handoff until measured, and have Layer 3 refuse any route whose loss the
-capability matrix reports as exceeding threshold (R6).
+### ~~OQ-7 — Handoff window~~ — **MEASURED in rev 58**
+The engine-side floor is between 31 ms and 273 ms, and the four engines differ
+by 8.7×. Measured with `wabench`'s `ready` scenario, seven runs each against
+Barback:
 
-**Revision trigger:** Layer 3 work starting. `whatsapp-bench` already has the
-pinned-source, hermetic, offline harness to run it.
+| Engine | Median | Spread |
+| --- | --- | --- |
+| `hypermeow` | 31.2 ms | 3.2 ms |
+| `zapo` | 52.9 ms | 3.4 ms |
+| `Baileys` | 156.3 ms | 22.7 ms |
+| `whatsapp-rust` | 273.3 ms | 3.2 ms |
+
+**`ready` is the right scenario and `reconnect` is not** (D-135). `ready` times
+the interval from workload start to the engine's own connected event, which is
+when Layer 3 could release a queued backlog — the definition the window needs.
+`reconnect` looks closer to a handoff and is not comparable across engines: each
+adapter decides what "back" means, and `whatsmeow`'s returns when the socket is
+up where Baileys waits for the open event. The same measurement reads 2.5 ms and
+16.5 ms for that reason, and neither is the window.
+
+**A floor, not an SLA.** Barback runs locally, so these exclude every network
+round trip; a real handoff adds them to each of the handshake's legs. The number
+bounds what the engine costs, which is the part a route can be chosen on.
+
+**Resync does not differentiate.** `offline-sync` takes about 0.55 s on all
+three engines that complete it, because the backlog is paced by the server
+rather than by the client.
 
 ### ~~OQ-8 — Zero-copy priority~~ — **RESOLVED in rev 5**
 Settled by the measured stanza shape in RFC-007, not by W6: the real tail
@@ -1874,17 +1894,55 @@ number this project refuses to guess.
 - **The unavailability window, per engine pair** (RFC-003, OQ-7). Handshake plus
   resync, and no one has timed it. Until it is timed there is no SLA to offer
   and no threshold for Layer 3 to refuse a route by.
-- **The loss, per route** (R2). Twenty routes, and `wa-store-migrate` already
-  documents that some lose things: Baileys drops skip message keys,
-  `whatsapp-rust`'s app-state encoding loses sub-second precision. The promise
-  is **"loss is known, declared and accepted"**, never "lossless" — and today
-  nothing is known, which makes the promise unsayable rather than merely
-  unproven.
+- ~~**The loss, per route** (R2).~~ **Measured in rev 58.** Twelve routes across
+  the four engines, computed by `wa-store-migrate`'s own `planLosses` rather
+  than read off its README:
 
-**So v2 starts with an experiment, not a host.** `whatsapp-bench` has the
-pinned-source, hermetic, offline harness already. A route whose loss is
-unmeasured is a route the gate cannot judge, and a host that moves a session
-across it is claiming something no one checked.
+| Route | Lost | Degraded |
+| --- | --- | --- |
+| `whatsmeow` → `zapo` | nothing | nothing |
+| `whatsapp-rust` → `zapo` | nothing | `appStateVersions` |
+| `Baileys` → `zapo` | nothing | `sessions`, `senderKeys`, `privacyTokens` |
+| `zapo` → `whatsmeow` | `deviceLists` | nothing |
+| `whatsapp-rust` → `whatsmeow` | `deviceLists` | `appStateVersions` |
+| `Baileys` → `whatsmeow` | `deviceLists` | `sessions`, `senderKeys`, `privacyTokens` |
+| → `whatsapp-rust`, from `zapo` or `whatsmeow` | `contacts`, `messageSecrets` | `appStateVersions` |
+| → `Baileys`, from `zapo` or `whatsmeow` | `contacts`, `messageSecrets` | `sessions`, `senderKeys`, `privacyTokens` |
+| `Baileys` ↔ `whatsapp-rust` | `contacts`, `messageSecrets` | all four of the above |
+
+  **Loss is a property of the destination**, and degradation of both ends.
+  Nothing is lost moving *into* `zapo`, which makes it the safe target and
+  `Baileys ↔ whatsapp-rust` the pair to refuse by default.
+
+  One domain in the IR, `senderKeyDistributions`, is neither read nor written by
+  any adapter. Forcing it into a snapshot makes every route look like it loses
+  something; no real source can produce it, so it is dead weight in the IR
+  rather than a route cost. Worth deleting upstream, not worth modelling.
+
+**So v2 started with an experiment, not a host**, and both unknowns are now
+numbers. A route whose loss is unmeasured is a route the gate cannot judge, and
+a host that moves a session across it is claiming something no one checked.
+
+#### Two engines cannot do a phase RFC-003 requires
+
+Found by trying to measure, and neither is in the loss matrix because neither is
+about state.
+
+- **`zapo` cannot drop its transport.** The harness reports it outright:
+  *"zapo does not support dropping its transport, which reconnect requires"*.
+  Phase 3 is `detach`, a clean disconnect that is not a logout, and `zapo` has
+  no way to express it. It can be a handoff **source** only if the process
+  exits, which is a different design from the one RFC-003 describes.
+- **`whatsapp-rust` does not come back.** `disconnect()` then `connect()` never
+  completes within thirty seconds against a local mock, and the same adapter
+  evidences nothing in `offline-sync` while reporting the units complete. Phase
+  5 is `attach`, so this is the mirror problem: it can be a **source** but not
+  yet a target.
+
+Together these remove four of the twelve routes until one engine or the other
+changes, and they land on the two extremes of the window measurement — the
+slowest to become ready and the one that cannot become ready twice. Both are
+engine work, not host work, and neither was visible from reading the RFCs.
 
 #### Definition of done for v2
 
@@ -2130,10 +2188,48 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-132 | Publication freezes contract version 1 as *fixed*, not as *final* | New capability identifiers, new reserved flag bits and new metadata tags may still appear: a reader that meets one keeps it rather than refusing, because the format was built to carry what it cannot resolve. What needs version 2 is moving a field, changing what one means, or removing anything — the three a reader cannot survive by ignoring | 45 |
 | D-133 | `l0.plaintext.cause` stays without a provider rather than being wired to `Event::UndecryptableMessage` | That event is per message, deduplicated per `(chat, id)` and suppressed on resends, and its `decrypt_fail_mode` is a display hint rather than a cause. A status that is right sometimes and absent otherwise is worse than one that is uniformly `Unobserved`: a gate can act on the second and not on the first | 50 |
 | D-134 | v2 is Layer 3 — the host and moving a session between engines — and it opens with an experiment rather than a host | The three RFCs it needs were accepted in rev 7 and have not moved, so the design is not the open part. What is open is two numbers: the unavailability window per engine pair and the loss per route. R2's promise is "loss is known, declared and accepted", and nothing is known — which makes the promise unsayable, not merely unproven. A route whose loss is unmeasured is one the gate cannot judge | 57 |
+| D-135 | The handoff window is measured by `ready`, never by `reconnect` | `ready` times workload start to the engine's own connected event, which is when a host could release a queued backlog. `reconnect` is not comparable across engines: each adapter decides what "back" means, and whatsmeow's returns on socket-up where Baileys waits for the open event — 2.5 ms against 16.5 ms for the same nominal thing | 58 |
+| D-136 | Layer 3 prefers `zapo` as a handoff target and refuses `Baileys ↔ whatsapp-rust` by default | Loss is a property of the destination: nothing is lost moving into `zapo`, while both directions between `Baileys` and `whatsapp-rust` lose `contacts` and `messageSecrets` and degrade four more domains. A default that has to be overridden is how a measured matrix becomes a policy | 58 |
 
 ---
 
 ## Changelog
+
+### rev 58 — 2026-08-10
+
+v2 opened on the claim that its two unknowns had to be measured before anything
+was built. They are measured, and measuring them found three things that
+reading could not.
+
+- **The handoff window's engine-side floor is 31 ms to 273 ms**, an 8.7× spread:
+  `hypermeow` 31.2, `zapo` 52.9, `Baileys` 156.3, `whatsapp-rust` 273.3, seven
+  runs each, within-engine spread about 3 ms. A floor rather than an SLA —
+  Barback is local, so every network round trip is excluded.
+- **`reconnect` cannot answer that question** (D-135), which is the finding
+  behind the finding. It is the scenario that looks like a handoff, and it is
+  not comparable: each adapter decides what "back" means, so whatsmeow returns
+  when the socket is up and Baileys waits for the open event. Two engines, one
+  nominal measurement, 2.5 ms and 16.5 ms. `ready` is the comparable one because
+  it times what a host would wait for.
+- **The loss matrix is filled in** for all twelve routes, computed by
+  `wa-store-migrate`'s own `planLosses` instead of read off its README. Loss is
+  a property of the destination: nothing is lost moving into `zapo`, and
+  `Baileys ↔ whatsapp-rust` loses two domains and degrades four. That is a
+  policy now (D-136), not a table.
+- **Two engines cannot perform a phase RFC-003 requires.** `zapo` cannot drop
+  its transport, so it cannot `detach`; `whatsapp-rust`'s disconnect-then-connect
+  never returns in thirty seconds, so it cannot `attach`. Four of the twelve
+  routes are unavailable until one of them changes. Neither was visible from the
+  RFCs, and both are engine work rather than host work.
+- One correction to my own reading. `senderKeyDistributions` appeared to drop on
+  every route; it is neither read nor written by any adapter, so no real source
+  can produce it. The universal drop was an artifact of forcing it into a
+  synthetic snapshot — it is dead weight in the IR, not a route cost.
+- **`wa-store-migrate` does not build from its repository.** `src/adapters/wa-web`
+  is imported by the registry and by five test files and is not committed; five
+  suites fail on the missing module. The npm package ships it, so a consumer is
+  fine and a contributor is not — which matters because D-012 plans a
+  differentially verified port of exactly that code.
 
 ### rev 57 — 2026-08-09
 
