@@ -65,6 +65,7 @@
 extern crate alloc;
 
 pub mod content;
+pub mod dedup;
 pub mod error;
 pub mod extract;
 pub mod generated;

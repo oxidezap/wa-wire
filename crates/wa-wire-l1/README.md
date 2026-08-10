@@ -21,6 +21,22 @@ let event = derive(&parse(&stanza)).expect("derives");
 assert_eq!(event.tag(), "receipt");
 ```
 
+## Telling a redelivery from an arrival
+
+Moving a session between engines is stop-the-world. Inbound traffic survives it
+because the server queues it; acknowledgements in flight do not, and the server
+resends what it had no way to know was read. `dedup::SeenStanzas` is the bounded
+window that tells the second copy from the first.
+
+It sits beside `derive` rather than inside it. Whether a stanza has been seen
+before is the one thing that stanza does not carry, and a `derive` that answered
+differently depending on its history would stop being the thing four engines can
+be compared on.
+
+It answers three ways. `New`, `Duplicate`, and `Untracked` for a stanza it
+cannot identify — most shapes do not model an `id`, and reporting those as new
+would let a caller read "could not tell" as "there were none".
+
 ## Three parts, all generated
 
 | Part | Source | Generator |

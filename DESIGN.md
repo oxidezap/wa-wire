@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 60
+> **Last revised:** rev 61
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1980,9 +1980,11 @@ than host work, and neither was visible from reading the RFCs.
    both believe they own one session (R1). Not retrofittable, so it comes early.
 3. `detach` and `logout` distinct at the type level, with a test that the
    distinction cannot be crossed by accident (R4).
-4. Deduplication by message id in L1 (R3). The window queues inbound
-   server-side, but in-flight acks can duplicate, so this is mandatory rather
-   than a refinement.
+4. ~~Deduplication by message id in L1 (R3).~~ **Done in rev 61**:
+   `wa_wire_l1::dedup::SeenStanzas`, a bounded window a caller drives. It is
+   beside `derive` rather than inside it, because telling a redelivery from an
+   arrival is exactly the knowledge one stanza does not carry, and a stateful
+   `derive` would stop being the thing four engines can be compared on (D-010).
 5. One session moved between two engines and back, with the events on either
    side compared by the conformance runner — the v1 machinery pointed at the v2
    claim.
@@ -2218,10 +2220,40 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-134 | v2 is Layer 3 — the host and moving a session between engines — and it opens with an experiment rather than a host | The three RFCs it needs were accepted in rev 7 and have not moved, so the design is not the open part. What is open is two numbers: the unavailability window per engine pair and the loss per route. R2's promise is "loss is known, declared and accepted", and nothing is known — which makes the promise unsayable, not merely unproven. A route whose loss is unmeasured is one the gate cannot judge | 57 |
 | D-135 | The handoff window is measured by `ready`, never by `reconnect` | `ready` times workload start to the engine's own connected event, which is when a host could release a queued backlog. `reconnect` is not comparable across engines: each adapter decides what "back" means, and whatsmeow's returns on socket-up where Baileys waits for the open event — 2.5 ms against 16.5 ms for the same nominal thing | 58 |
 | D-136 | Layer 3 prefers `zapo` as a handoff target and refuses `Baileys ↔ whatsapp-rust` by default | Loss is a property of the destination: nothing is lost moving into `zapo`, while both directions between `Baileys` and `whatsapp-rust` lose `contacts` and `messageSecrets` and degrade four more domains. A default that has to be overridden is how a measured matrix becomes a policy | 58 |
+| D-137 | Deduplication keys on tag *and* id, holds a bounded window, and reports a third answer for what it cannot identify | An `<ack>` and a `<receipt>` for one message carry that message's id, so keying on the id alone would report the second as a redelivery of the first and drop it. The window is bounded because the alternative is unbounded state in a `no_std` crate that allocates nowhere else; the trade is that an evicted id reads as new, which loses nothing. And a stanza with no id is `Untracked` rather than `New`, so a caller counting duplicates cannot read "could not tell" as "there were none" | 61 |
 
 ---
 
 ## Changelog
+
+### rev 61 — 2026-08-10
+
+- **R3 is implemented**: `wa_wire_l1::dedup::SeenStanzas`. A handoff is
+  stop-the-world, inbound survives it because the server queues it, and acks in
+  flight do not — the server resends what it could not know was read. R3 calls
+  deduplicating those mandatory, and the fourth item of the v2 definition of
+  done is now done.
+- **Beside `derive`, not inside it.** Telling a redelivery from a first arrival
+  is the one thing a single stanza does not carry, and D-010 makes `derive` pure
+  precisely so four engines can be compared on it. A stateful `derive` would
+  answer differently depending on what it had seen, and nothing could be
+  replayed. A caller that does not need deduplication pays nothing.
+- **Three answers, not two** (D-137). `New` and `Duplicate`, and `Untracked` for
+  a stanza with no `id` — which is most of them, since only `ack`, `receipt` and
+  `call` shapes model one. Folding that into `New` would let a caller counting
+  duplicates read "could not tell" as "there were none", the same mistake the
+  gate refuses when it reports `incomparable`.
+- **The key is tag and id together.** An `<ack>` and a `<receipt>` for one
+  message both carry that message's id; keying on the id alone would report the
+  second as a redelivery of the first and drop it.
+- No allocation and no growth: a fixed ring of inline ids, `no_std`, about six
+  kilobytes at the default window. An id longer than a slot is `Untracked`
+  rather than truncated, because a truncated id collides with every id sharing
+  its prefix, and that collision is the one error here that loses a message.
+- A duplicate is not re-remembered. Re-inserting it would evict one older entry
+  per redelivery, so a burst would empty the window of everything it was there
+  to recognise — tested by sending fifty and requiring the four originals to
+  survive.
 
 ### rev 60 — 2026-08-10
 
