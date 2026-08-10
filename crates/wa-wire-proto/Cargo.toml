@@ -8,6 +8,11 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+keywords = ["whatsapp", "protobuf", "protocol", "no-std"]
+categories = ["network-programming", "encoding", "no-std"]
+readme = "README.md"
+documentation = "https://docs.rs/wa-wire-proto"
+
 [dependencies]
 
 [lints]

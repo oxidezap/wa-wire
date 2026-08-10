@@ -7,6 +7,10 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+keywords = ["whatsapp", "protocol", "interoperability", "no-std"]
+categories = ["network-programming", "api-bindings", "no-std"]
+readme = "README.md"
+documentation = "https://docs.rs/wa-wire-adapter"
 
 [features]
 default = ["alloc"]

@@ -74,12 +74,15 @@ loud, at startup — not a runtime surprise or a silent degradation.
 The set is a versioned surface rather than a list to append to: adding one after
 publication is a version bump, so the vocabulary was audited before freezing.
 
-One of the ten has no provider. `l0.plaintext.cause` — every adapter reports
-`Unobserved` for a missing payload, though the format has carried
-`DecryptFailed` and `Unsupported` since it was written. A name without a
-provider costs a line; the same name added later costs a version, and until one
-exists a gate cannot tell a build that stopped decrypting from an adapter that
-stopped watching.
+All ten have a provider, which was not true when this was published. The last
+was `l0.plaintext.cause`: the format had carried `DecryptFailed` and
+`Unsupported` since it was written, and every adapter still reported
+`Unobserved` for a missing payload because no engine said why one was missing.
+Naming it anyway cost a line; the same name added after the freeze would have
+cost a version.
+
+Not every adapter has every one, and the matrix is the point rather than a
+shortfall — a consumer asks for what it needs and finds out at setup.
 
 ## Scope
 

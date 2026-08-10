@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 55
+> **Last revised:** rev 56
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1801,7 +1801,8 @@ No L2. No Layer 3 host.
 ### Definition of done for v1
 
 1. `wa-wire-contract` published, with the RFC-008 format specified and frozen.
-   **Done in rev 45**, at 0.1.0 — [on crates.io](https://crates.io/crates/wa-wire-contract).
+   **Done in rev 45**, at 0.1.0 — [on crates.io](https://crates.io/crates/wa-wire-contract),
+   0.1.2 as of rev 56, when the last capability without a provider got one.
 2. Four adapters emitting L0-plain: `whatsapp-rust`, `zapo`, `Baileys`,
    `hypermeow`. **Done as of rev 41.** Two are built against engine changes
    still in review: [polymorfa/hypermeow#5](https://github.com/polymorfa/hypermeow/pull/5)
@@ -2044,6 +2045,26 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 56 — 2026-08-09
+
+- **The other six crates are prepared for publication.** Contract 0.1.2 goes
+  with them: its README said one of the ten capabilities had no provider, and
+  that stopped being true in rev 55. All ten have one now, though no adapter has
+  all ten — which is the matrix rather than a shortfall.
+- **Two packages were shipping things nobody installing them wants.**
+  `wa-wire-l1` carried 4MB of vendored `whatspec` JSON, which is generator input:
+  the derivation ships as the generated Rust beside it, and nothing at build or
+  run time opens the spec. `wa-wire-conformance` carried the corpus, the frozen
+  recordings and every integration test — and each of those tests reads a file,
+  including fixtures from adapters that are not in the package at all. Shipping
+  the tests without their data would publish a crate whose `cargo test` fails.
+  Both are excluded, and `wa-wire-conformance` went from 54 files to 12.
+- **The last two cannot be verified before the first four are up.** `cargo
+  package` resolves dependencies through the index, so `wa-wire-l1` cannot be
+  checked until `wa-wire-codec` exists there, and `wa-wire-conformance` until
+  `wa-wire-l1` does. Inherent to publishing a graph; the order handles it, and
+  each `cargo publish` verifies itself when its turn comes.
 
 ### rev 55 — 2026-08-09
 

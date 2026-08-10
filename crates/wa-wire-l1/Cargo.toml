@@ -7,6 +7,14 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+keywords = ["whatsapp", "protocol", "stanza", "codegen"]
+categories = ["network-programming", "parser-implementations", "no-std"]
+readme = "README.md"
+documentation = "https://docs.rs/wa-wire-l1"
+# Generator input, not something a consumer reads. The derivation ships as
+# the generated Rust beside it; the spec is 4MB of JSON that only
+# `tools/generate-l1.py` opens.
+exclude = ["spec/"]
 
 [features]
 default = []

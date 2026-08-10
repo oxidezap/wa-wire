@@ -7,6 +7,10 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+keywords = ["whatsapp", "protocol", "parser", "binary", "no-std"]
+categories = ["network-programming", "parser-implementations", "encoding", "no-std"]
+readme = "README.md"
+documentation = "https://docs.rs/wa-wire-codec"
 
 [features]
 default = ["bundled-tokens"]

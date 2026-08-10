@@ -7,6 +7,10 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+keywords = ["whatsapp", "recording", "protocol", "container", "no-std"]
+categories = ["network-programming", "encoding", "no-std"]
+readme = "README.md"
+documentation = "https://docs.rs/wa-wire-recording"
 
 [features]
 default = ["alloc"]

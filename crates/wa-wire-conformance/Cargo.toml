@@ -8,6 +8,18 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+keywords = ["whatsapp", "conformance", "protocol", "testing"]
+categories = ["network-programming", "development-tools::testing", "no-std"]
+readme = "README.md"
+documentation = "https://docs.rs/wa-wire-conformance"
+
+# This crate's own test material, and none of it useful to a dependent. Every
+# integration test here reads a file: the corpus, the frozen recordings, or a
+# fixture from an adapter that is not even in this package. Shipping the tests
+# without what they read would publish a crate whose `cargo test` fails, and
+# shipping the data would ship our engines' output to someone comparing theirs.
+exclude = ["corpus/", "recordings/", "tests/"]
+
 [dependencies]
 wa-wire-adapter = { path = "../wa-wire-adapter", version = "0.1.0" }
 wa-wire-codec = { path = "../wa-wire-codec", version = "0.1.0" }
