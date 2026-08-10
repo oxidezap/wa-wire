@@ -1838,6 +1838,85 @@ reproducible here and not yet by a stranger.
 **Explicitly out of v1:** L2 commands, Layer 3 host, session handoff, fencing,
 multi-session pooling, media transfer, the `wa-store-migrate` port.
 
+### v2 scope — Layer 3: the host, and moving a session between engines
+
+**Opened in rev 57.** v1 made four engines produce the same events from the same
+traffic. v2 is what that was for: a session running on one engine, moved to
+another, without re-pairing.
+
+The design is not the open part. [RFC-003](#rfc-003--session-handoff-protocol),
+[RFC-004](#rfc-004--multi-session-host-and-resource-sharing) and
+[RFC-006](#rfc-006--store-ownership) were accepted in rev 7 and nothing since
+has disturbed them. What v2 adds is implementation, and two numbers nobody has.
+
+#### What it inherits as settled
+
+- **Handoff is stop-the-world per session** (RFC-003). One device, one
+  connection: a second with the same keys makes the server kill the first, so
+  there is no blue/green. The six phases — quiesce, barrier, detach, snapshot,
+  attach, resume — follow from that and are not a choice.
+- **The host never owns the store** (D-007), and Layer 3 ships on external
+  `wa-store-migrate` (D-008). Owning it would mean reimplementing four engines'
+  session logic.
+- **`detach` is type-level distinct from `logout`** (R3-R4). A bug there unpairs
+  the customer's device, so it is enforced by types rather than by care.
+- **Sharing is per-process and never per-account** (RFC-004). Token tables,
+  protobuf descriptors, the HTTP pool and the executor are shared; key material,
+  Signal state, sockets, and the device-list and LID caches are not — the last
+  two because sharing them is a cross-tenant leak wearing the clothes of an
+  optimisation.
+
+#### What has to be measured before anything is claimed
+
+Both are marked `[UNKNOWN]` in the RFCs that need them, and both are the kind of
+number this project refuses to guess.
+
+- **The unavailability window, per engine pair** (RFC-003, OQ-7). Handshake plus
+  resync, and no one has timed it. Until it is timed there is no SLA to offer
+  and no threshold for Layer 3 to refuse a route by.
+- **The loss, per route** (R2). Twenty routes, and `wa-store-migrate` already
+  documents that some lose things: Baileys drops skip message keys,
+  `whatsapp-rust`'s app-state encoding loses sub-second precision. The promise
+  is **"loss is known, declared and accepted"**, never "lossless" — and today
+  nothing is known, which makes the promise unsayable rather than merely
+  unproven.
+
+**So v2 starts with an experiment, not a host.** `whatsapp-bench` has the
+pinned-source, hermetic, offline harness already. A route whose loss is
+unmeasured is a route the gate cannot judge, and a host that moves a session
+across it is claiming something no one checked.
+
+#### Definition of done for v2
+
+1. The unavailability window measured for every engine pair, and the per-route
+   loss matrix filled in from measurement rather than from documentation.
+2. A fencing token: persisted, monotonic, and proven to serialise two hosts that
+   both believe they own one session (R1). Not retrofittable, so it comes early.
+3. `detach` and `logout` distinct at the type level, with a test that the
+   distinction cannot be crossed by accident (R4).
+4. Deduplication by message id in L1 (R3). The window queues inbound
+   server-side, but in-flight acks can duplicate, so this is mandatory rather
+   than a refinement.
+5. One session moved between two engines and back, with the events on either
+   side compared by the conformance runner — the v1 machinery pointed at the v2
+   claim.
+6. The loss the route declared, and no more, observed in that move.
+
+**Explicitly out of v2:** L2 commands, media transfer, QuickJS or any
+fat-host binding, and multi-host scheduling. The first is a project of its own
+(D-019, R7); the last is what a fencing token exists to make possible later, not
+something v2 builds.
+
+#### What v2 depends on that this project does not own
+
+`wa-store-migrate` belongs to vinikjkkj, who also authors `zapo`. D-012 settled
+the technical question — a differentially verified port with `docs/IR.md`
+promoted to normative — and [OQ-3](#oq-3--wa-store-migrate-port--decided-technically-open-on-governance)
+records that what remains is a conversation rather than a design. v2's core
+step, `snapshot`, runs on that tool. **That is the single largest risk in this
+scope**, and unlike v1's two open engine PRs it is a dependency at the centre
+rather than at the edges.
+
 ### Ordering
 
 Dependencies, not a schedule.
@@ -2050,12 +2129,32 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-131 | A capability is a promise about what crosses the boundary, not a fact about the engine behind it | *Plugin host* and *runtime portability* are rows in the matrix and are not capabilities: they matter to whoever is choosing an engine, and a consumer cannot require either of them at setup. Naming them would put things in the vocabulary that `require` could never usefully check | 44 |
 | D-132 | Publication freezes contract version 1 as *fixed*, not as *final* | New capability identifiers, new reserved flag bits and new metadata tags may still appear: a reader that meets one keeps it rather than refusing, because the format was built to carry what it cannot resolve. What needs version 2 is moving a field, changing what one means, or removing anything — the three a reader cannot survive by ignoring | 45 |
 | D-133 | `l0.plaintext.cause` stays without a provider rather than being wired to `Event::UndecryptableMessage` | That event is per message, deduplicated per `(chat, id)` and suppressed on resends, and its `decrypt_fail_mode` is a display hint rather than a cause. A status that is right sometimes and absent otherwise is worse than one that is uniformly `Unobserved`: a gate can act on the second and not on the first | 50 |
+| D-134 | v2 is Layer 3 — the host and moving a session between engines — and it opens with an experiment rather than a host | The three RFCs it needs were accepted in rev 7 and have not moved, so the design is not the open part. What is open is two numbers: the unavailability window per engine pair and the loss per route. R2's promise is "loss is known, declared and accepted", and nothing is known — which makes the promise unsayable, not merely unproven. A route whose loss is unmeasured is one the gate cannot judge | 57 |
 
 ---
 
 ## Changelog
 
 ### rev 57 — 2026-08-09
+
+- **v2 is open, and it is Layer 3** (D-134): the host, and moving a session from
+  one engine to another without re-pairing. v1 made four engines agree about
+  what arrives; this is what that agreement was for.
+- **The design is not the open part.** RFC-003, RFC-004 and RFC-006 were
+  accepted in rev 7 and nothing in fifty revisions has disturbed them. Handoff
+  is stop-the-world because one device gets one connection; the host never owns
+  the store; `detach` is not `logout`, at the type level. v2 implements what
+  those already decided.
+- **It opens with an experiment.** Two numbers are marked `[UNKNOWN]` in the
+  RFCs that need them — the unavailability window per engine pair (OQ-7) and the
+  loss per route (R2) — and both are the kind this project will not guess. R2's
+  promise is "loss is known, declared and accepted"; today nothing is known,
+  which makes the promise unsayable rather than merely unproven. `whatsapp-bench`
+  has the harness already.
+- **The largest risk is named where it can be seen.** v2's `snapshot` phase runs
+  on `wa-store-migrate`, which belongs to someone else. v1's two open engine PRs
+  are at the edges; this one is at the centre, and OQ-3 records that what remains
+  there is a conversation rather than a design.
 
 - **The seven crates are published.** `wa-wire-contract` 0.1.2 and the other six
   at 0.1.0, all seven built on docs.rs. Verified the way a stranger would: a new

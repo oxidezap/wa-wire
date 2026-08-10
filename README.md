@@ -14,6 +14,8 @@ never changed.
 > version 1 is frozen. The design is recorded in [`DESIGN.md`](DESIGN.md), which
 > carries ten accepted RFCs, a decision log and a per-revision changelog. The
 > v1 scope is L0 + L1: there is no Layer 3 host, and sending is the consumer's.
+> [v2 is open](DESIGN.md#v2-scope--layer-3-the-host-and-moving-a-session-between-engines)
+> and is Layer 3 — moving a session between engines without re-pairing.
 
 ```toml
 [dependencies]
