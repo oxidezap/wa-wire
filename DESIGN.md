@@ -8,7 +8,7 @@
 > **Name:** `wa-wire` (D-018) · **License:** MIT, `adapters/hypermeow/` MPL-2.0 (D-022)
 > **v1 scope:** L0 + L1, takeover included. No L2, no Layer 3 host.
 > **Owner:** oxidezap
-> **Last revised:** rev 58
+> **Last revised:** rev 59
 
 This document is **incremental**. Every revision appends to the
 [Changelog](#changelog) and the [Decision Log](#decision-log). Claims backed by
@@ -1933,11 +1933,18 @@ about state.
   Phase 3 is `detach`, a clean disconnect that is not a logout, and `zapo` has
   no way to express it. It can be a handoff **source** only if the process
   exits, which is a different design from the one RFC-003 describes.
-- **`whatsapp-rust` does not come back.** `disconnect()` then `connect()` never
-  completes within thirty seconds against a local mock, and the same adapter
-  evidences nothing in `offline-sync` while reporting the units complete. Phase
-  5 is `attach`, so this is the mirror problem: it can be a **source** but not
-  yet a target.
+- **`whatsapp-rust` does not come back**, and rev 59 found why. `disconnect()`
+  writes `is_running = false` and fires the shutdown notifier: it is a terminal
+  stop, not a pause. The run loop then prints *"Expected disconnect (e.g., 515),
+  reconnecting immediately…"* and, on the next line, *"Client run loop has shut
+  down."* A `connect()` after that completes the Noise handshake and the server
+  sends its `<success>`, but the loop that would decode it has exited, so
+  nothing is read, no `Connected` is dispatched, and eighteen seconds later the
+  keepalive discovers `NotConnected`.
+
+  So phase 5 is not slow or flaky here — **the library has no detach that is not
+  a stop**, which is a different problem from the one the symptom suggested. It
+  can be a **source** and not a target.
 
 Together these remove four of the twelve routes until one engine or the other
 changes, and they land on the two extremes of the window measurement — the
@@ -2194,6 +2201,31 @@ Portability is enforced too: the contract builds with no allocator and for
 ---
 
 ## Changelog
+
+### rev 59 — 2026-08-10
+
+- **Rev 58 said `whatsapp-rust` cannot `attach`. It is more specific than that,
+  and the specificity changes what v2 needs.** `disconnect()` writes
+  `is_running = false` and fires the shutdown notifier — it is a terminal stop.
+  The run loop announces *"reconnecting immediately"* and then announces that it
+  has shut down; a later `connect()` completes the handshake and the server
+  sends its `<success>`, and nothing decodes it because the reader is gone.
+- **What the library lacks is a detach that is not a stop**, which RFC-003's
+  phase 3 requires by name and R4 requires to be type-level distinct from
+  `logout`. That is a capability to add, not a bug to fix, and it is the same
+  shape as `zapo`'s inability to drop its transport.
+- Three explanations were eliminated before that one survived, each with
+  evidence: the `expected_disconnect` flag left dirty (the symptom persists on
+  the commit that clears it), the `Connection` guard dropped undriven (the
+  pinned API returns no guard, and driving it on the newer API changes nothing),
+  and the caller racing the run loop (removing the caller's `connect()` leaves
+  the same two log lines and no new connection).
+- `agent_prompts/detach-and-reattach-a-session.md` in `whatsapp-rust` carries
+  the reproduction, the eliminated hypotheses, and the one question that decides
+  the work — whether `disconnect()` is terminal by design, in which case the log
+  line is the defect and the missing capability is the finding. The prompt does
+  not answer it, because answering it needs the intent behind an API this
+  repository does not own.
 
 ### rev 58 — 2026-08-10
 
