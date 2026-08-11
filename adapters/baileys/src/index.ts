@@ -12,7 +12,14 @@
 
 export { toEnvelope, waWire, type WaWire, type WaWireConfig, type WaWireOptions } from './adapter.js'
 export {
+    DetachError,
+    createDetacher,
+    type SessionDetacher,
+    type SocketEnd
+} from './handoff.js'
+export {
     ADAPTER_VERSION,
+    DETACHING_INFO,
     ENGINE_VERSION,
     ID,
     INFO,

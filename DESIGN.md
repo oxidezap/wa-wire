@@ -2003,8 +2003,17 @@ than host work, and neither was visible from reading the RFCs.
    `derive` would stop being the thing four engines can be compared on (D-010).
 5. One session moved between two engines and back, with the events on either
    side compared by the conformance runner — the v1 machinery pointed at the v2
-   claim.
-6. The loss the route declared, and no more, observed in that move.
+   claim. **Half done in rev 64**: the *store* moves,
+   `whatsapp-rust → zapo → whatsapp-rust` on a real paired session
+   (`tools/handoff-cycle`). What is left is the traffic half, which needs `zapo`
+   to attach with a store it did not create — its backends are pluggable and
+   writing one is host work (D-007).
+6. ~~The loss the route declared, and no more, observed in that move.~~ **Done
+   in rev 64**, and the answer is *no*: everything came back byte-identical
+   except `appStateSyncKeys.timestamp`, which the route does not declare and
+   which `zapo`'s writer turns from absent into `0`. `appStateVersions` is
+   declared lossy in both directions and came back identical. The check exists
+   now, and it is the check that found both (D-142).
 
 **Explicitly out of v2:** L2 commands, media transfer, QuickJS or any
 fat-host binding, and multi-host scheduling. The first is a project of its own
@@ -2240,10 +2249,59 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-138 | `Detach` is a trait with one method, not a variant of an enum that also names `logout` | The two acts look alike from one line away and differ irreversibly: a detach hands the session on, a logout unpairs the customer's device. `enum End { Detach, Logout }` is the shape a bug flips and still compiles. A host driving a handoff holds `&dyn Detach` and cannot log out because there is no method to call — proved by a `compile_fail` doctest paired with an identical one that compiles, so it cannot start passing for an unrelated reason | 62 |
 | D-139 | The fencing token lives in `wa-wire-adapter` beside `Detach`, and an engine never sees it | The fence is the host's bookkeeping and the detach is the engine's act. An engine has no way to know what else in the fleet believes it owns this session, so a token threaded through the adapter API would be a parameter no implementation could check. Keeping them adjacent and separate is what lets a host run them in order | 62 |
 | D-140 | An engine's capability is read from the engine, never from a harness failure | `zapo` was recorded as unable to drop its transport on the strength of a `whatsapp-bench` message that says exactly that. The message reports on the benchmark client, which never registered a drop hook, and `WaClient.disconnect()` had been there the whole time. A harness failure is evidence about the harness until someone reads the engine | 63 |
+| D-141 | The handoff cycle takes `wa-store-migrate` from npm, not from its repository | The repository does not build — `src/adapters/wa-web` is imported by the registry and by five test files and is not committed — and the published package ships it. Waiting for the repository to be fixed would have kept the one dependency at the centre of v2 blocking on someone else's commit, when the artefact that runs was already available | 64 |
+| D-142 | A move is checked by comparing the snapshots byte for byte, never by counting rows | 807 prekeys going out and 807 coming back is the answer to "did it run", and a round trip that returns the right number of prekeys with the wrong bytes inside them passes it. Counting also missed the one real finding: every app-state key came home with a timestamp it did not leave with, and the count never moved | 64 |
 
 ---
 
 ## Changelog
+
+### rev 64 — 2026-08-11
+
+- **The snapshot step runs.** `tools/handoff-cycle` moves one session
+  `whatsapp-rust → zapo → whatsapp-rust` and compares what came back with what
+  left. `wa-store-migrate` comes from npm rather than from its repository, which
+  still does not build (D-141) — the dependency at the centre of v2 is no longer
+  waiting on someone else's commit.
+- **On a real session, not a synthetic one.** Paired against Barback with
+  `capture-corpus`, 807 prekeys, 70 app-state keys, one session, one identity.
+  The committed fixture is that store reduced to eight of each so a reviewer can
+  read it; the account is the mock server's.
+- **Byte for byte, not by count** (D-142). Prekeys, sessions, identities,
+  `signedPreKey`, `deviceLists` and `appStateVersions` all came back identical.
+- **One undeclared difference, which is exactly what item 6 asks about.**
+  `appStateSyncKeys.timestamp` is absent in the IR — `whatsapp-rust` has no such
+  column — and `zapo`'s writer turns absent into `0`
+  (`adapters/zapo/from-canonical.js:81`), its reader handing back `0` rather
+  than absent. Every key comes home claiming 1970 and `planLosses` says nothing.
+  Harmless on this route, since `whatsapp-rust` does not read the field. Not
+  harmless on a route whose destination picks the newest key by it.
+- **And one over-declaration.** `appStateVersions` is called lossy in both
+  directions and came back byte-identical. Over-declaring is the safe direction;
+  worth knowing, because a host reading the matrix would warn about a move that
+  costs nothing.
+- **A third, read rather than observed.** `updatedAtMs: t.timestampMs ??
+  Date.now()` (`adapters/zapo/from-canonical.js:104`) makes the same migration
+  produce a different store each run. The fixture has no `tcTokens`, so this is
+  recorded to keep it from being found twice.
+- **The upstream read recipe corrupts every prekey.** `wa-store-migrate`'s
+  README splits `prekeys.key` as a 64-byte keypair; it is a libsignal
+  `PreKeyRecordStructure` protobuf. Splitting it yields two 32-byte strings that
+  are the right length and neither of which is a key, so nothing downstream
+  notices. `dump-rust-store.py` parses the record. The device columns *are* a
+  raw pair, private first.
+- **`registrationId` divides the four engines**, and blocks the route above this
+  tool. `zapo` generates 1..16381 and Baileys masks to 14 bits; `whatsapp-rust`
+  uses 1..2³¹−1 and whatsmeow a full `uint32`. `wa-store-migrate` validates 14
+  bits, so a real `whatsapp-rust` session fails `validate: true` on every route
+  out. The wire carries a `uint32` — WA Web's `WhisperTextProtocol` declares it
+  so — which makes this a local convention two engines keep and two do not.
+- **All four adapters now declare `lifecycle.detach`.** `Baileys` via
+  `end(undefined)`, which closes without the `loggedOut` status code every
+  consumer branches on to decide whether to wipe its auth state; `hypermeow` via
+  `Disconnect()`, which calls `expectDisconnect` first so the automatic
+  reconnect does not fire. Both take the one engine method they use rather than
+  a whole client, so what they depend on is in the type.
 
 ### rev 63 — 2026-08-11
 

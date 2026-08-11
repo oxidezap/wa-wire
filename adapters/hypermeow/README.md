@@ -65,7 +65,7 @@ than left as a comment.
 | `l0.takeover` | in `TakeoverInfo`, not here — the hook's `drop` return is native takeover |
 | `l0.outbound.observed` | **no** — the engine has no outbound observation point |
 | `lifecycle.drain-hook` | **no** — nothing says when incoming handlers have finished |
-| `lifecycle.detach` | **no** — `Disconnect()` then `Connect()` completes a cycle in the engine, but this adapter does not expose it yet |
+| `lifecycle.detach` | in `DetachingInfo` — `Disconnect()` calls `expectDisconnect` first, so the automatic reconnect does not fire |
 
 A recording from this adapter therefore holds the inbound half of a session and
 nothing the client replied. Only `whatsapp-rust` can report the other half

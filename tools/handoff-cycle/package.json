@@ -1,0 +1,12 @@
+{
+  "name": "wa-wire-handoff-cycle",
+  "private": true,
+  "type": "module",
+  "description": "Moves one session between two engines and back, and checks the loss against what the route declared",
+  "scripts": {
+    "check": "node cycle.mjs fixtures/whatsapp-rust-session.json"
+  },
+  "dependencies": {
+    "wa-store-migrate": "^0.1.1"
+  }
+}

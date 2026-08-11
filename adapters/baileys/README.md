@@ -67,7 +67,7 @@ than left as a comment.
 | `l0.takeover` | **no** — the hook observes; the pipeline runs regardless |
 | `l0.outbound.observed` | **no** — nothing reports what the client sent |
 | `lifecycle.drain-hook` | **no** — nothing says when handlers have drained |
-| `lifecycle.detach` | **no** — ending the socket without marking it closed brings the session back, but this adapter does not expose it yet |
+| `lifecycle.detach` | in `DETACHING_INFO` — `end(undefined)` closes without the `loggedOut` status a consumer wipes state on |
 
 The auth phase is worth noting against `zapo`, which protects `success` and
 `failure` from its stanza filters and so cannot see the login exchange. Being

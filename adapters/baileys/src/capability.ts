@@ -57,6 +57,19 @@ export const INFO: AdapterInfo = {
     capabilities: TAP_CAPABILITIES
 }
 
+/**
+ * What this adapter can do when it can also release the session.
+ *
+ * Its own declaration, because detaching needs the socket and an instance
+ * installed as a tap has only the frame hook. A consumer requiring
+ * `lifecycle.detach` is saying it holds a detacher, and a set covering both
+ * would be false for whichever it actually has.
+ */
+export const DETACHING_INFO: AdapterInfo = {
+    ...INFO,
+    capabilities: [...INFO.capabilities, Capability.Detach]
+}
+
 /** Whether this adapter declares `capability`. */
 export function has(capability: Capability): boolean {
     return INFO.capabilities.includes(capability)
