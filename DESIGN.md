@@ -2003,11 +2003,17 @@ than host work, and neither was visible from reading the RFCs.
    `derive` would stop being the thing four engines can be compared on (D-010).
 5. One session moved between two engines and back, with the events on either
    side compared by the conformance runner — the v1 machinery pointed at the v2
-   claim. **Half done in rev 64**: the *store* moves,
-   `whatsapp-rust → zapo → whatsapp-rust` on a real paired session
-   (`tools/handoff-cycle`). What is left is the traffic half, which needs `zapo`
-   to attach with a store it did not create — its backends are pluggable and
-   writing one is host work (D-007).
+   claim. **Mostly done in rev 64.** The store round-trips
+   `whatsapp-rust → zapo → whatsapp-rust`, and the outbound leg also runs live:
+   `zapo` attaches to a `whatsapp-rust` session, connects and records, with no
+   re-pairing (`tools/handoff-cycle`). Two things are left, and the second
+   replaces the first. Coming back live needs `zapo`'s session read *out*, which
+   its contracts do not offer — nothing enumerates, so an attach is possible
+   from outside and a harvest is not (D-144); the way through is a caller-supplied
+   backend, which sees every write as it happens. And the comparison this item
+   names is one the runner declines by design (D-143): what a live move supports
+   is a continuity assertion, not a stanza-by-stanza diff between two windows of
+   a server.
 6. ~~The loss the route declared, and no more, observed in that move.~~ **Done
    in rev 64**, and the answer is *no*: everything came back byte-identical
    except `appStateSyncKeys.timestamp`, which the route does not declare and
@@ -2251,12 +2257,42 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-140 | An engine's capability is read from the engine, never from a harness failure | `zapo` was recorded as unable to drop its transport on the strength of a `whatsapp-bench` message that says exactly that. The message reports on the benchmark client, which never registered a drop hook, and `WaClient.disconnect()` had been there the whole time. A harness failure is evidence about the harness until someone reads the engine | 63 |
 | D-141 | The handoff cycle takes `wa-store-migrate` from npm, not from its repository | The repository does not build — `src/adapters/wa-web` is imported by the registry and by five test files and is not committed — and the published package ships it. Waiting for the repository to be fixed would have kept the one dependency at the centre of v2 blocking on someone else's commit, when the artefact that runs was already available | 64 |
 | D-142 | A move is checked by comparing the snapshots byte for byte, never by counting rows | 807 prekeys going out and 807 coming back is the answer to "did it run", and a round trip that returns the right number of prekeys with the wrong bytes inside them passes it. Counting also missed the one real finding: every app-state key came home with a timestamp it did not leave with, and the count never moved | 64 |
+| D-143 | A live handoff is not checked by comparing the two legs' recordings | The gate refuses them as `UndeclaredInput` and is right to: two live legs are two different windows of a server talking, so a stanza-by-stanza difference between them is a fact about the server rather than about the engines (D-079). Item 5's phrasing asks the runner for a verdict it exists to decline; the assertion a live move supports is continuity, and it needs its own check | 64 |
+| D-144 | An attach goes through the engine's own store contracts, never around them | D-007 says the host does not own the store, and that cuts both ways: seeding `zapo` uses documented methods only, so a contract that changes breaks at the call instead of yielding a store that loads and is subtly wrong. The cost is that the reverse is not available — `zapo` exposes no enumeration, so it can be attached to from outside and not harvested from outside | 64 |
 
 ---
 
 ## Changelog
 
 ### rev 64 — 2026-08-11
+
+- **A session changed engines, live.** `tools/handoff-cycle/attach-zapo.mjs`
+  migrates a `whatsapp-rust` session into `zapo`'s shape, seeds a fresh `zapo`
+  store through `zapo`'s own contracts (D-144), and connects: `credentials ready
+  { registered: true }`, handshake, `success`, 47 envelopes recorded — against a
+  server log holding exactly one pairing, from the `whatsapp-rust` leg minutes
+  earlier. The account never re-paired, which is the whole claim of v2.
+- **The script fails if a QR appears**, because a run that pairs has proved only
+  that the mock server pairs anyone. The server's log is the second opinion, and
+  it is the one that settles it.
+- **`capture-corpus` can write a recording** as well as its directory of frames.
+  The two answer different questions: the files are a corpus to replay one
+  stanza at a time, the recording is a session to compare against another
+  engine's. Its capability list is read from `CAPABILITIES` rather than written
+  out, so a recording cannot claim something `INFO` stopped saying.
+- **The runner refuses to compare the two legs, and should** (D-143). Two live
+  legs are two different windows of the server, so a difference between them
+  says nothing about the engines. Item 5 asks for a comparison the container
+  exists to prevent.
+- **Two API mistakes worth recording, one run each.** `WaClient` takes
+  `chatSocketUrls`; `url` is silently ignored and the client races its
+  production endpoints instead — a run against real WhatsApp with credentials
+  from a mock server. And the certificate-chain check is under `dangerous`.
+- **`zapo` reconnects on its own after all**, which the adapter's doc denied. A
+  socket that fails unexpectedly is retried with backoff. What it does not do is
+  come back from a `disconnect()` the caller asked for — `stopComms` sets
+  `preventRetry` — and that is the property `lifecycle.detach` rests on. The
+  claim was right and the reason given for it was wrong.
 
 - **The snapshot step runs.** `tools/handoff-cycle` moves one session
   `whatsapp-rust → zapo → whatsapp-rust` and compares what came back with what

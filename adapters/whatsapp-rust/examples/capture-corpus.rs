@@ -52,8 +52,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use wa_wire_adapter::{RawStanza, StanzaSink};
-use wa_wire_adapter_whatsapp_rust::WaWirePlugin;
+use wa_wire_adapter::{Capability, RawStanza, StanzaSink};
+use wa_wire_adapter_whatsapp_rust::{
+    ADAPTER_VERSION, CAPABILITIES, ENGINE_VERSION, PLUGIN_ID, WaWirePlugin,
+};
+use wa_wire_recording::{ArtifactClass, MetaBuilder, RecordingWriter};
 use whatsapp_rust::store::persistence_manager::PersistenceManager;
 use whatsapp_rust::types::events::{Event, EventHandler, EventInterest, EventKind};
 use whatsapp_rust::{Client, ClientBuilder};
@@ -67,6 +70,7 @@ struct Settings {
     store: Option<String>,
     pair_post: Option<String>,
     version: Option<(u32, u32, u32)>,
+    recording: Option<PathBuf>,
 }
 
 impl Settings {
@@ -95,6 +99,9 @@ impl Settings {
             seconds,
             store: std::env::var("WA_WIRE_CAPTURE_STORE").ok(),
             pair_post: std::env::var("WA_WIRE_CAPTURE_PAIR_POST").ok(),
+            recording: std::env::var("WA_WIRE_CAPTURE_RECORDING")
+                .ok()
+                .map(PathBuf::from),
             version: std::env::var("WA_WIRE_CAPTURE_VERSION")
                 .ok()
                 .map(|value| parse_version(&value))
@@ -123,6 +130,14 @@ struct FrameWriter {
     dir: PathBuf,
     written: usize,
     failures: usize,
+    /// Also assembled as one recording, when a caller asked for one.
+    ///
+    /// The directory and the recording answer different questions: the files
+    /// are a corpus to replay one stanza at a time, and the recording is a
+    /// session to compare against another engine's. A handoff needs the second
+    /// — the claim is about what two engines heard, which is not a property any
+    /// single stanza has.
+    recording: Option<RecordingWriter>,
 }
 
 impl FrameWriter {
@@ -151,7 +166,28 @@ impl FrameWriter {
             dir,
             written: 0,
             failures: 0,
+            recording: None,
         })
+    }
+
+    /// Assemble a recording alongside the files.
+    ///
+    /// The capability list is the adapter's own declaration rather than a
+    /// literal, so a recording cannot come to claim something `INFO` stopped
+    /// saying.
+    fn recording(mut self) -> Result<Self, wa_wire_recording::WriteError> {
+        let capabilities: Vec<&str> = CAPABILITIES.iter().map(Capability::identifier).collect();
+        let meta = MetaBuilder::new()
+            .adapter(
+                PLUGIN_ID,
+                ADAPTER_VERSION,
+                ENGINE_VERSION,
+                1,
+                capabilities.iter().copied(),
+            )?
+            .artifact_class(ArtifactClass::Captured)?;
+        self.recording = Some(RecordingWriter::new(meta)?);
+        Ok(self)
     }
 
     /// A name that sorts in arrival order and says what it holds.
@@ -180,6 +216,24 @@ impl StanzaSink for FrameWriter {
         let tag = wa_wire_codec::Parser::new(wa_wire_codec::tokens::TABLE)
             .parse(stanza.frame)
             .map_or_else(|_| "unparsed".to_owned(), |node| node.tag().to_string());
+        // Into the recording before the file: the recording is the session and
+        // an envelope missing from it is a divergence a comparison would report,
+        // while a `.bin` that failed to write is one stanza less in a corpus.
+        if let Some(writer) = self.recording.as_mut() {
+            match stanza.encode_to_vec() {
+                Ok(envelope) => {
+                    if let Err(error) = writer.envelope(&envelope) {
+                        self.failures = self.failures.saturating_add(1);
+                        eprintln!("  recording: {error}");
+                    }
+                }
+                Err(error) => {
+                    self.failures = self.failures.saturating_add(1);
+                    eprintln!("  recording: {error}");
+                }
+            }
+        }
+
         let path = self.dir.join(self.name(&tag));
         match std::fs::write(&path, stanza.frame) {
             Ok(()) => {
@@ -286,7 +340,11 @@ async fn main() -> anyhow::Result<()> {
         settings.out.display()
     );
 
-    let plugin = WaWirePlugin::new(FrameWriter::new(settings.out.clone())?);
+    let mut frames = FrameWriter::new(settings.out.clone())?;
+    if settings.recording.is_some() {
+        frames = frames.recording()?;
+    }
+    let plugin = WaWirePlugin::new(frames);
     let sink = plugin.sink();
     let client = build(&settings, plugin).await?;
     client
@@ -305,12 +363,21 @@ async fn main() -> anyhow::Result<()> {
     client.disconnect().await;
     task.abort();
 
-    let sink = sink.lock().expect("sink lock");
-    println!(
-        "\n{} frames written, {} failed",
-        sink.written, sink.failures
-    );
-    if sink.written == 0 {
+    let (written, failures, recording) = {
+        let mut sink = sink.lock().expect("sink lock");
+        // Taken rather than borrowed: finishing a recording consumes the
+        // writer, and the plugin still holds the sink.
+        let recording = sink.recording.take().map(RecordingWriter::finish);
+        (sink.written, sink.failures, recording)
+    };
+    println!("\n{written} frames written, {failures} failed");
+
+    if let (Some(path), Some(bytes)) = (settings.recording.as_ref(), recording) {
+        std::fs::write(path, &bytes)?;
+        println!("recording: {} ({} bytes)", path.display(), bytes.len());
+    }
+
+    if written == 0 {
         anyhow::bail!("no stanzas captured — is the session paired and the server sending?");
     }
     Ok(())

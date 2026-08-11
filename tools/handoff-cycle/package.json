@@ -4,9 +4,12 @@
   "type": "module",
   "description": "Moves one session between two engines and back, and checks the loss against what the route declared",
   "scripts": {
-    "check": "node cycle.mjs fixtures/whatsapp-rust-session.json"
+    "check": "node cycle.mjs fixtures/whatsapp-rust-session.json",
+    "attach": "node attach-zapo.mjs"
   },
   "dependencies": {
-    "wa-store-migrate": "^0.1.1"
+    "wa-store-migrate": "^0.1.1",
+    "zapo-js": "file:../../../zapo",
+    "@oxidezap/wa-wire-adapter-zapo": "file:../../adapters/zapo"
   }
 }

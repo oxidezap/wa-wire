@@ -4,9 +4,16 @@
  * `WaClient.disconnect()` is the call, and which call it is carries the whole
  * meaning. Its own documentation says it closes the transport gracefully and
  * *does not* clear stored credentials — `connect()` again resumes the same
- * session. It emits `isLogout: false`, and `zapo` has no built-in auto-reconnect
- * at all, so once it returns nothing brings the socket back except a caller
- * asking. That is a detach.
+ * session. It emits `isLogout: false`, and it stops the transport rather than
+ * merely closing the socket: it reaches `WaComms.stopComms()`, which sets
+ * `preventRetry`, so once it returns nothing brings the socket back except a
+ * caller asking. That is a detach.
+ *
+ * Worth stating precisely, because `zapo` *does* reconnect on its own — a socket
+ * that fails unexpectedly is retried with backoff, which a run against a server
+ * it cannot handshake with shows five times over. What it does not do is come
+ * back from a disconnect the caller asked for. The difference between the two
+ * paths is `preventRetry`, and it is the property a handoff depends on.
  *
  * `WaClient.logout()` is the one that must stay out of reach here. It runs the
  * server-side logout and unpairs the device; nothing brings that back without
