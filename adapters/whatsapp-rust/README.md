@@ -76,13 +76,23 @@ real rather than cosmetic.
 | `l0.outbound` | on `Sender` | on `Sender` |
 | `l0.request` | on `Sender` | on `Sender` |
 | `lifecycle.drain-hook` | **no** | **no** |
+| `lifecycle.detach` | on `Detacher` | on `Detacher` |
 
 Neither is a superset of the other, which is why they carry separate
 declarations (`INFO` and `takeover::TAKEOVER_INFO`). Sending is a third
-(`SENDING_INFO`, and `REQUESTING_INFO` when replies are correlated), because an
-adapter built to observe genuinely cannot send and one set covering both would
-be false for whichever the consumer actually holds. Every row is asserted in
-this crate's tests.
+(`SENDING_INFO`, and `REQUESTING_INFO` when replies are correlated), and
+releasing the session a fourth (`DETACHING_INFO`), because an adapter built to
+observe genuinely cannot send and one set covering both would be false for
+whichever the consumer actually holds. Every row is asserted in this crate's
+tests.
+
+**Detach** is `Client::pause`, and the choice of call is the whole content of
+the row. `disconnect()` is terminal — the run loop shuts down and the session
+does not come back — and `logout()` unpairs the device. `pause` closes the
+socket, refuses `connect()` including an attempt already in flight, and changes
+nothing at the protocol level, so the session can be picked up elsewhere and
+handed back. `tests/detach.rs` asserts the engine is left resumable rather than
+finished, which is what tells the three apart after the fact.
 
 **Tap** rides `Event::RawNode`, emitted before any early return, so it sees
 everything the engine decodes — and only observes.

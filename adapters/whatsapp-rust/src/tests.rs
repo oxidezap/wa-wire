@@ -557,7 +557,9 @@ fn a_rejection_this_engine_cannot_hand_over_says_so() {
 fn sent_frame_event(node: &Node) -> Arc<Event> {
     let packed = marshal::marshal(node).expect("marshals");
     Arc::new(Event::SentFrame(
-        events::SentFrame::builder().plaintext(packed.into()).build(),
+        events::SentFrame::builder()
+            .plaintext(packed.into())
+            .build(),
     ))
 }
 

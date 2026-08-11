@@ -310,52 +310,111 @@ fn a_recording_frozen_mid_write_there_is_still_readable_here() {
 
 /// The capability vocabulary is one contract, written in two languages.
 ///
-/// Rust and TypeScript both name the capabilities an adapter may declare, and
-/// nothing tied the two lists together — so the ninth was added to one and not
-/// the other, and a TypeScript consumer could not name, require or report
+/// Every quoted string on a non-comment line between `open` and the first
+/// `close` after it.
+///
+/// Bounded to one block rather than scanning a whole file, so a string literal
+/// elsewhere in it is not mistaken for a declaration — and so the count of what
+/// was found means something.
+///
+/// Comment lines are skipped rather than parsed. Both files document each
+/// capability in prose above it, and prose has apostrophes: reading "engine's"
+/// as an opening quote swallows the declaration that follows.
+fn quoted_within(source: &str, open: &str, close: &str) -> Vec<String> {
+    let start = source
+        .find(open)
+        .unwrap_or_else(|| panic!("no `{open}` in the source"));
+    let rest = &source[start.saturating_add(open.len())..];
+    let end = rest
+        .find(close)
+        .unwrap_or_else(|| panic!("no `{close}` closing `{open}`"));
+
+    let mut found = Vec::new();
+    for line in rest[..end].lines() {
+        let line = line.trim_start();
+        if line.starts_with("//") || line.starts_with('*') || line.starts_with("/*") {
+            continue;
+        }
+        let Some(quote) = line.find(['"', '\'']) else {
+            continue;
+        };
+        let delimiter = char::from(line.as_bytes()[quote]);
+        let after = &line[quote.saturating_add(1)..];
+        let Some(closing) = after.find(delimiter) else {
+            continue;
+        };
+        found.push(after[..closing].to_owned());
+    }
+    found
+}
+
+/// Rust, TypeScript and Go each name the capabilities an adapter may declare,
+/// and nothing tied the lists together — so the ninth was added to one and not
+/// the others, and a TypeScript consumer could not name, require or report
 /// `l0.outbound.observed` even though the contract defines it. Absence there
 /// looks like missing traffic, which is precisely what declaring capabilities
 /// exists to prevent.
 ///
-/// Read from the source rather than from a fixture: the list is a handful of
-/// string constants, and a generated fixture would be a third description to
+/// Read from the sources rather than from a fixture: each list is a handful of
+/// string constants, and a generated fixture would be a fourth description to
 /// keep in step.
 ///
-/// One file for both TypeScript adapters, since the vocabulary is the
-/// contract's and they share it. An adapter's own declaration is not here and
-/// has no business being — what an adapter *has* is checked by that adapter.
+/// One TypeScript file for both TypeScript adapters, since the vocabulary is
+/// the contract's and they share it. An adapter's own declaration is not here
+/// and has no business being — what an adapter *has* is checked by that adapter.
 #[test]
-fn both_languages_name_the_same_capabilities() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../adapters/typescript/src/capability.ts");
-    let source = std::fs::read_to_string(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+fn every_language_names_the_same_capabilities() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    // Each entry is the file, and the block within it that holds the
+    // vocabulary — a whole-file scan would pick up unrelated string literals
+    // and then the count below would prove nothing.
+    let lists = [
+        (
+            root.join("adapters/typescript/src/capability.ts"),
+            "export const Capability = {",
+            "} as const",
+        ),
+        (
+            root.join("adapters/hypermeow/adapter.go"),
+            "const (\n\t// L0InboundTap",
+            "\n)",
+        ),
+    ];
 
-    for capability in wa_wire_contract::Capability::ALL {
-        let quoted = format!("'{}'", capability.identifier());
-        assert!(
-            source.contains(&quoted),
-            "{} names {capability} and {} does not",
-            "wa-wire-contract",
-            path.display()
-        );
-    }
+    for (path, open, close) in lists {
+        let source = std::fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        let declared = quoted_within(&source, open, close);
 
-    // And nothing there that Rust does not have: a TypeScript adapter could
-    // otherwise declare a capability no host knows how to require.
-    for line in source.lines() {
-        let Some(start) = line.find(": 'l0.") else {
-            continue;
-        };
-        // Past `: '` to the opening quote's other side, then up to the close.
-        let rest = &line[start + 3..];
-        let Some(end) = rest.find('\'') else {
-            continue;
-        };
-        let identifier = &rest[..end];
-        assert!(
-            wa_wire_contract::Capability::from_identifier(identifier).is_some(),
-            "{} names {identifier} and wa-wire-contract does not",
+        for capability in wa_wire_contract::Capability::ALL {
+            assert!(
+                declared.iter().any(|name| name == capability.identifier()),
+                "wa-wire-contract names {capability} and {} does not",
+                path.display()
+            );
+        }
+
+        // And nothing there that Rust does not have: an adapter could otherwise
+        // declare a capability no host knows how to require.
+        //
+        // Every declaration in the block, not those under one prefix. This read
+        // was `": 'l0."` and so was blind to the whole `lifecycle.` family, and
+        // to Go entirely — it would have passed a TypeScript-only
+        // `lifecycle.detach`, which is the exact drift the test exists to catch,
+        // in the half of the vocabulary it was not looking at.
+        for name in &declared {
+            assert!(
+                wa_wire_contract::Capability::from_identifier(name).is_some(),
+                "{} names {name} and wa-wire-contract does not",
+                path.display()
+            );
+        }
+
+        // A read that matched nothing would agree with everything.
+        assert_eq!(
+            declared.len(),
+            wa_wire_contract::Capability::ALL.len(),
+            "{} should hold one declaration per capability and nothing else",
             path.display()
         );
     }

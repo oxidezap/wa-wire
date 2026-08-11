@@ -212,14 +212,15 @@ impl PlaintextJoiner {
         // aged it out — which is where the wire put it.
         self.age_pending();
 
-        self.pending.push(Self::begin(node).unwrap_or_else(|| Pending {
-            message_id: String::new(),
-            frame: node.backing_bytes(),
-            slots: Vec::new(),
-            child_indices: Vec::new(),
-            age: 0,
-            given_up: false,
-        }));
+        self.pending
+            .push(Self::begin(node).unwrap_or_else(|| Pending {
+                message_id: String::new(),
+                frame: node.backing_bytes(),
+                slots: Vec::new(),
+                child_indices: Vec::new(),
+                age: 0,
+                given_up: false,
+            }));
         self.drain(sink);
     }
 

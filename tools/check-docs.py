@@ -365,11 +365,37 @@ def check_published_version(text: str, out: Failures) -> None:
         out.add("published", None, f"wa-wire-contract is at {version}, which the document never mentions")
 
 
+def capability_docs() -> list[Path]:
+    """The other documents that describe the capability vocabulary.
+
+    DESIGN.md is not the only place the count and the names are written down,
+    and it was not where the published mistake lived: the crate README claimed
+    `l0.outbound.observed` had no provider, and later that naming a capability
+    after publication costs a version — which the code has contradicted since
+    the ninth was added. A check that only read DESIGN.md could not see either.
+
+    Every README, so a new crate or adapter is covered by existing there rather
+    than by being added to a list here.
+    """
+    return sorted(
+        path
+        for path in ROOT.rglob("README.md")
+        if "node_modules" not in path.parts and "target" not in path.parts
+    )
+
+
+def report(out: Failures, where: str) -> None:
+    for check, line, message in sorted(out.items, key=lambda item: (item[0], item[1] or 0)):
+        at = f"{where}:{line}" if line else where
+        print(f"{at}: [{check}] {message}")
+
+
 def main() -> int:
     text = DESIGN.read_text()
     capabilities = real_capabilities()
-    out = Failures()
+    findings = 0
 
+    out = Failures()
     asserted = current_text(text)
     check_capability_names(asserted, capabilities, out)
     check_capability_count(asserted, capabilities, out)
@@ -378,16 +404,29 @@ def main() -> int:
     check_anchors(text, out)
     check_rfc_references(text, out)
     check_published_version(text, out)
+    report(out, "DESIGN.md")
+    findings += len(out.items)
 
-    if not out:
-        print(f"check-docs: DESIGN.md agrees with the code ({len(capabilities)} capabilities)")
+    # The vocabulary checks only: a README's links and citations are not this
+    # tool's business, and asking it to resolve them would make every one of
+    # them a reason for CI to fail on an unrelated edit.
+    readmes = capability_docs()
+    for path in readmes:
+        also = Failures()
+        prose = path.read_text()
+        check_capability_names(prose, capabilities, also)
+        check_capability_count(prose, capabilities, also)
+        report(also, str(path.relative_to(ROOT)))
+        findings += len(also.items)
+
+    if not findings:
+        print(
+            f"check-docs: DESIGN.md and {len(readmes)} READMEs agree with the code "
+            f"({len(capabilities)} capabilities)"
+        )
         return 0
 
-    for check, line, message in sorted(out.items, key=lambda item: (item[0], item[1] or 0)):
-        where = f"DESIGN.md:{line}" if line else "DESIGN.md"
-        print(f"{where}: [{check}] {message}")
-
-    print(f"\ncheck-docs: {len(out.items)} findings")
+    print(f"\ncheck-docs: {findings} findings")
     return 1
 
 

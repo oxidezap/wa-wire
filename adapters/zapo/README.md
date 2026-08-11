@@ -42,6 +42,7 @@ That exception is the whole reason this mode is still L0-plain.
 | `l0.outbound` | on `createSender` |
 | `l0.request` | on `createRequester` |
 | `l0.inbound.auth-phase` | **no** |
+| `lifecycle.detach` | **no** — the engine has no way to give up its socket and keep the pairing |
 | `l0.zero-copy-frame` | **no** |
 
 The first three are what any instance provides. Takeover is not: installed as a

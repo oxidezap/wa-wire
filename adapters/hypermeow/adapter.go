@@ -83,6 +83,14 @@ const (
 	ZeroCopyFrame Capability = "l0.zero-copy-frame"
 	// DrainHook reports when incoming handlers have drained.
 	DrainHook Capability = "lifecycle.drain-hook"
+	// Detach releases the session — socket closed, no reconnect of the
+	// engine's own accord — while leaving the account paired. The act
+	// DrainHook only reports the right moment for, and the one an engine can
+	// be entirely unable to perform: WhatsApp allows one connection per
+	// device, so a second engine cannot take a session the first has not let
+	// go of. There is no partial version — a detach that logs out is not a
+	// worse detach, it is a different and irreversible act.
+	Detach Capability = "lifecycle.detach"
 )
 
 // AdapterInfo is what this adapter declares at setup.

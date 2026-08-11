@@ -407,7 +407,11 @@ fn stanzas_leave_in_the_order_they_arrived() {
     joiner.accept_frame(&owned(&NodeBuilder::new("notification").build()), &mut sink);
 
     assert_eq!(sink.envelopes.len(), 0, "the two behind it wait their turn");
-    assert_eq!(joiner.pending(), 1, "only the message is waiting on anything");
+    assert_eq!(
+        joiner.pending(),
+        1,
+        "only the message is waiting on anything"
+    );
     assert_eq!(joiner.queued(), 3);
 
     joiner.accept_plaintext(&plaintext("M11", 0, b"late but fine"), &mut sink);
@@ -489,7 +493,10 @@ fn a_failure_completes_the_stanza_like_a_payload_does() {
     let mut sink = Capture::default();
 
     joiner.accept_frame(&owned(&message_with("M1", &["msg"])), &mut sink);
-    assert!(sink.envelopes.is_empty(), "held while the <enc> is unsettled");
+    assert!(
+        sink.envelopes.is_empty(),
+        "held while the <enc> is unsettled"
+    );
 
     joiner.accept_failure(&failure("M1", 0, PlaintextStatus::Unsupported), &mut sink);
 

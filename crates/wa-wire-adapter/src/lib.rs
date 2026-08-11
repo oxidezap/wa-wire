@@ -67,6 +67,7 @@
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
+pub mod handoff;
 pub mod info;
 pub mod path;
 #[cfg(feature = "alloc")]
@@ -74,6 +75,9 @@ pub mod send;
 pub mod sink;
 pub mod stanza;
 
+#[cfg(feature = "alloc")]
+pub use handoff::{Detach, DetachFailed, DetachFuture};
+pub use handoff::{Fence, Fenced, FencingToken};
 pub use info::{AdapterInfo, Violation};
 pub use path::{MAX_DEPTH, NodePathBuf, PathTooDeep};
 #[cfg(feature = "alloc")]

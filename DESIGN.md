@@ -586,8 +586,8 @@ upstream #1260 no engine had it. A recording that captures only the inbound side
 holds one half of a conversation — see [RFC-010](#rfc-010--recording-container),
 which today records exactly that half.
 
-**The contract names it** as `l0.outbound.observed` (D-102), and
-`Capability::ALL` has ten members as of the 0.1.0 freeze. The row stays about
+**The contract names it** as `l0.outbound.observed` (D-102), the ninth of the
+identifiers frozen at 0.1.0. The row stays about
 engines rather than about us: it records what an engine *could* provide, which
 was the input to that decision and not the decision.
 
@@ -1132,9 +1132,11 @@ original and no copy — there is a spec and two implementers.
 **Status:** **ACCEPTED** (rev 7), **published and frozen** in rev 45 as
 contract version 1, shipped in
 [`wa-wire-contract` 0.1.1](https://crates.io/crates/wa-wire-contract). What is
-fixed is the envelope layout, the ten capability identifiers, and what every
-field means. Additive change stays inside version 1; moving a field, changing
-what one means, or removing one needs version 2 (D-132).
+fixed is the envelope layout, the capability identifiers named at the time, and
+what every field means. Additive change stays inside version 1 — a recording
+declares capabilities by name and keeps names it does not recognise as bytes, so
+naming a new one costs nothing a reader has to know about. Moving a field,
+changing what one means, or removing one needs version 2 (D-132).
 
 ### The observation that decides the whole RFC
 
@@ -1976,10 +1978,19 @@ than host work, and neither was visible from reading the RFCs.
 
 1. The unavailability window measured for every engine pair, and the per-route
    loss matrix filled in from measurement rather than from documentation.
-2. A fencing token: persisted, monotonic, and proven to serialise two hosts that
-   both believe they own one session (R1). Not retrofittable, so it comes early.
-3. `detach` and `logout` distinct at the type level, with a test that the
-   distinction cannot be crossed by accident (R4).
+2. ~~A fencing token: persisted, monotonic, and proven to serialise two hosts
+   that both believe they own one session (R1).~~ **Done in rev 62**:
+   `wa_wire_adapter::handoff::Fence`. A `u64` a host persists and an `admit`
+   that refuses a token older than the newest seen, naming both — the host that
+   comes back from a pause is told it *lost* the session, not that something
+   failed.
+3. ~~`detach` and `logout` distinct at the type level, with a test that the
+   distinction cannot be crossed by accident (R4).~~ **Done in rev 62**:
+   `wa_wire_adapter::handoff::Detach` is a trait with one method, so a host
+   driving a handoff has no `logout` to reach (D-138). The test is a
+   `compile_fail` doctest paired with an identical passing one, and the engine
+   side is `lifecycle.detach` — declared by `whatsapp-rust` via `Client::pause`,
+   and by nobody else yet.
 4. ~~Deduplication by message id in L1 (R3).~~ **Done in rev 61**:
    `wa_wire_l1::dedup::SeenStanzas`, a bounded window a caller drives. It is
    beside `derive` rather than inside it, because telling a redelivery from an
@@ -2221,10 +2232,58 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-135 | The handoff window is measured by `ready`, never by `reconnect` | `ready` times workload start to the engine's own connected event, which is when a host could release a queued backlog. `reconnect` is not comparable across engines: each adapter decides what "back" means, and whatsmeow's returns on socket-up where Baileys waits for the open event — 2.5 ms against 16.5 ms for the same nominal thing | 58 |
 | D-136 | Layer 3 prefers `zapo` as a handoff target and refuses `Baileys ↔ whatsapp-rust` by default | Loss is a property of the destination: nothing is lost moving into `zapo`, while both directions between `Baileys` and `whatsapp-rust` lose `contacts` and `messageSecrets` and degrade four more domains. A default that has to be overridden is how a measured matrix becomes a policy | 58 |
 | D-137 | Deduplication keys on tag *and* id, holds a bounded window, and reports a third answer for what it cannot identify | An `<ack>` and a `<receipt>` for one message carry that message's id, so keying on the id alone would report the second as a redelivery of the first and drop it. The window is bounded because the alternative is unbounded state in a `no_std` crate that allocates nowhere else; the trade is that an evicted id reads as new, which loses nothing. And a stanza with no id is `Untracked` rather than `New`, so a caller counting duplicates cannot read "could not tell" as "there were none" | 61 |
+| D-138 | `Detach` is a trait with one method, not a variant of an enum that also names `logout` | The two acts look alike from one line away and differ irreversibly: a detach hands the session on, a logout unpairs the customer's device. `enum End { Detach, Logout }` is the shape a bug flips and still compiles. A host driving a handoff holds `&dyn Detach` and cannot log out because there is no method to call — proved by a `compile_fail` doctest paired with an identical one that compiles, so it cannot start passing for an unrelated reason | 62 |
+| D-139 | The fencing token lives in `wa-wire-adapter` beside `Detach`, and an engine never sees it | The fence is the host's bookkeeping and the detach is the engine's act. An engine has no way to know what else in the fleet believes it owns this session, so a token threaded through the adapter API would be a parameter no implementation could check. Keeping them adjacent and separate is what lets a host run them in order | 62 |
 
 ---
 
 ## Changelog
+
+### rev 62 — 2026-08-11
+
+- **The fencing token and the type-level detach**, items 2 and 3 of the v2
+  definition of done, in `wa_wire_adapter::handoff`. They ship together because
+  they are the two halves of one question — who may end a session, and how.
+- **`Fence` refuses the host that came back.** R1 is the case a per-session lock
+  cannot cover: after a GC pause or a partition, two hosts each believe they own
+  a session, and the Signal ratchet does not survive two writers. `Fence::admit`
+  takes a monotonic `FencingToken` and refuses one older than the newest it has
+  seen, naming both — a host has to be able to report that it *lost* the session
+  rather than that something failed, because the two call for opposite
+  responses. A refusal does not move the fence, and `resumed_at` is how a
+  restarted host comes back knowing what it had already admitted.
+- **`FencingToken::next` stops rather than wraps.** A wrapped token compares
+  below every token in the field, which is exactly the state fencing exists to
+  make impossible, and it would look like it worked.
+- **`Detach` offers detaching and nothing else** (D-138). Not a `logout` on the
+  same trait, not an enum with two variants — the distinction R4 asks for is
+  enforced by what exists. The `compile_fail` doctest is paired with an
+  identical passing one; verified by flipping the failing line to the passing
+  call and watching rustdoc report that it compiled.
+- **`lifecycle.detach` is the eleventh capability**, with a provider on the day
+  it was named: `whatsapp-rust`'s `Client::pause` (#1265) closes the socket,
+  refuses `connect()` including an attempt in flight, and leaves the account
+  paired. `Detacher` is the adapter's, and `tests/detach.rs` asserts the client
+  is left *resumable* — which is what tells `pause` apart from `disconnect` and
+  `logout` after the fact. Swapping the call to `disconnect()` fails two of the
+  three tests.
+- **The trait promises "will not open another", not "holds no socket".** An
+  engine can have a connection attempt in flight that a detach cannot reach
+  into; `pause` documents exactly that. What every implementation must guarantee
+  is that no such attempt becomes a live session.
+- **Adding a capability does not bump the contract version**, which the code has
+  said since the ninth and two READMEs still denied. A recording declares
+  capabilities by name and keeps names it does not recognise as bytes. What
+  costs a version is removing an identifier or changing what one means.
+- **`check-docs.py` now reads every README**, not only `DESIGN.md`. The stale
+  prose above was outside its reach, and so was the published claim it was
+  written for. Sixteen documents, vocabulary checks only.
+- **Two narrow reads in the cross-language test.** It scanned TypeScript for
+  `": 'l0."` and so was blind to the whole `lifecycle.` family, and it never
+  read Go at all — a Go-only or TypeScript-only capability would have passed.
+  Now both files, bounded to the block that holds the vocabulary, with a count
+  assertion so a read that matches nothing cannot agree with everything.
+  Verified by deleting `lifecycle.detach` from the Go source.
 
 ### rev 61 — 2026-08-10
 

@@ -57,13 +57,12 @@
 
 use std::sync::{Arc, Mutex};
 
+use wa_wire_adapter::handoff::{Detach, DetachFuture};
 use wa_wire_adapter::{
-    PlaintextStatus,
-    AdapterInfo, Capability, CapabilitySet, RawStanza, RequestError, RequestFuture, SendError,
-    SendFuture, StanzaRequester, StanzaSender, StanzaSink, Violation,
+    AdapterInfo, Capability, CapabilitySet, PlaintextStatus, RawStanza, RequestError,
+    RequestFuture, SendError, SendFuture, StanzaRequester, StanzaSender, StanzaSink, Violation,
 };
 use whatsapp_rust::OwnedNodeRef;
-use whatsapp_rust::wacore_binary::util::unpack;
 use whatsapp_rust::plugins::{
     ClientPlugin, PluginCapability, PluginContext, PluginCoreEventSubscription, PluginFuture,
     PluginManifest,
@@ -71,6 +70,7 @@ use whatsapp_rust::plugins::{
 use whatsapp_rust::types::events::{
     EncDecryptFailureReason, Event, EventHandler, EventInterest, EventKind,
 };
+use whatsapp_rust::wacore_binary::util::unpack;
 
 use crate::plaintext::{DecryptedEnc, FailedEnc, PlaintextJoiner};
 
@@ -474,6 +474,66 @@ impl StanzaSender for Sender {
         })
     }
 }
+
+/// Releasing the session so another engine can take it.
+///
+/// [`Client::pause`] is the engine's word for this, and it is the one that
+/// matches: it closes the socket, refuses `connect()` for as long as it holds —
+/// including an attempt already in flight, which is retracted rather than
+/// published — and changes nothing at the protocol level, so the account stays
+/// registered and other devices see nothing.
+///
+/// [`Client::disconnect`] is not the one. It is terminal: it clears
+/// `is_running`, the run loop shuts down, and the session does not come back on
+/// a later `connect()`. A handoff that used it would release the session and
+/// have nowhere to put it back.
+///
+/// [`Client::logout`] is neither, and is why [`Detach`] is a trait with one
+/// method: it unpairs the device, and a host holding this cannot reach it.
+///
+/// [`Client::pause`]: whatsapp_rust::Client::pause
+/// [`Client::disconnect`]: whatsapp_rust::Client::disconnect
+/// [`Client::logout`]: whatsapp_rust::Client::logout
+pub struct Detacher {
+    client: Arc<whatsapp_rust::Client>,
+}
+
+impl Detacher {
+    /// Release `client`'s session when asked.
+    #[must_use]
+    pub const fn new(client: Arc<whatsapp_rust::Client>) -> Self {
+        Self { client }
+    }
+}
+
+impl Detach for Detacher {
+    fn detach(&self) -> DetachFuture<'_> {
+        // Infallible: `pause` returns nothing and is idempotent, so there is no
+        // failure to report and no second call to guard against. The `Result`
+        // is the boundary's, for engines that can refuse.
+        Box::pin(async move {
+            self.client.pause().await;
+            Ok(())
+        })
+    }
+}
+
+/// What this adapter can do when it can also release the session.
+///
+/// A separate declaration for the same reason [`SENDING_CAPABILITIES`] is one:
+/// detaching needs the `Client`, and an adapter installed as a tap has only the
+/// plugin's view. A consumer that requires [`Capability::Detach`] is saying it
+/// holds a [`Detacher`], and one built without a client would be claiming
+/// something it cannot do.
+pub const DETACHING_CAPABILITIES: CapabilitySet = CAPABILITIES.with(Capability::Detach);
+
+/// This adapter's declaration when it can also release the session.
+pub const DETACHING_INFO: AdapterInfo<'static> = AdapterInfo::new(
+    PLUGIN_ID,
+    ADAPTER_VERSION,
+    ENGINE_VERSION,
+    DETACHING_CAPABILITIES,
+);
 
 /// This adapter's declaration when it also sends and correlates replies.
 pub const REQUESTING_INFO: AdapterInfo<'static> = AdapterInfo::new(

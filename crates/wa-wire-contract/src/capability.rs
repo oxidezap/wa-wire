@@ -71,11 +71,28 @@ pub enum Capability {
     /// Reports when incoming handlers have drained, which a clean detach
     /// requires.
     DrainHook,
+    /// Releases the session — socket closed, no reconnect of the engine's own
+    /// accord — while leaving the account paired.
+    ///
+    /// The act [`DrainHook`] only reports the right moment for, and the one an
+    /// engine can be entirely unable to perform: WhatsApp allows one connection
+    /// per device, so a second engine cannot take a session the first has not
+    /// let go of. An engine whose only way to stop is to unpair does not have
+    /// this, and there is no partial version — a detach that logs out is not a
+    /// worse detach, it is a different and irreversible act.
+    ///
+    /// What it does *not* promise is continuity. Whatever an engine carries
+    /// across a network drop it carries across this, and nothing more; the
+    /// session resumed elsewhere resyncs like any reconnect, and what that
+    /// costs is declared rather than avoided.
+    ///
+    /// [`DrainHook`]: Self::DrainHook
+    Detach,
 }
 
 impl Capability {
     /// Every capability this contract version defines.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::L0InboundTap,
         Self::L0InboundAuthPhase,
         Self::L0Outbound,
@@ -86,6 +103,7 @@ impl Capability {
         Self::Takeover,
         Self::ZeroCopyFrame,
         Self::DrainHook,
+        Self::Detach,
     ];
 
     /// The stable identifier used in manifests and diagnostics.
@@ -102,6 +120,7 @@ impl Capability {
             Self::Takeover => "l0.takeover",
             Self::ZeroCopyFrame => "l0.zero-copy-frame",
             Self::DrainHook => "lifecycle.drain-hook",
+            Self::Detach => "lifecycle.detach",
         }
     }
 
@@ -125,6 +144,7 @@ impl Capability {
             Self::DrainHook => 7,
             Self::L0OutboundObserved => 8,
             Self::L0PlaintextCause => 9,
+            Self::Detach => 10,
         }
     }
 }
@@ -137,7 +157,7 @@ impl fmt::Display for Capability {
 
 /// A set of capabilities, packed into a bitmask.
 ///
-/// `u16` because there are ten and there were eight. Widening it is a
+/// `u16` because there are eleven and there were eight. Widening it is a
 /// source-level change and not a wire one: a recording declares capabilities by
 /// *name* and keeps the ones it does not recognise as bytes, so a reader from
 /// before the ninth still round-trips a recording that claims it. That is why

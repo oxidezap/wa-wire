@@ -42,8 +42,9 @@ assumed.
 
 ## What publication froze
 
-Contract version 1 is fixed as of 0.1.0: the envelope layout, the ten
-capability identifiers, and the meaning of every field an envelope carries.
+Contract version 1 is fixed as of 0.1.0: the envelope layout, the capability
+identifiers named at the time, and the meaning of every field an envelope
+carries.
 
 Fixed rather than final. Additive change stays inside version 1 — new
 capability names, new reserved flag bits, new metadata tags — because the
@@ -67,19 +68,24 @@ which would make the project worse than useless.
 
 ## Capabilities are declared, never inferred
 
-`Capability::ALL` has ten members, and an adapter says which it has at setup.
-A capability the consumer asked for and the adapter lacks is a setup error —
-loud, at startup — not a runtime surprise or a silent degradation.
+An adapter says which of `Capability::ALL` it has at setup. A capability the
+consumer asked for and the adapter lacks is a setup error — loud, at startup —
+not a runtime surprise or a silent degradation.
 
-The set is a versioned surface rather than a list to append to: adding one after
-publication is a version bump, so the vocabulary was audited before freezing.
+Naming a new one is additive and stays inside contract version 1: a recording
+declares capabilities by name and keeps names it does not recognise as bytes, so
+a reader written before a name existed still round-trips a recording that claims
+it. What would cost a version is the other direction — removing an identifier or
+changing what one means, which turns an old recording's declaration into a lie.
 
-All ten have a provider, which was not true when this was published. The last
-was `l0.plaintext.cause`: the format had carried `DecryptFailed` and
-`Unsupported` since it was written, and every adapter still reported
-`Unobserved` for a missing payload because no engine said why one was missing.
-Naming it anyway cost a line; the same name added after the freeze would have
-cost a version.
+Every one has a provider, which was not true at publication. `l0.plaintext.cause`
+was the last to get one: the format had carried `DecryptFailed` and `Unsupported`
+since it was written, and every adapter still reported `Unobserved` for a missing
+payload because no engine said why one was missing.
+
+The newest is `lifecycle.detach` — releasing a session so another engine can take
+it, without unpairing the device. It is the one an engine can be flatly unable to
+do, and one of them is.
 
 Not every adapter has every one, and the matrix is the point rather than a
 shortfall — a consumer asks for what it needs and finds out at setup.

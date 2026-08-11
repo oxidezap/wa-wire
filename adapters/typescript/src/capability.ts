@@ -59,6 +59,18 @@ export const Capability = {
     ZeroCopyFrame: 'l0.zero-copy-frame',
     /** Reports when incoming handlers have drained. */
     DrainHook: 'lifecycle.drain-hook',
+    /**
+     * Releases the session — socket closed, no reconnect of the engine's own
+     * accord — while leaving the account paired.
+     *
+     * The act {@link DrainHook} only reports the right moment for, and the one
+     * an engine can be entirely unable to perform: WhatsApp allows one
+     * connection per device, so a second engine cannot take a session the
+     * first has not let go of. An engine whose only way to stop is to unpair
+     * does not have this, and there is no partial version — a detach that logs
+     * out is not a worse detach, it is a different and irreversible act.
+     */
+    Detach: 'lifecycle.detach',
 } as const
 
 export type Capability = (typeof Capability)[keyof typeof Capability]

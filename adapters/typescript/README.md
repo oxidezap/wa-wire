@@ -20,8 +20,8 @@ rather than copying it — which is what this package was extracted for.
 
 ## What is here, and what is not
 
-Here: the envelope layout, the recording container, the nine capability
-identifiers, and the checks that hold an adapter to what it declared.
+Here: the envelope layout, the recording container, the capability
+vocabulary, and the checks that hold an adapter to what it declared.
 
 Not here: any adapter's own declaration. The vocabulary is the contract's; what
 an adapter *has* is the adapter's, and lives with it. An earlier version of this
