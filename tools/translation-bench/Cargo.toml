@@ -1,0 +1,18 @@
+[package]
+name = "wa-wire-translation-bench"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Its own workspace, for the reason the whatsapp-rust adapter has one: this
+# pulls in libsignal, and the contract and codec stay dependency-free.
+[workspace]
+
+[dependencies]
+# By path, outside this repository — the same arrangement the whatsapp-rust
+# adapter uses, and for the same reason: there is no released version to pin.
+wacore-libsignal = { path = "../../../whatsapp-rust/wacore/libsignal" }
+
+[profile.release]
+opt-level = 3
+lto = true

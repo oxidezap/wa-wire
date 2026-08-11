@@ -1684,6 +1684,65 @@ widens.
 The handoff window this project measured for v2 is 31–273 ms. Translation is not
 where the time goes.
 
+### [MEASURED] Would a Rust translation crate be faster? Yes, and it does not matter
+
+D-012 already settled that `wa-store-migrate` should be ported as a
+differentially verified port. That is about the *snapshot* machinery. A separate
+question is whether the per-access translation Option E needs should be a Rust
+crate, so rev 66 measured the same 1705-byte session record three ways —
+`tools/translation-bench` for the native figure, and a purpose-built
+`wasm-bindgen` module to separate the boundary from the work.
+
+| Path | Read-modify-write | Notes |
+| --- | ---: | --- |
+| JS, `zapo`'s own codec | 3.4 – 4.4 µs | five runs of 5000 |
+| Rust via wasm, called from JS | 2.9 – 3.0 µs | of which **0.095 µs is the crossing** |
+| Rust, native | 1.78 – 1.82 µs | `SessionRecord::deserialize` + `serialize` |
+
+**The crossing is not the tax it was assumed to be.** Marshalling a 1705-byte
+`Uint8Array` into wasm and returning a number costs 0.095 µs — three percent of
+the round trip. The expectation going in was that FFI would eat the gain; it
+does not, and `baileyrs` shipping a wasm bridge in production is the same result
+arrived at by building it.
+
+So the gains are real and small. Rust is 2 to 2.5× faster than the JS codec
+natively, and about 1.3× faster once wasm is in the way. At 1.4 store calls per
+stanza that is **1 to 2 µs saved per stanza**, against a store that already
+spends 624 µs on a single `messages.upsertBatch`. **Speed is not a reason to
+write this crate.**
+
+Four things are.
+
+- **The engine that matters for Layer 3 is already Rust.** `whatsapp-rust`
+  would use the crate natively at 1.8 µs; the TypeScript engines would reach the
+  same code through wasm at 3.0 µs, which is still faster than the JS they have.
+  One implementation, every consumer.
+- **The house style makes pass-through the default.** These crates are
+  `no_std`, dependency-free and allocation-free where the format allows, and the
+  measurement says a borrow is 0.014 µs against 1.43 µs to decode — a hundredfold.
+  A crate written in that style is one where the free path is the easy one to
+  take, which is the opposite of a converter whose every call materialises a
+  structure.
+- **The types would have caught the defects rev 64 found.** `timestamp ?? 0`
+  turns absent into epoch; `Option<u64>` makes that unrepresentable without
+  saying so. `updatedAtMs: t.timestampMs ?? Date.now()` puts a clock in a pure
+  conversion; a crate with no ambient clock cannot. And the prekey record whose
+  documented read splits a protobuf as a keypair is a `struct` away from being
+  impossible.
+- **Two implementations that must agree is the point** (D-012). A port is not a
+  replacement for the TypeScript one — it is the second oracle that makes a
+  disagreement visible instead of a silent divergence.
+
+**The reason not to** is unchanged and is not technical: `wa-store-migrate`
+belongs to vinikjkkj, who also authors `zapo`, and
+[OQ-3](#oq-3--wa-store-migrate-port--decided-technically-open-on-governance)
+records that a coordinated port is worth more than a quiet fork. Nothing
+measured here changes that.
+
+**What this measurement does not cover.** One domain, on one record. Sender
+keys, app-state and the device record may each land differently, and the wasm
+build's size and load cost are not in any number above.
+
 ### [VERIFIED] Which domains are free, and which are not
 
 Zero-copy is not a property of the design — it is a property of whether the
@@ -2461,6 +2520,16 @@ Portability is enforced too: the contract builds with no allocator and for
   and not the other. With one canonical record an adapter simply does not project
   a field its engine lacks, and the field is still there for the next reader.
   Loss stops being a property of the route.
+- **A Rust translation crate would be 2–2.5× faster, and that is not the
+  reason to write one.** The same record costs 3.4–4.4 µs through `zapo`'s JS
+  codec, 1.78 µs in native Rust, and 2.9 µs in Rust reached from JS through
+  wasm — of which the boundary crossing is **0.095 µs**, three percent. The
+  expectation that FFI would eat the gain was wrong. At 1.4 accesses per stanza
+  the saving is 1–2 µs against a store already spending 624 µs per
+  `upsertBatch`. The arguments that do hold are one implementation for every
+  consumer, a house style where pass-through is the default path, and types that
+  make rev 64's three defects unrepresentable — `timestamp ?? 0` needs an
+  `Option`, and a pure conversion cannot reach `Date.now()`. `tools/translation-bench`.
 - **`check-docs.py` now reads `baileyrs` too**, so the precedent is cited under
   the same rule as everything else. Two existing Baileys citations had to be
   qualified with `packages/baileys/` first: `baileyrs` mirrors the upstream file

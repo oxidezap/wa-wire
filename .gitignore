@@ -30,3 +30,4 @@ adapters/*/dist/
 # the conformance test reads them. Committed would be a fourth description of
 # what the engines produce, kept in step by hand.
 adapters/*/replay/
+tools/translation-bench/target/
