@@ -52,9 +52,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use wa_wire_adapter::handoff::{Barrier, Detach, Gate};
 use wa_wire_adapter::{Capability, RawStanza, StanzaSink};
 use wa_wire_adapter_whatsapp_rust::{
-    ADAPTER_VERSION, CAPABILITIES, ENGINE_VERSION, PLUGIN_ID, WaWirePlugin,
+    ADAPTER_VERSION, CAPABILITIES, Detacher, ENGINE_VERSION, PLUGIN_ID, WaWirePlugin,
 };
 use wa_wire_recording::{ArtifactClass, MetaBuilder, RecordingWriter};
 use whatsapp_rust::store::persistence_manager::PersistenceManager;
@@ -107,6 +108,18 @@ impl Settings {
                 .map(|value| parse_version(&value))
                 .transpose()?,
         })
+    }
+}
+
+/// Why the barrier could not be confirmed, in one phrase for the log.
+///
+/// Read from the declaration rather than written out, so a capability that
+/// starts being true changes this line without anyone remembering to.
+fn quiet_because() -> &'static str {
+    if CAPABILITIES.contains(Capability::DrainHook) {
+        "declares lifecycle.drain-hook"
+    } else {
+        "no lifecycle.drain-hook: the engine drains, nothing reports it"
     }
 }
 
@@ -360,8 +373,38 @@ async fn main() -> anyhow::Result<()> {
     let task = tokio::spawn(async move { running.run().await });
 
     tokio::time::sleep(Duration::from_secs(settings.seconds)).await;
-    client.disconnect().await;
+
+    // The handoff, in the order RFC-003 gives. A capture that just disconnected
+    // would be measuring the shape of a session ending, not of one being handed
+    // over — and the two differ in exactly the phases below.
+    //
+    // Phase 1, quiesce. Nothing here issues commands, so the gate holds nothing;
+    // it runs anyway, because the point of the phase is that the application
+    // cannot add to what phase 2 drains, and a step skipped for being empty is
+    // one nobody notices is missing later.
+    let mut gate: Gate<Vec<u8>, 32> = Gate::new();
+    gate.quiesce();
+
+    // Phase 2, barrier. This adapter does not declare `lifecycle.drain-hook`, so
+    // nothing will ever call `drained` and the answer is `Unconfirmed`.
+    //
+    // Which is not the same as "nothing drained". `Client::pause` flushes
+    // inbound commits, offline receipts and the outbound scope before it closes
+    // the socket — the engine does drain. What it does not do is tell a plugin,
+    // so the honest report is that the host could not confirm it, and that is
+    // the distinction `Quiet` exists to keep.
+    let barrier = Barrier::new();
+
+    // Phase 3, detach — `pause`, not `disconnect`. The second is terminal and
+    // the session would not come back; this is a handoff.
+    Detacher::new(Arc::clone(&client)).detach().await?;
     task.abort();
+
+    println!("barrier: {} ({})", barrier.state(), quiet_because());
+
+    // Phase 6, resume.
+    let released = gate.resume(|_| unreachable!("nothing was queued"));
+    println!("resumed: {released} command(s) released");
 
     let (written, failures, recording) = {
         let mut sink = sink.lock().expect("sink lock");

@@ -629,13 +629,12 @@ session.
 ### Phases
 
 ```
-1. quiesce   stop accepting new commands; mark session draining
-2. barrier   drain in-flight sends, pending acks, active retries
-             (zapo: registerDispose; whatsapp-rust: task_drain_timeout)
-3. detach    clean disconnect — MUST NOT be a logout
-4. snapshot  export state via the wa-store-migrate IR
-5. attach    target engine imports, connects, completes handshake
-6. resume    release the queued command backlog
+1. quiesce   stop accepting new commands; mark session draining   — `Gate::quiesce`
+2. barrier   drain in-flight sends, pending acks, active retries  — `Barrier`, and `Quiet` for what it could not confirm
+3. detach    clean disconnect — MUST NOT be a logout               — `Detach`, declared by all four adapters
+4. snapshot  export state via the wa-store-migrate IR              — `tools/handoff-cycle`
+5. attach    target engine imports, connects, completes handshake  — same
+6. resume    release the queued command backlog                    — `Gate::resume`
 ```
 
 ### State that must never be split or concurrently written
@@ -2525,10 +2524,44 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-145 | A live handoff is checked for continuity — one pairing, one account, traffic on every leg — not for agreement | Agreement is a question about two engines reading one input, and `engine_agreement` answers it. A move is a question about one account surviving, and what witnesses it is the server's pairing count and the `lid` and `companion_enc_static` that a re-pair would have minted anew. Verified by falsification: pointed at two recordings from different pairings, the check fails on all three | 65 |
 | D-146 | The return leg carries the state the other engine changed, rather than reattaching with the store it still had | `zapo` consumed five prekeys in a six-second leg — 807 in, 802 out. A `whatsapp-rust` that came back with its own copy would offer the server keys already handed out, which is the drift R1 describes one step short of two writers. Measured rather than assumed, which is also what makes the harvest worth its complexity | 65 |
 | D-147 | The canonical form for a translating store is the libsignal protobuf, not any engine's decoded structure | It is what two of four engines already persist, it is what the wire carries, and it is the only candidate defined outside a single engine. Measured: a session that both sides hold as those bytes costs around 0.04 µs to hand over as a view, against 3.4–4.4 µs to decode and re-encode — so the choice of canonical form is what decides whether a domain is free | 66 |
+| D-148 | The barrier reports two outcomes, `Confirmed` and `Unconfirmed`, never one | Only one engine of the four declares `lifecycle.drain-hook`, so three can never say their handlers finished. Collapsing the answers would let a host read "I stopped waiting" as "there was nothing left", and what sits in that gap is an ack the server resends to whoever holds the session next. Same shape as `Admission::Untracked` and `PlaintextStatus::Unobserved` | 67 |
+| D-149 | The backlog is bounded and hands a command back when full, rather than dropping it | An unbounded queue behind a stalled handoff is a leak that presents as a hang, and this crate allocates nowhere else. Dropping would make a full backlog look like a successful hold, so the application would never learn its command went nowhere — handing it back leaves the choice where it belongs: refuse the command, or abandon the handoff | 67 |
 
 ---
 
 ## Changelog
+
+### rev 67 — 2026-08-11
+
+- **RFC-003's protocol is complete.** Phases 1, 2 and 6 — quiesce, barrier and
+  resume — existed only as prose; detach, snapshot and attach had been built
+  around them. `wa_wire_adapter::handoff::Gate` and `Barrier`, and the same two
+  in TypeScript for `zapo`.
+- **The rev 65 cycle was the unsafe version and now is not.** It moved a session
+  with no quiesce and no barrier, so in-flight sends and pending acks were
+  abandoned; it worked because the mock server was quiet and because R3 exists to
+  survive exactly that. `run-cycle.sh` now runs all six phases in order on both
+  engines.
+- **One run shows both halves of the capability matrix.** `zapo` declares
+  `lifecycle.drain-hook`, and its barrier reports `drained` from the engine's own
+  dispose — after the joiner's flush, not before, since a stanza still held is
+  one the consumer has not seen. `whatsapp-rust` declares no such hook and
+  reports `not known to have drained`.
+- **Which is not the same as "nothing drained"** (D-148). `Client::pause` flushes
+  inbound commits, offline receipts and the outbound scope before closing the
+  socket. The engine drains; it does not tell a plugin. The line the run prints
+  says so, and reads the reason off `CAPABILITIES` rather than restating it, so a
+  capability that starts being true changes the message without anyone
+  remembering to.
+- **The gate is bounded and gives a full command back** (D-149), preserves order,
+  and opens before it drains — a command produced by releasing another is passed
+  rather than appended to a queue being emptied. Its `Debug` reports counts and
+  never commands, for the reason ids stay out of `SeenStanzas`'.
+- **`abandon` is the other ending.** A handoff that failed discards its backlog
+  and says how many, because a host that gives up should be able to report what
+  it cost.
+- **Verified by breaking it**: releasing the backlog newest-first fails two
+  tests, and the ring-reuse test is one of them.
 
 ### rev 66 — 2026-08-11
 

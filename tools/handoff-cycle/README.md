@@ -83,13 +83,24 @@ npm install
 ./run-cycle.sh
 ```
 
-Three legs, one session, one pairing:
+All six phases of RFC-003, on three legs, with one pairing:
 
 1. **`whatsapp-rust` pairs** against the Barback mock and holds the account.
 2. **`zapo` takes it over** — the store is migrated into `zapo`'s shape, seeded
    into a fresh store, and connected. It reports `credentials ready {
    registered: true }`, handshakes, receives `success`, and records traffic.
 3. **`whatsapp-rust` picks it back up**, with the store `zapo` handed back.
+
+Each leg runs `quiesce → barrier → detach`, and `resume` after. One run shows
+both halves of the capability matrix: `zapo` declares `lifecycle.drain-hook` and
+its barrier reports `drained` from the engine's own dispose, while
+`whatsapp-rust` reports `not known to have drained`.
+
+That second line is not "nothing drained". `Client::pause` flushes inbound
+commits, offline receipts and the outbound scope before closing the socket — the
+engine drains and does not tell a plugin. The distinction is the whole reason
+the barrier has two outcomes, and what sits in the gap is an ack the server will
+resend to whoever holds the session next.
 
 Leg 3 is run with no pairing endpoint configured at all. A leg that needed to
 pair would have nowhere to send the code, so it would hang and record nothing —

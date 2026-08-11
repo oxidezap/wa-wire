@@ -75,9 +75,9 @@ pub mod send;
 pub mod sink;
 pub mod stanza;
 
+pub use handoff::{Barrier, Fence, Fenced, FencingToken, Gate, Offered, Quiet};
 #[cfg(feature = "alloc")]
 pub use handoff::{Detach, DetachFailed, DetachFuture};
-pub use handoff::{Fence, Fenced, FencingToken};
 pub use info::{AdapterInfo, Violation};
 pub use path::{MAX_DEPTH, NodePathBuf, PathTooDeep};
 #[cfg(feature = "alloc")]

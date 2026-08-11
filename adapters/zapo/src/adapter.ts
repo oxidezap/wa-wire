@@ -76,6 +76,17 @@ export interface Options {
      * wrong tag into the one report a consumer has about a gap.
      */
     readonly onError?: (error: unknown, stanza: Stanza) => void
+    /**
+     * Completed when the engine's dispose has run, which is after its incoming
+     * handlers have drained.
+     *
+     * RFC-003's phase 2 needs to know that nothing is still in flight before
+     * the session is released, and `zapo` is the one engine of the four that
+     * can say so — that is what `lifecycle.drain-hook` declares. Passing a
+     * barrier here is how a host collects it; leaving it out costs nothing, and
+     * a host that does not hand one over simply never gets a confirmation.
+     */
+    readonly barrier?: { readonly drained: () => void }
 }
 
 /** This adapter's declaration. */
@@ -151,6 +162,11 @@ export function waWire(options: Options) {
                 // Whatever is still held is the last anyone will hear about
                 // those stanzas.
                 joiner.flush(sink)
+                // After the flush, not before: the barrier says the session is
+                // quiet, and a stanza still sitting in the joiner is one the
+                // consumer has not seen. Reporting first would confirm a drain
+                // that had not finished.
+                options.barrier?.drained()
             })
         },
     })

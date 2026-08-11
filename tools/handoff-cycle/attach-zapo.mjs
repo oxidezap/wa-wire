@@ -18,7 +18,10 @@ import { WaClient, createStore } from 'zapo-js'
 import { decodeBinaryNode } from 'zapo-js/transport'
 import {
     ArtifactClass,
+    Barrier,
+    Gate,
     Mode,
+    Quiet,
     RecordKind,
     createDetacher,
     encodeRecording,
@@ -98,8 +101,14 @@ function noteAddresses(frame) {
     }
 }
 
+// Phase 2's collector. `zapo` declares `lifecycle.drain-hook`, so its dispose
+// runs after the incoming handlers have finished and this can be *confirmed*
+// rather than waited out — the one engine of the four where that is true.
+const barrier = new Barrier()
+
 const plugin = waWire({
     mode: Mode.Tap,
+    barrier,
     sink: (stanza) => {
         envelopes.push(encodeEnvelope(stanza))
         noteAddresses(stanza.frame)
@@ -143,9 +152,33 @@ console.log('connected without pairing')
 
 await new Promise((resolve) => setTimeout(resolve, Number(seconds) * 1000))
 
-// Detach, not logout — the same distinction the adapter's `Detach` trait makes
-// unreachable by construction on the Rust side.
+// --- the handoff, in the order RFC-003 gives -----------------------------------
+//
+// Phase 1: stop accepting commands. Nothing here produces any, so the gate holds
+// nothing — which is worth doing anyway, because the point of the phase is that
+// the application cannot add to what phase 2 is about to drain, and a run that
+// skipped it would be measuring a quieter handoff than a real one.
+const gate = new Gate(32)
+gate.quiesce()
+
+// Phase 2: wait for the engine to go quiet. The detach is what triggers `zapo`'s
+// dispose, so the wait is armed first and awaited after — waiting here would
+// wait for a drain nothing has asked for yet.
+const draining = barrier.wait(2000)
+
+// Phase 3: detach, not logout — the same distinction the adapter's `Detach`
+// trait makes unreachable by construction on the Rust side.
 await createDetacher(client).detach()
+
+const quiet = await draining
+console.log(`barrier: ${quiet}`)
+if (quiet !== Quiet.Confirmed) {
+    // Not fatal — three of the four engines can never confirm one. Fatal *here*,
+    // because zapo declares `lifecycle.drain-hook` and a run where it did not
+    // report would mean the declaration had stopped being true.
+    console.error('FAILED: zapo declares lifecycle.drain-hook and did not report a drain')
+    process.exitCode = 1
+}
 
 // Read the session back before the store goes away. Every peer the leg heard
 // from is asked for on top of what was seeded, because the contracts answer
@@ -189,6 +222,14 @@ writeFileSync(
         )
     )
 )
+
+// Phase 6: release the backlog. Empty here, and run for the same reason phase 1
+// was: the sequence is what is being demonstrated, and a step skipped because it
+// happened to be empty is a step nobody notices is missing later.
+const released = await gate.resume(() => {
+    throw new Error('nothing was queued, so nothing can be released')
+})
+console.log(`resumed: ${released} command(s) released`)
 
 console.log(`${envelopes.length} envelopes -> ${out}`)
 if (pairedHere) {

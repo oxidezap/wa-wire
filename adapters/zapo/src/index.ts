@@ -22,6 +22,7 @@
 export { Capability, UnmetCapabilitiesError, declares, type AdapterInfo } from '@oxidezap/wa-wire-ts'
 export { has, missing, require } from './capability.js'
 export { DETACHING_INFO, REQUESTING_INFO, SENDING_INFO, TAKEOVER_CAPABILITIES, TAP_CAPABILITIES } from './capability.js'
+export { Barrier, Gate, Quiet, type Offered } from './quiesce.js'
 export {
     DetachError,
     createDetacher,

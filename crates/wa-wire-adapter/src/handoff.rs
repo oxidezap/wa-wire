@@ -191,6 +191,293 @@ impl Fence {
     }
 }
 
+/// Whether anything actually said the engine had gone quiet.
+///
+/// RFC-003's phase 2 drains in-flight sends, pending acks and active retries
+/// before the session is released. An engine that reports when its incoming
+/// handlers have finished can say so; three of the four cannot, and
+/// [`Capability::DrainHook`] is how an adapter declares which it is.
+///
+/// So a barrier has two outcomes and not one. Collapsing them would let a host
+/// read "I stopped waiting" as "there was nothing left" — the same mistake
+/// [`Admission::Untracked`] and [`PlaintextStatus::Unobserved`] exist to refuse,
+/// and a worse one here, because what is lost is an ack the server will now
+/// resend to whoever holds the session next.
+///
+/// [`Capability::DrainHook`]: wa_wire_contract::Capability::DrainHook
+/// [`Admission::Untracked`]: https://docs.rs/wa-wire-l1
+/// [`PlaintextStatus::Unobserved`]: wa_wire_contract::PlaintextStatus::Unobserved
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Quiet {
+    /// The engine reported that its handlers had drained.
+    Confirmed,
+    /// Nothing reported anything. The host stopped waiting, and what was in
+    /// flight is unknown rather than absent.
+    Unconfirmed,
+}
+
+impl Quiet {
+    /// Whether the engine said so, rather than the host having given up.
+    #[must_use]
+    pub const fn is_confirmed(self) -> bool {
+        matches!(self, Self::Confirmed)
+    }
+}
+
+impl fmt::Display for Quiet {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Confirmed => "drained",
+            Self::Unconfirmed => "not known to have drained",
+        })
+    }
+}
+
+/// The drain, waited on by the host and completed by the adapter.
+///
+/// Deliberately not a future. An engine reports a drain from a callback, and
+/// making this async would push a runtime into a `no_std` crate that has none —
+/// so it is a flag the adapter sets and the host reads, and how long to wait is
+/// the host's business because the host is the one with a clock.
+///
+/// ```
+/// use wa_wire_adapter::handoff::{Barrier, Quiet};
+///
+/// let barrier = Barrier::new();
+/// assert_eq!(barrier.state(), Quiet::Unconfirmed);
+///
+/// // The adapter's drain hook fires.
+/// barrier.drained();
+/// assert_eq!(barrier.state(), Quiet::Confirmed);
+/// ```
+///
+/// An adapter that does not declare
+/// [`Capability::DrainHook`](wa_wire_contract::Capability::DrainHook) never
+/// calls [`drained`](Self::drained), so its barrier stays `Unconfirmed` and the
+/// host learns that from the type rather than from the matrix.
+#[derive(Debug, Default)]
+pub struct Barrier {
+    drained: core::sync::atomic::AtomicBool,
+}
+
+impl Barrier {
+    /// A barrier nothing has reported on yet.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            drained: core::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// Report that the engine's handlers have finished.
+    ///
+    /// Idempotent, because a drain hook that fires twice is reporting the same
+    /// fact and an adapter should not have to remember whether it already did.
+    pub fn drained(&self) {
+        self.drained
+            .store(true, core::sync::atomic::Ordering::Release);
+    }
+
+    /// What is known right now.
+    #[must_use]
+    pub fn state(&self) -> Quiet {
+        if self.drained.load(core::sync::atomic::Ordering::Acquire) {
+            Quiet::Confirmed
+        } else {
+            Quiet::Unconfirmed
+        }
+    }
+}
+
+/// A command offered while the session was being handed over.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Offered<T> {
+    /// The gate is open; send it now.
+    Pass(T),
+    /// Held for release when the session comes back.
+    Held,
+    /// The backlog is full and this was not held.
+    ///
+    /// Handed back rather than dropped, so the caller still has it and can
+    /// decide: refuse the command, or give up on the handoff. Dropping it here
+    /// would make a full backlog look like a successful hold.
+    Full(T),
+}
+
+/// Phases 1 and 6: stop accepting commands, then let them go.
+///
+/// A handoff is stop-the-world because one device gets one connection, so
+/// something has to hold what the application asks for in between. That
+/// something is here rather than in an adapter: the commands are the host's,
+/// no engine knows they exist, and the window is the host's to choose.
+///
+/// Bounded, for the same reason [`SeenStanzas`] is: this crate allocates
+/// nowhere, and an unbounded backlog behind a handoff that has stalled is a
+/// leak that presents as a hang. A full gate says so and hands the command
+/// back.
+///
+/// Order is preserved. Releasing commands in a different order than they were
+/// offered would reorder an application's sends, which is a bug it cannot see
+/// and cannot have caused.
+///
+/// ```
+/// use wa_wire_adapter::handoff::{Gate, Offered};
+///
+/// let mut gate: Gate<&str, 4> = Gate::new();
+/// assert!(matches!(gate.offer("before"), Offered::Pass("before")));
+///
+/// gate.quiesce();
+/// assert!(matches!(gate.offer("during"), Offered::Held));
+///
+/// let mut released = Vec::new();
+/// gate.resume(|command| released.push(command));
+/// assert_eq!(released, ["during"]);
+/// assert!(matches!(gate.offer("after"), Offered::Pass("after")));
+/// ```
+///
+/// [`SeenStanzas`]: https://docs.rs/wa-wire-l1
+pub struct Gate<T, const N: usize = 32> {
+    slots: [Option<T>; N],
+    head: usize,
+    len: usize,
+    quiesced: bool,
+}
+
+impl<T, const N: usize> Gate<T, N> {
+    /// An open gate with an empty backlog.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            slots: core::array::from_fn(|_| None),
+            head: 0,
+            len: 0,
+            quiesced: false,
+        }
+    }
+
+    /// Stop accepting commands. Idempotent.
+    ///
+    /// Phase 1. Everything offered from here is held until
+    /// [`resume`](Self::resume), which is what makes the phases after it
+    /// meaningful: draining what is in flight is pointless if the application
+    /// is still adding to it.
+    pub const fn quiesce(&mut self) {
+        self.quiesced = true;
+    }
+
+    /// Whether commands are being held.
+    #[must_use]
+    pub const fn is_quiesced(&self) -> bool {
+        self.quiesced
+    }
+
+    /// How many commands are waiting.
+    #[must_use]
+    pub const fn backlog(&self) -> usize {
+        self.len
+    }
+
+    /// Whether the backlog has no room left.
+    #[must_use]
+    pub const fn is_full(&self) -> bool {
+        self.len >= N
+    }
+
+    /// Offer a command: send it now, hold it, or hand it back.
+    pub fn offer(&mut self, command: T) -> Offered<T> {
+        if !self.quiesced {
+            return Offered::Pass(command);
+        }
+        if self.len >= N {
+            // Also the zero-capacity case, which is a caller saying it wants no
+            // backlog rather than an error — every command comes straight back.
+            return Offered::Full(command);
+        }
+        // Wrapped by comparison rather than by `%`, the way `SeenStanzas` does:
+        // a modulo is a second place the empty-capacity case has to be right in.
+        let advanced = self.head.saturating_add(self.len);
+        let at = if advanced >= N {
+            advanced.saturating_sub(N)
+        } else {
+            advanced
+        };
+        let Some(slot) = self.slots.get_mut(at) else {
+            return Offered::Full(command);
+        };
+        *slot = Some(command);
+        self.len = self.len.saturating_add(1);
+        Offered::Held
+    }
+
+    /// The slot after `at`, wrapped.
+    const fn after(at: usize) -> usize {
+        let advanced = at.saturating_add(1);
+        if advanced >= N { 0 } else { advanced }
+    }
+
+    /// Phase 6: open the gate and release the backlog, oldest first.
+    ///
+    /// The gate opens *before* the backlog drains, so a command the release
+    /// itself produces is passed rather than appended to a queue being emptied.
+    /// Returns how many were released.
+    pub fn resume(&mut self, mut release: impl FnMut(T)) -> usize {
+        self.quiesced = false;
+        let released = self.len;
+        for _ in 0..released {
+            if let Some(command) = self.slots.get_mut(self.head).and_then(Option::take) {
+                release(command);
+            }
+            self.head = Self::after(self.head);
+        }
+        self.len = 0;
+        released
+    }
+
+    /// Drop the backlog without releasing it, and open the gate.
+    ///
+    /// For a handoff that failed and is being abandoned: the commands were
+    /// never sent, and the caller has already been told so by whatever refused
+    /// them. Returns how many were discarded, because a host that abandons a
+    /// handoff should be able to report what it cost.
+    pub fn abandon(&mut self) -> usize {
+        self.quiesced = false;
+        let discarded = self.len;
+        for _ in 0..discarded {
+            if let Some(slot) = self.slots.get_mut(self.head) {
+                *slot = None;
+            }
+            self.head = Self::after(self.head);
+        }
+        self.len = 0;
+        discarded
+    }
+}
+
+impl<T, const N: usize> Default for Gate<T, N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Counts and state, never the commands.
+///
+/// A command is the application's, and can carry a message body. The same
+/// reasoning keeps ids out of `SeenStanzas`' `Debug`.
+#[expect(
+    clippy::missing_fields_in_debug,
+    reason = "a command can carry a message body and does not belong in a log line"
+)]
+impl<T, const N: usize> fmt::Debug for Gate<T, N> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Gate")
+            .field("quiesced", &self.quiesced)
+            .field("backlog", &self.len)
+            .field("capacity", &N)
+            .finish()
+    }
+}
+
 #[cfg(feature = "alloc")]
 pub use self::releasing::{Detach, DetachFailed, DetachFuture};
 

@@ -258,3 +258,154 @@ mod releasing {
         );
     }
 }
+
+// --- phases 1, 2 and 6: quiesce, barrier, resume ------------------------------
+
+#[test]
+fn a_gate_passes_until_it_is_told_not_to() {
+    let mut gate: Gate<u8, 4> = Gate::new();
+
+    assert!(!gate.is_quiesced());
+    assert!(matches!(gate.offer(1), Offered::Pass(1)));
+    assert_eq!(gate.backlog(), 0);
+
+    gate.quiesce();
+    assert!(gate.is_quiesced());
+    assert!(matches!(gate.offer(2), Offered::Held));
+    assert_eq!(gate.backlog(), 1);
+}
+
+#[test]
+fn the_backlog_comes_back_in_the_order_it_went_in() {
+    // Releasing out of order would reorder an application's sends — a bug it
+    // cannot see and did not cause.
+    let mut gate: Gate<u8, 8> = Gate::new();
+    gate.quiesce();
+    for command in 1..=5 {
+        assert!(matches!(gate.offer(command), Offered::Held));
+    }
+
+    let mut released = alloc::vec::Vec::new();
+    let count = gate.resume(|command| released.push(command));
+
+    assert_eq!(count, 5);
+    assert_eq!(released, alloc::vec![1, 2, 3, 4, 5]);
+    assert_eq!(gate.backlog(), 0);
+    assert!(!gate.is_quiesced());
+}
+
+#[test]
+fn a_full_gate_hands_the_command_back_rather_than_dropping_it() {
+    // Dropping here would make a full backlog look like a successful hold, and
+    // the application would never learn its command went nowhere.
+    let mut gate: Gate<u8, 2> = Gate::new();
+    gate.quiesce();
+
+    assert!(matches!(gate.offer(1), Offered::Held));
+    assert!(matches!(gate.offer(2), Offered::Held));
+    assert!(gate.is_full());
+
+    match gate.offer(3) {
+        Offered::Full(command) => assert_eq!(command, 3, "the caller still has it"),
+        other => panic!("expected the command back, got {other:?}"),
+    }
+    assert_eq!(gate.backlog(), 2, "and nothing already held was displaced");
+}
+
+#[test]
+fn the_gate_opens_before_the_backlog_drains() {
+    // A command produced by releasing another must be sent, not appended to a
+    // queue that is being emptied — otherwise it waits for a resume that has
+    // already happened.
+    let mut gate: Gate<u8, 4> = Gate::new();
+    gate.quiesce();
+    gate.offer(1);
+
+    let mut sent = alloc::vec::Vec::new();
+    gate.resume(|command| {
+        sent.push(command);
+    });
+    assert!(matches!(gate.offer(9), Offered::Pass(9)));
+    assert_eq!(sent, alloc::vec![1]);
+}
+
+#[test]
+fn the_slots_are_reused_around_the_ring() {
+    let mut gate: Gate<u8, 3> = Gate::new();
+    for round in 0..4u8 {
+        gate.quiesce();
+        assert!(matches!(gate.offer(round), Offered::Held));
+        assert!(matches!(gate.offer(round + 100), Offered::Held));
+
+        let mut released = alloc::vec::Vec::new();
+        gate.resume(|command| released.push(command));
+        assert_eq!(released, alloc::vec![round, round + 100], "round {round}");
+    }
+}
+
+#[test]
+fn abandoning_discards_the_backlog_and_says_how_much() {
+    // A handoff that failed is being given up on: the commands were never sent
+    // and whoever refused them has already said so.
+    let mut gate: Gate<u8, 4> = Gate::new();
+    gate.quiesce();
+    gate.offer(1);
+    gate.offer(2);
+
+    assert_eq!(gate.abandon(), 2);
+    assert_eq!(gate.backlog(), 0);
+    assert!(!gate.is_quiesced());
+    assert!(matches!(gate.offer(3), Offered::Pass(3)));
+}
+
+#[test]
+fn a_gate_reports_its_state_without_reporting_its_commands() {
+    // A command can carry a message body. Ids stay out of `SeenStanzas`' Debug
+    // for the same reason.
+    let mut gate: Gate<&str, 4> = Gate::new();
+    gate.quiesce();
+    gate.offer("hello, this is the body");
+
+    let rendered = alloc::format!("{gate:?}");
+    assert!(rendered.contains("backlog"), "{rendered}");
+    assert!(rendered.contains("capacity"), "{rendered}");
+    assert!(
+        !rendered.contains("hello"),
+        "the command leaked: {rendered}"
+    );
+}
+
+#[test]
+fn a_barrier_says_nothing_until_something_reports() {
+    // The whole point of the second answer: an adapter with no drain hook never
+    // calls `drained`, so a host reads "not known" instead of "there was
+    // nothing left".
+    let barrier = Barrier::new();
+
+    assert_eq!(barrier.state(), Quiet::Unconfirmed);
+    assert!(!barrier.state().is_confirmed());
+
+    barrier.drained();
+    assert_eq!(barrier.state(), Quiet::Confirmed);
+    assert!(barrier.state().is_confirmed());
+}
+
+#[test]
+fn reporting_a_drain_twice_reports_the_same_fact() {
+    let barrier = Barrier::default();
+    barrier.drained();
+    barrier.drained();
+    assert_eq!(barrier.state(), Quiet::Confirmed);
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn an_unconfirmed_barrier_says_so_in_words() {
+    // This lands in a report a person reads, and "drained" against "not known
+    // to have drained" is the difference between two handoffs that look alike.
+    assert_eq!(alloc::format!("{}", Quiet::Confirmed), "drained");
+    assert_eq!(
+        alloc::format!("{}", Quiet::Unconfirmed),
+        "not known to have drained"
+    );
+}
