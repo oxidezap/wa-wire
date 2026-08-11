@@ -1930,14 +1930,19 @@ a host that moves a session across it is claiming something no one checked.
 Found by trying to measure, and neither is in the loss matrix because neither is
 about state.
 
-**`zapo` is now the only one.** The paragraph below described two engines; one
-of them was fixed.
+**Neither is a blocker any more.** The paragraph below described two engines;
+one was fixed upstream and the other was never broken.
 
-- **`zapo` cannot drop its transport.** The harness reports it outright:
-  *"zapo does not support dropping its transport, which reconnect requires"*.
-  Phase 3 is `detach`, a clean disconnect that is not a logout, and `zapo` has
-  no way to express it. It can be a handoff **source** only if the process
-  exits, which is a different design from the one RFC-003 describes.
+- ~~**`zapo` cannot drop its transport.**~~ **Withdrawn in rev 63.** The claim
+  came from a harness failure — *"zapo does not support dropping its transport,
+  which reconnect requires"* — which reports on the `whatsapp-bench` client, not
+  on the engine: `clients/zapo/benchmark.mjs` simply never called
+  `registerTransportDrop`. `WaClient.disconnect()` has been there all along, and
+  its own doc says it closes the transport gracefully, does not clear stored
+  credentials, and that `connect()` again resumes the same session; it emits
+  `isLogout: false`, and `zapo` has no auto-reconnect, so nothing reopens the
+  socket unless a caller asks. Given the hook, five `reconnect` cycles complete
+  against the mock server with no re-pairing.
 - ~~**`whatsapp-rust` does not come back**~~ — **fixed upstream in rev 60.**
   `Client::pause()` and `Client::resume()` landed as
   [#1265](https://github.com/oxidezap/whatsapp-rust/pull/1265), with the
@@ -1989,8 +1994,8 @@ than host work, and neither was visible from reading the RFCs.
    `wa_wire_adapter::handoff::Detach` is a trait with one method, so a host
    driving a handoff has no `logout` to reach (D-138). The test is a
    `compile_fail` doctest paired with an identical passing one, and the engine
-   side is `lifecycle.detach` — declared by `whatsapp-rust` via `Client::pause`,
-   and by nobody else yet.
+   side is `lifecycle.detach` — declared by `whatsapp-rust` via `Client::pause`
+   and by `zapo` via `WaClient.disconnect` (rev 63).
 4. ~~Deduplication by message id in L1 (R3).~~ **Done in rev 61**:
    `wa_wire_l1::dedup::SeenStanzas`, a bounded window a caller drives. It is
    beside `derive` rather than inside it, because telling a redelivery from an
@@ -2234,10 +2239,41 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-137 | Deduplication keys on tag *and* id, holds a bounded window, and reports a third answer for what it cannot identify | An `<ack>` and a `<receipt>` for one message carry that message's id, so keying on the id alone would report the second as a redelivery of the first and drop it. The window is bounded because the alternative is unbounded state in a `no_std` crate that allocates nowhere else; the trade is that an evicted id reads as new, which loses nothing. And a stanza with no id is `Untracked` rather than `New`, so a caller counting duplicates cannot read "could not tell" as "there were none" | 61 |
 | D-138 | `Detach` is a trait with one method, not a variant of an enum that also names `logout` | The two acts look alike from one line away and differ irreversibly: a detach hands the session on, a logout unpairs the customer's device. `enum End { Detach, Logout }` is the shape a bug flips and still compiles. A host driving a handoff holds `&dyn Detach` and cannot log out because there is no method to call — proved by a `compile_fail` doctest paired with an identical one that compiles, so it cannot start passing for an unrelated reason | 62 |
 | D-139 | The fencing token lives in `wa-wire-adapter` beside `Detach`, and an engine never sees it | The fence is the host's bookkeeping and the detach is the engine's act. An engine has no way to know what else in the fleet believes it owns this session, so a token threaded through the adapter API would be a parameter no implementation could check. Keeping them adjacent and separate is what lets a host run them in order | 62 |
+| D-140 | An engine's capability is read from the engine, never from a harness failure | `zapo` was recorded as unable to drop its transport on the strength of a `whatsapp-bench` message that says exactly that. The message reports on the benchmark client, which never registered a drop hook, and `WaClient.disconnect()` had been there the whole time. A harness failure is evidence about the harness until someone reads the engine | 63 |
 
 ---
 
 ## Changelog
+
+### rev 63 — 2026-08-11
+
+- **`zapo` can release its session, and could all along.** rev 58 recorded that
+  it could not, citing the harness verbatim: *"zapo does not support dropping
+  its transport, which reconnect requires"*. That message is emitted by
+  `whatsapp-bench`'s SDK when a client never calls `registerTransportDrop`, and
+  `clients/zapo/benchmark.mjs` never did. It says nothing about the engine
+  (D-140).
+- **What the engine actually offers.** `WaClient.disconnect()` closes the
+  transport gracefully, does not clear stored credentials — its own doc says
+  `connect()` again resumes the same session — and emits `isLogout: false`.
+  `zapo` has no built-in auto-reconnect, so nothing reopens the socket unless a
+  caller asks. Every clause a detach needs.
+- **Measured, not reasoned.** Registering the hook in the bench client and
+  running `reconnect --client zapo` gives 5/5 cycles valid against the mock
+  server, p50 3.9 ms, with no pairing or QR traffic in the server log. The
+  earlier finding was withdrawn on evidence, not on a second reading.
+- **`createDetacher` in the `zapo` adapter**, and `DETACHING_INFO` beside
+  `SENDING_INFO`. Not on the sending ladder: releasing the session and
+  correlating a reply are unrelated powers, and stacking them would make a host
+  ask for `l0.request` to be allowed to hand a session on.
+- **Two of the four adapters now declare `lifecycle.detach`.** `whatsapp-rust`
+  via `Client::pause`, `zapo` via `WaClient.disconnect`. `Baileys` and
+  `hypermeow` can — ending the socket without marking it closed, and
+  `Disconnect()` then `Connect()` — and their adapters do not expose it yet.
+- **This unblocks the preferred route.** D-136 prefers `zapo` as a handoff
+  target because nothing is lost moving into it; a round trip also needs it as a
+  source, which is what was thought impossible. Items 5 and 6 of the v2
+  definition of done now wait on `wa-store-migrate` alone.
 
 ### rev 62 — 2026-08-11
 
@@ -2343,8 +2379,10 @@ Portability is enforced too: the contract builds with no allocator and for
   sends its `<success>`, and nothing decodes it because the reader is gone.
 - **What the library lacks is a detach that is not a stop**, which RFC-003's
   phase 3 requires by name and R4 requires to be type-level distinct from
-  `logout`. That is a capability to add, not a bug to fix, and it is the same
-  shape as `zapo`'s inability to drop its transport.
+  `logout`. That is a capability to add, not a bug to fix. *(Added upstream as
+  `Client::pause`/`resume` in #1265; the sentence that followed here paired it
+  with `zapo`'s supposed inability to drop its transport, which rev 63
+  withdrew.)*
 - Three explanations were eliminated before that one survived, each with
   evidence: the `expected_disconnect` flag left dirty (the symptom persists on
   the commit that clears it), the `Connection` guard dropped undriven (the

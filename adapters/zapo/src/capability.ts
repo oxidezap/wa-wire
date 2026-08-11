@@ -66,6 +66,24 @@ export const SENDING_INFO: AdapterInfo = {
 }
 
 /**
+ * What this adapter can do when it can also release the session.
+ *
+ * Its own declaration for the same reason {@link SENDING_INFO} is one:
+ * detaching needs the `WaClient`, and an instance installed as a plugin has only
+ * the filter's view. A consumer requiring `lifecycle.detach` is saying it holds
+ * a detacher.
+ *
+ * Not part of the ladder below. Releasing the session and correlating a reply
+ * are unrelated powers — a consumer wanting one has no use for the other — and
+ * stacking them would make a host ask for `l0.request` to be allowed to hand the
+ * session on.
+ */
+export const DETACHING_INFO: AdapterInfo = {
+    ...INFO,
+    capabilities: [...INFO.capabilities, Capability.Detach],
+}
+
+/**
  * What this adapter can do when it also correlates replies.
  *
  * A ladder, not three unrelated sets: requesting includes sending, which
