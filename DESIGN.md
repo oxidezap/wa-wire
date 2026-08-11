@@ -1743,6 +1743,49 @@ measured here changes that.
 keys, app-state and the device record may each land differently, and the wasm
 build's size and load cost are not in any number above.
 
+### [MEASURED] The other three domains, and why the session is the only one that matters
+
+The figures above are one domain. Rev 66 also measured the rest, on real records
+from a real group session — a sender key from an actual SKDM, the bincode
+`HashState` `whatsapp-rust` writes for app-state, and the device record.
+Medians of five runs of 5000; the first run after a build is noisy enough to
+report double, which is why nothing here is a single figure.
+
+| Domain | Size | JS read-modify-write | Rust read-modify-write |
+| --- | ---: | ---: | ---: |
+| session record | 1705 B | 3.4 – 4.4 µs | 1.7 – 1.9 µs |
+| app-state `HashState` | 131 B | 0.95 µs | *not reachable* |
+| sender key record | 83 B | 0.65 µs | 0.20 – 0.22 µs |
+| device record, whole | — | 0.23 – 0.25 µs | — |
+| app-state sync key | — | pass-through, 0.044 µs | — |
+
+**The session record is the only expensive domain**, and it is expensive because
+it is twenty times larger than anything else — the cost tracks the record, not
+the domain. Everything else is under a microsecond in JavaScript and under a
+quarter of one in Rust.
+
+That sharpens the recommendation rather than changing it. Choosing the libsignal
+protobuf as canonical makes the *most expensive* domain a pass-through for the
+two engines that already hold it that way, and leaves the cheap domains cheap
+whichever way they go. The format decision buys the most where it costs the most.
+
+**The device record has no codec on either side.** `whatsapp-rust` stores each
+key pair as 64 bytes with the private half first; every other engine wants two
+named fields. So the translation is a rename and two slices, and the only
+question is whether they borrow or copy — and at 0.04–0.10 µs either way in
+JavaScript the two are inside each other's noise, while Rust separates them at
+0.015 against 0.021. For this domain the design question is not the format at
+all; it is whether the store API hands out views, and only the Rust side is
+fast enough for that to be measurable.
+
+**App-state has an argument hiding in it.** `whatsapp-rust`'s `HashState` codec
+is `pub(crate)` in its sqlite storage crate, so a translating store *outside* the
+engine cannot reach the engine's own encoder and would have to carry a second
+implementation of it — which is exactly what `wa-store-migrate` does, and exactly
+where the `timestamp ?? 0` defect lived. A translation that runs inside the
+adapter, against the engine's own code, does not have that problem. It is a small
+observation and it points the same way Option E does.
+
 ### [VERIFIED] Which domains are free, and which are not
 
 Zero-copy is not a property of the design — it is a property of whether the

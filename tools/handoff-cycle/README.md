@@ -174,9 +174,16 @@ third between the first two attempts. For scale, the same run
 shows `zapo`'s own `messages.upsertBatch` at 624 µs per call against an
 in-memory store.
 
-So translation is not where the time goes — but only if the canonical form is
-one an engine already holds. That is a per-domain question, and the amendment
-has the table.
+`measure-domains.mjs` prices the other three domains on `fixtures/group-session.json`
+— a session captured against a Barback running `--bench-group`, so the sender key
+is from an actual SKDM rather than constructed. A sender key round-trips in
+0.65 µs, app-state's bincode `HashState` in 0.95 µs, and the whole device record
+in 0.23 µs, against 3.4–4.4 µs for a session.
+
+So the session record is the only expensive domain, and it is expensive because
+it is twenty times larger than anything else. Translation is not where the time
+goes — but only if the canonical form is one an engine already holds, and that is
+a per-domain question the amendment has the table for.
 
 There is also a route-blocking disagreement above this tool's level:
 `registrationId`. `zapo` generates 1..16381 and Baileys masks to 14 bits, while
