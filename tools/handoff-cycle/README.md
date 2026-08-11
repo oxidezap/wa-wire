@@ -151,6 +151,33 @@ recording. `zapo` does not declare `l0.inbound.auth-phase` — it protects
 the login even though the login happened, and `zapo`'s own log shows it. A
 silent skip there would have turned a capability gap into a passing check.
 
+## Measuring what a translating store would cost
+
+Two scripts, for the two halves of a per-access budget — the numbers behind
+RFC-006's Option E amendment.
+
+```console
+node measure-store-access.mjs session.json ws://127.0.0.1:46020/ws/chat 8
+node measure-translation.mjs 3000
+```
+
+`measure-store-access.mjs` wraps the bundle `zapo` is handed and times every
+call. A live session made **68 store calls across 47 stanzas — 1.4 per stanza**.
+Counting starts after seeding, because the seed is the host's own writing and
+charging it to the engine would inflate every row.
+
+`measure-translation.mjs` prices one translation on the committed fixture's real
+1705-byte session record. Across five runs of 5000: a pass-through view is
+0.041–0.047 µs, a copy 0.286–0.315 µs, and a decode-and-re-encode through
+`zapo`'s codec 3.4–4.4 µs. Ranges, because a single run's median moved by a
+third between the first two attempts. For scale, the same run
+shows `zapo`'s own `messages.upsertBatch` at 624 µs per call against an
+in-memory store.
+
+So translation is not where the time goes — but only if the canonical form is
+one an engine already holds. That is a per-domain question, and the amendment
+has the table.
+
 There is also a route-blocking disagreement above this tool's level:
 `registrationId`. `zapo` generates 1..16381 and Baileys masks to 14 bits, while
 `whatsapp-rust` uses 1..2³¹−1 and whatsmeow a full `uint32`. `wa-store-migrate`

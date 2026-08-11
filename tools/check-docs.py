@@ -141,7 +141,13 @@ def check_in_repo_refs(text: str, out: Failures) -> None:
             )
 
 
-ENGINES = {name: ROOT.parent / name for name in ("whatsapp-rust", "zapo", "Baileys", "hypermeow")}
+# The four engines, plus `baileyrs` — not an engine, but cited as the working
+# precedent for a translating store, and a citation nobody checks is how the
+# stale prose this tool exists for got in.
+ENGINES = {
+    name: ROOT.parent / name
+    for name in ("whatsapp-rust", "zapo", "Baileys", "hypermeow", "baileyrs")
+}
 
 # How far a cited line may sit from the evidence for it. Wide, because a
 # citation often points inside a function while naming the function.

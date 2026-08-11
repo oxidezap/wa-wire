@@ -39,6 +39,7 @@ Confidence markers used throughout:
 - [RFC-009 — Contract versioning and provenance](#rfc-009--contract-versioning-and-provenance)
 - [RFC-010 — Recording container](#rfc-010--recording-container)
 - [RFC-005 amendment — comparison profiles](#rfc-005-amendment--comparison-profiles)
+- [RFC-006 amendment — Option E, the translating store](#rfc-006-amendment--option-e-the-translating-store)
 - [5. What this unlocks](#5-what-this-unlocks)
 - [6. Risks and honest limitations](#6-risks-and-honest-limitations)
 - [7. Open questions](#7-open-questions)
@@ -260,7 +261,7 @@ assumption in this design that Baileys would need a patch.
 
 Also verified: `sendNode` (`socket.ts:163`), `query` (`socket.ts:260`),
 tag-scoped `CB:*` handlers (`socket.ts:1026-1208`), `connectionReplaced = 440`
-(`src/Types/index.ts:31`). No takeover mechanism, no plugin system, no drain
+(`packages/baileys/src/Types/index.ts:31`). No takeover mechanism, no plugin system, no drain
 hook.
 
 **[VERIFIED] The oxidezap Baileys fork already depends on
@@ -336,7 +337,7 @@ authenticates with the same keys:
   with the same keys"* (`types/events/events.go:138`).
 - `whatsapp-rust`: `Event::StreamReplaced` (`wacore/src/types/events.rs:263, 943`),
   documented for `<conflict>`, 516 device removal, and 401.
-- `Baileys`: `connectionReplaced = 440` (`src/Types/index.ts:31`).
+- `Baileys`: `connectionReplaced = 440` (`packages/baileys/src/Types/index.ts:31`).
 
 **This is the single most design-defining fact in the document.** Blue/green
 handoff with connection overlap is physically impossible. See
@@ -781,7 +782,7 @@ engines. **Store** models did the opposite — they diverged completely.
 
 | Engine | Model | Shape |
 | --- | --- | --- |
-| Baileys | `SignalKeyStore.get(type, ids)` / `set(dataSet)` over a 10-entry `SignalDataTypeMap`, plus `transactWith(scope)` with deterministically ordered locks (`Types/Auth.ts:74-133`) | **generic typed KV** |
+| Baileys | `SignalKeyStore.get(type, ids)` / `set(dataSet)` over a 10-entry `SignalDataTypeMap`, plus `transactWith(scope)` with deterministically ordered locks (`packages/baileys/src/Types/Auth.ts:74-133`) | **generic typed KV** |
 | zapo | 16 domain stores — 11 persistent + 5 cache — with per-domain backends and compile-time refusal to route an unimplemented domain (`src/store/types.ts:21-125`) | **domain-oriented, granular** |
 | whatsmeow | ~9 Go interfaces: `IdentityStore`, `SessionStore`, `PreKeyStore`, `SenderKeyStore`, `AppStateSyncKeyStore`, `AppStateStore`, `ContactStore`, `ChatSettingsStore`, `DeviceContainer` (`store/store.go:23-121`) | **domain-oriented** |
 | whatsapp-rust | `Backend: SignalStore + AppSyncStore + ProtocolStore + MsgSecretStore + DeviceStore` (`wacore/src/store/traits.rs:936`), with libsignal traits kept separate (`wacore/libsignal/src/protocol/storage/traits.rs`) | **domain + libsignal split** |
@@ -795,7 +796,7 @@ Several store operations carry **logic**, not just persistence:
 - `GetManySessions` / `PutManySessions` — batch paths that exist for
   performance (`:33-35`)
 - `transactWith(scope)` — Baileys orders locks by sorted `RecordRef` to make
-  overlapping transactions deadlock-free (`Types/Auth.ts:119-129`)
+  overlapping transactions deadlock-free (`packages/baileys/src/Types/Auth.ts:119-129`)
 - zapo separates *persistent* from *cache* domains with different teardown
   semantics (`src/store/types.ts:38-60`)
 
@@ -1584,6 +1585,170 @@ most likely to move on review, and it is stated rather than left to be noticed.
 
 ---
 
+## RFC-006 amendment — Option E, the translating store
+
+**Status:** **PROPOSED** (rev 66). Amends
+[RFC-006](#rfc-006--store-ownership), which stays ACCEPTED — this adds an option
+its four did not cover and does not retract any of them.
+
+RFC-006 asked who *owns* the store and answered with four arrangements, all of
+which keep each engine's own persistence and move data between them. This asks a
+different question: what if there is one store and each adapter presents it in
+the shape its engine expects, translating per access instead of per handoff?
+
+That is not Option D. D was "shared physical backend, namespaced per engine" and
+was rejected in one line — *sharing the disk does not share the semantics*,
+which is right, because in D each engine still writes its own format and the
+namespaces keep them apart. Here there is one canonical record and the
+translation is at the boundary: the semantics are shared and the syntax is what
+gets converted.
+
+It is closer to Option C, and inverted. C had the host own the store and was
+rejected because the host would have to decide who generates pre-keys. Here the
+engine keeps every decision it had; only persistence is redirected.
+
+### The precedent
+
+`baileyrs` already does this, in production, for one engine pair. Its
+`useMultiFileAuthState` returns an `AuthenticationState` whose `keys` are a
+*projection* of a neutral native store — `namespace + key -> bytes` — onto
+Baileys' `SignalKeyStore`
+(`src/Compatibility/legacy-store/native-projection.ts:45`), with a routing table
+naming which legacy type lives in which native namespace
+(`src/Compatibility/legacy-store/routing.ts:185`) and codecs converting the
+values. `saveCreds` is a deliberate no-op: the native store is already the
+truth, and the hook survives only so unchanged upstream call sites keep working
+(`baileyrs/src/Utils/use-multi-file-auth-state.ts:25`).
+
+Nothing is dumped and nothing is converted wholesale. Unchanged Baileys
+application code reads and writes a store it does not know is somebody else's.
+
+### [VERIFIED] The objection that rejected Option C is one engine in four
+
+RFC-006 says a host that owns the store "must decide who generates pre-keys",
+citing whatsmeow. That citation is accurate and the generalisation is not.
+
+| Engine | Where a pre-key is generated | Store's part |
+| --- | --- | --- |
+| Baileys | `generateOrGetPreKeys(creds, range)` in the socket layer (`packages/baileys/src/Utils/signal.ts:53`) | `set(dataSet)` — persistence only |
+| whatsapp-rust | the client layer: `KeyPair::generate` (`whatsapp-rust/src/prekeys.rs:400`), then hands over an encoded record | `store_prekey(id, record, uploaded)` (`wacore/src/store/traits.rs:339`) — persistence only |
+| zapo | the caller injects a generator: `getOrGenPreKeys(count, generator)` (`src/store/contracts/pre-key.store.ts:5`) | allocates ids, persists |
+| whatsmeow | `s.genOnePreKey(...)` inside the SQL store (`store/sqlstore/store.go:584`), behind `GetOrGenPreKeys(ctx, count)` (`store/store.go:42`) | **generates** |
+
+Three of the four already separate generation from persistence, so for three of
+them a store that only persists is the store they already have. Only whatsmeow
+would need the split made — and it is a split inside one implementation, not a
+change to the protocol.
+
+The RFC's other logic-carrying operations survive the re-reading and are the
+real cost. Baileys' `transactWith` acquires locks in a deterministic sorted
+order so overlapping transactions cannot deadlock
+(`packages/baileys/src/Types/Auth.ts:119-129`); that is behaviour a translating
+store has to reproduce, not persistence it can pass through.
+
+### [MEASURED] What a translation costs
+
+Two numbers decide this, and neither existed before rev 66.
+
+**How often a live session touches the store.** Measured by wrapping the bundle
+`zapo` is handed and timing every call
+(`tools/handoff-cycle/measure-store-access.mjs`): **68 store calls across 47
+stanzas — 1.4 per stanza**, over a session seeded from a real `whatsapp-rust`
+store. The store is not on a hot path; it is consulted about as often as
+stanzas arrive.
+
+**What one translation costs.** Measured on the committed fixture's real
+1705-byte session record (`tools/handoff-cycle/measure-translation.mjs`). Ranges
+rather than points: these are the medians of five runs of 5000 iterations, and a
+single run's median moved by a third between the first two attempts — worth
+knowing before anyone budgets against one number.
+
+| Translation | Median across five runs |
+| --- | ---: |
+| pass-through, a view over the same bytes | 0.041 – 0.047 µs |
+| copy of the same 1705 bytes | 0.286 – 0.315 µs |
+| decode session record, proto to `zapo`'s structure | 2.19 – 2.82 µs |
+| encode session record, `zapo`'s structure to proto | 1.25 – 1.55 µs |
+
+So the worst case — every access a full read-modify-write through the codec —
+is **3.4 to 4.4 µs**, and at 1.4 accesses per stanza that is **5 to 6 µs of
+translation per stanza**. Handing over the same bytes instead is fifty to
+seventy times cheaper.
+
+For scale, the same access measurement shows `zapo`'s own `messages.upsertBatch`
+at 624 µs and `contacts.upsertBatch` at 587 µs per call: the store already
+spends two orders of magnitude more on work that has nothing to do with
+translation, and that is against an in-memory backend. Against a disk the gap
+widens.
+
+The handoff window this project measured for v2 is 31–273 ms. Translation is not
+where the time goes.
+
+### [VERIFIED] Which domains are free, and which are not
+
+Zero-copy is not a property of the design — it is a property of whether the
+canonical form is the one an engine already holds, and that differs *by domain
+within a single engine*:
+
+| Domain | Baileys | whatsapp-rust | zapo |
+| --- | --- | --- | --- |
+| session | `Uint8Array` (`packages/baileys/src/Types/Auth.ts:76`) | libsignal proto bytes | decoded structure |
+| sender key | `Uint8Array` (`packages/baileys/src/Types/Auth.ts:77`) | proto bytes | decoded structure |
+| identity key | `Uint8Array` (`packages/baileys/src/Types/Auth.ts:84`) | raw bytes | raw bytes |
+| pre-key | `KeyPair` (`packages/baileys/src/Types/Auth.ts:75`) | `PreKeyRecordStructure` proto | `{keyId, keyPair}` |
+
+Choosing the libsignal protobuf as canonical makes sessions and sender keys a
+pass-through for Baileys and `whatsapp-rust` — around 0.04 µs, a view — and a codec for
+`zapo`. Choosing `zapo`'s decoded structure inverts that. Either way identity
+keys are free everywhere and pre-keys are cheap, since a 32-byte copy is 0.061 µs.
+
+**The recommendation is the protobuf**, on the grounds that it is what two of
+four engines already persist, it is the format the wire uses, and it is the only
+one of the three that is defined outside any single engine.
+
+### What this buys that Option B cannot
+
+Rev 64 measured a defect that is inherent to converting whole stores:
+`appStateSyncKeys.timestamp` is absent in `whatsapp-rust`, so the IR carries
+none, so `zapo`'s writer stores `0` and the key comes back claiming 1970.
+
+A translating store does not have that failure mode. There is one canonical
+record; an adapter whose engine has no timestamp column simply does not project
+that field, and the field is still there when another adapter reads it. Loss
+stops being a property of the *route* and becomes at most an incomplete
+projection — which is a smaller claim, and a local one.
+
+This is the strongest argument for Option E and it did not come from reasoning
+about it. It came from running Option B and reading what came back.
+
+### What is still unknown
+
+- **Whether a projection can carry `transactWith`.** Lock ordering across a
+  translating boundary is the one place this could be genuinely hard, and
+  nothing here measures it.
+- **Write amplification.** Every measurement above is a read or a small write
+  against an in-memory store. A canonical store on disk, with two adapters
+  writing through it, is a different question and the honest one to ask next.
+- **Whether the engines would take it.** Option E needs each engine to accept a
+  caller-supplied store, and three of them already do: `zapo` takes a backend
+  bundle per domain (`WaStoreBackend`, `src/store/types.ts:137`), Baileys takes
+  an `AuthenticationState` (`packages/baileys/src/Types/Socket.ts:75`), and
+  `whatsapp-rust` takes anything implementing `Backend`
+  (`wacore/src/store/traits.rs:936`). whatsmeow also takes a store, and is the
+  one that would need its pre-key generation lifted out of it first.
+
+### Sequencing
+
+Option B ships and works; rev 65 moved a real session between two engines and
+back on it. Option E is not a replacement for it — it is what makes a handoff
+cost nothing instead of costing a snapshot, and the two can coexist: an engine
+that cannot use the canonical store keeps being handed a converted one.
+
+Nothing here is implemented. This records a design and the measurements that
+make it credible, so that the next person arguing about it argues about numbers.
+
+---
+
 ## RFC-005 amendment — comparison profiles
 
 **Status:** **ACCEPTED** (rev 23), **implemented** in rev 24. Amends
@@ -2257,10 +2422,51 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-144 | An attach goes through the engine's own store contracts, never around them | D-007 says the host does not own the store, and that cuts both ways: seeding `zapo` uses documented methods only, so a contract that changes breaks at the call instead of yielding a store that loads and is subtly wrong. The cost is that the reverse is not available — `zapo` exposes no enumeration, so it can be attached to from outside and not harvested from outside | 64 |
 | D-145 | A live handoff is checked for continuity — one pairing, one account, traffic on every leg — not for agreement | Agreement is a question about two engines reading one input, and `engine_agreement` answers it. A move is a question about one account surviving, and what witnesses it is the server's pairing count and the `lid` and `companion_enc_static` that a re-pair would have minted anew. Verified by falsification: pointed at two recordings from different pairings, the check fails on all three | 65 |
 | D-146 | The return leg carries the state the other engine changed, rather than reattaching with the store it still had | `zapo` consumed five prekeys in a six-second leg — 807 in, 802 out. A `whatsapp-rust` that came back with its own copy would offer the server keys already handed out, which is the drift R1 describes one step short of two writers. Measured rather than assumed, which is also what makes the harvest worth its complexity | 65 |
+| D-147 | The canonical form for a translating store is the libsignal protobuf, not any engine's decoded structure | It is what two of four engines already persist, it is what the wire carries, and it is the only candidate defined outside a single engine. Measured: a session that both sides hold as those bytes costs around 0.04 µs to hand over as a view, against 3.4–4.4 µs to decode and re-encode — so the choice of canonical form is what decides whether a domain is free | 66 |
 
 ---
 
 ## Changelog
+
+### rev 66 — 2026-08-11
+
+- **RFC-006 gains a fifth option, as a proposal**: one canonical store, each
+  adapter projecting it into the shape its engine expects, translating per
+  access instead of per handoff. Not Option D, whose rejection stands — D had
+  each engine writing its own format to a shared disk, so the semantics stayed
+  apart. Here there is one record and only the syntax is converted.
+- **`baileyrs` is the working precedent**, and it is not hypothetical: its
+  `AuthenticationState.keys` is a projection of a neutral `namespace + key ->
+  bytes` store onto Baileys' `SignalKeyStore`, with `saveCreds` a deliberate
+  no-op because the native store is already the truth. Unchanged upstream code
+  reads and writes a store it does not know belongs to somebody else.
+- **The objection that rejected Option C is one engine in four.** RFC-006 says a
+  host owning the store "must decide who generates pre-keys" and cites whatsmeow,
+  which is accurate — `genOnePreKey` runs inside its SQL store. Baileys generates
+  in the socket layer, `whatsapp-rust` in the client layer, and `zapo` takes a
+  generator as a parameter. Three of four already hand the store a finished key.
+- **Two measurements that did not exist.** A live session makes **1.4 store calls
+  per stanza** (68 across 47), and the worst translation on a real 1705-byte
+  session record is **3.4–4.4 µs** for a decode-and-re-encode — 5 to 6 µs per
+  stanza. A range because a single run's median moved by a third between
+  attempts; these are medians of five runs of 5000. `zapo`'s own `messages.upsertBatch` costs 624 µs per call against an
+  in-memory backend. Translation is two orders of magnitude below what the store
+  already spends.
+- **Zero-copy is a property of the chosen canonical form, not of the design**
+  (D-147), and it varies by domain inside one engine: Baileys holds sessions and
+  identity keys as bytes and pre-keys as a structure. Picking the protobuf makes
+  sessions a sub-0.05 µs view for two engines and a codec for one.
+- **The argument that decides it came out of rev 64's defect.** Converting whole
+  stores lost `appStateSyncKeys.timestamp` because the field exists in one engine
+  and not the other. With one canonical record an adapter simply does not project
+  a field its engine lacks, and the field is still there for the next reader.
+  Loss stops being a property of the route.
+- **`check-docs.py` now reads `baileyrs` too**, so the precedent is cited under
+  the same rule as everything else. Two existing Baileys citations had to be
+  qualified with `packages/baileys/` first: `baileyrs` mirrors the upstream file
+  layout, and a bare `Types/Auth.ts` stopped resolving to one file. The check
+  found both, and found two claims in this amendment where the citation did not
+  show what the sentence said.
 
 ### rev 65 — 2026-08-11
 
@@ -4125,7 +4331,7 @@ rest.
 ### rev 2 — 2026-08-07
 
 - Added **RFC-006 — Store ownership**, resolving the analysis half of OQ-2.
-- Surveyed all four store models (`Types/Auth.ts:74-133`, `src/store/types.ts:21-125`,
+- Surveyed all four store models (`packages/baileys/src/Types/Auth.ts:74-133`, `src/store/types.ts:21-125`,
   `store/store.go:23-121`, `wacore/src/store/traits.rs:936`).
 - **Key finding:** event models converged across engines; store models diverged
   completely. Baileys is a generic typed KV; the other three are
