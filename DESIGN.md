@@ -2001,19 +2001,15 @@ than host work, and neither was visible from reading the RFCs.
    beside `derive` rather than inside it, because telling a redelivery from an
    arrival is exactly the knowledge one stanza does not carry, and a stateful
    `derive` would stop being the thing four engines can be compared on (D-010).
-5. One session moved between two engines and back, with the events on either
+5. ~~One session moved between two engines and back, with the events on either
    side compared by the conformance runner — the v1 machinery pointed at the v2
-   claim. **Mostly done in rev 64.** The store round-trips
-   `whatsapp-rust → zapo → whatsapp-rust`, and the outbound leg also runs live:
-   `zapo` attaches to a `whatsapp-rust` session, connects and records, with no
-   re-pairing (`tools/handoff-cycle`). Two things are left, and the second
-   replaces the first. Coming back live needs `zapo`'s session read *out*, which
-   its contracts do not offer — nothing enumerates, so an attach is possible
-   from outside and a harvest is not (D-144); the way through is a caller-supplied
-   backend, which sees every write as it happens. And the comparison this item
-   names is one the runner declines by design (D-143): what a live move supports
-   is a continuity assertion, not a stanza-by-stanza diff between two windows of
-   a server.
+   claim.~~ **Done in rev 65.** `tools/handoff-cycle/run-cycle.sh` runs three
+   legs against the mock server — `whatsapp-rust` pairs and holds, `zapo` takes
+   it over, `whatsapp-rust` picks it back up with what `zapo` handed back — and
+   the server pairs exactly once. The comparison is *not* the conformance
+   runner, which declines two live legs by design (D-143); it is a continuity
+   check on the account's `lid` and `companion_enc_static`, verified by pointing
+   it at two recordings from different pairings and watching it fail.
 6. ~~The loss the route declared, and no more, observed in that move.~~ **Done
    in rev 64**, and the answer is *no*: everything came back byte-identical
    except `appStateSyncKeys.timestamp`, which the route does not declare and
@@ -2259,10 +2255,45 @@ Portability is enforced too: the contract builds with no allocator and for
 | D-142 | A move is checked by comparing the snapshots byte for byte, never by counting rows | 807 prekeys going out and 807 coming back is the answer to "did it run", and a round trip that returns the right number of prekeys with the wrong bytes inside them passes it. Counting also missed the one real finding: every app-state key came home with a timestamp it did not leave with, and the count never moved | 64 |
 | D-143 | A live handoff is not checked by comparing the two legs' recordings | The gate refuses them as `UndeclaredInput` and is right to: two live legs are two different windows of a server talking, so a stanza-by-stanza difference between them is a fact about the server rather than about the engines (D-079). Item 5's phrasing asks the runner for a verdict it exists to decline; the assertion a live move supports is continuity, and it needs its own check | 64 |
 | D-144 | An attach goes through the engine's own store contracts, never around them | D-007 says the host does not own the store, and that cuts both ways: seeding `zapo` uses documented methods only, so a contract that changes breaks at the call instead of yielding a store that loads and is subtly wrong. The cost is that the reverse is not available — `zapo` exposes no enumeration, so it can be attached to from outside and not harvested from outside | 64 |
+| D-145 | A live handoff is checked for continuity — one pairing, one account, traffic on every leg — not for agreement | Agreement is a question about two engines reading one input, and `engine_agreement` answers it. A move is a question about one account surviving, and what witnesses it is the server's pairing count and the `lid` and `companion_enc_static` that a re-pair would have minted anew. Verified by falsification: pointed at two recordings from different pairings, the check fails on all three | 65 |
+| D-146 | The return leg carries the state the other engine changed, rather than reattaching with the store it still had | `zapo` consumed five prekeys in a six-second leg — 807 in, 802 out. A `whatsapp-rust` that came back with its own copy would offer the server keys already handed out, which is the drift R1 describes one step short of two writers. Measured rather than assumed, which is also what makes the harvest worth its complexity | 65 |
 
 ---
 
 ## Changelog
+
+### rev 65 — 2026-08-11
+
+- **Item 5 closes.** One session, three legs, one pairing:
+  `whatsapp-rust → zapo → whatsapp-rust`, live against the mock server,
+  `tools/handoff-cycle/run-cycle.sh`. The account paired once, in the first leg,
+  and never again.
+- **The last leg is run with no pairing endpoint at all.** A leg that needed to
+  pair would have nowhere to send the code, would hang, and would record
+  nothing. The assertion is made by leaving the means out rather than by
+  checking afterwards.
+- **`zapo` consumed five prekeys while it held the account** — 807 in, 802 out
+  (D-146). That number is why the return leg carries state instead of letting
+  `whatsapp-rust` reattach with the copy it still had, and it is the kind of
+  thing only a harvest can tell you.
+- **Harvesting `zapo` is possible after all**, and the earlier note that it was
+  not was half wrong. `auth.load()` and `appState.exportData()` are bulk reads;
+  what the contracts lack is *discovery*. So the harvest asks for everything it
+  seeded, probes prekey ids past the highest until a run of misses, and asks
+  about every peer that appeared in the leg's own traffic. The remaining gap — a
+  session for a peer that never appears in any stanza — is named rather than
+  closed, because nothing in the protocol writes one.
+- **The check is continuity, not agreement** (D-145). The runner declines two
+  live legs as `UndeclaredInput` and is right to. `continuity.mjs` asserts the
+  server paired once, that `lid` and `companion_enc_static` are unchanged across
+  the legs that could see them, and that every leg carried real traffic.
+  Falsified against two recordings from different pairings: it fails on all
+  three counts.
+- **One thing it reports rather than asserts.** Leg B has no `success` in its
+  recording, because `zapo` does not declare `l0.inbound.auth-phase` — it keeps
+  `success` and `failure` away from its stanza filters. The login happened and
+  `zapo`'s own log shows it; the recording cannot carry it. Said out loud, since
+  a silent skip would turn a capability gap into a passing check.
 
 ### rev 64 — 2026-08-11
 
@@ -2288,6 +2319,9 @@ Portability is enforced too: the contract builds with no allocator and for
   `chatSocketUrls`; `url` is silently ignored and the client races its
   production endpoints instead — a run against real WhatsApp with credentials
   from a mock server. And the certificate-chain check is under `dangerous`.
+- **The harvest gap named in D-144 is narrower than it said**; rev 65 measures
+  it. `auth.load()` and `appState.exportData()` are bulk reads, so what is
+  missing is discovery rather than reading.
 - **`zapo` reconnects on its own after all**, which the adapter's doc denied. A
   socket that fails unexpectedly is retried with backoff. What it does not do is
   come back from a `disconnect()` the caller asked for — `stopComms` sets

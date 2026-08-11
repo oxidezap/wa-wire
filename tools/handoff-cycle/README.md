@@ -76,61 +76,80 @@ parses the record.
 The device columns *are* a raw pair, and in the other order from how they read:
 `serialize_keypair` writes private first, then public.
 
-## The live move
-
-`attach-zapo.mjs` is the other half: it migrates a `whatsapp-rust` session into
-`zapo`'s shape, seeds a fresh `zapo` store with it, and connects. The thing to
-watch is not that traffic arrives — it is that **no QR is ever printed**. A run
-that pairs has proved only that the mock server pairs anyone, so the script
-fails if one appears, and the server's own log is the second opinion.
+## The whole move
 
 ```console
-node attach-zapo.mjs session.json ws://127.0.0.1:46002/ws/chat leg-b.wawr 6
+npm install
+./run-cycle.sh
 ```
 
-It works. `zapo` reports `credentials ready { registered: true }`, completes the
-handshake, receives `success`, and records 47 envelopes — against a server log
-holding exactly one pairing, from the `whatsapp-rust` leg minutes earlier. The
-session changed engines.
+Three legs, one session, one pairing:
 
-Seeding goes through `zapo`'s own store contracts and nothing else (D-007: the
-host never owns the store), so `seed-zapo-store.mjs` is written against
-documented methods and breaks at the call if one of them changes.
+1. **`whatsapp-rust` pairs** against the Barback mock and holds the account.
+2. **`zapo` takes it over** — the store is migrated into `zapo`'s shape, seeded
+   into a fresh store, and connected. It reports `credentials ready {
+   registered: true }`, handshakes, receives `success`, and records traffic.
+3. **`whatsapp-rust` picks it back up**, with the store `zapo` handed back.
 
-Two things cost a run each and are worth writing down. `WaClient` takes
+Leg 3 is run with no pairing endpoint configured at all. A leg that needed to
+pair would have nowhere to send the code, so it would hang and record nothing —
+the assertion made by leaving the means out rather than by checking afterwards.
+
+`zapo` consumed five prekeys while it held the session: 807 went in and 802 came
+back. That number is the reason the return leg carries state rather than letting
+`whatsapp-rust` reattach with the store it still had — offering the server keys
+it has already handed out is the drift R1 is about, one step short of two
+writers.
+
+Seeding and harvesting both go through `zapo`'s own store contracts and nothing
+else (D-007: the host never owns the store), so a contract that changes breaks
+at the call instead of yielding a store that loads and is subtly wrong.
+
+Harvesting has one real limit, and it is bounded rather than hoped away.
+`auth.load()` and `appState.exportData()` are bulk reads, but `getPreKeysById`,
+`getSessionsBatch` and `getRemoteIdentities` each answer about keys you already
+name, and nothing enumerates. So the harvest asks for everything it seeded, then
+probes prekey ids past the highest until a run of misses, and asks about every
+peer JID that appeared in the leg's own recorded traffic. What that leaves is a
+session written for a peer that never appears in the traffic — which nothing in
+the protocol does, since a session comes from a message, a retry or a prekey
+fetch, and all three are stanzas. An argument, not a guarantee, and the
+difference is worth the sentence.
+
+Two API mistakes cost a run each and are worth writing down. `WaClient` takes
 `chatSocketUrls`, not `url`; passing the latter is silently ignored and the
 client races its two production endpoints instead — a run against real WhatsApp
 with credentials from a mock. And the certificate-chain check lives under
-`dangerous`, which is the same reason the Rust side needs `insecure-capture`.
+`dangerous`, the same reason the Rust side needs `insecure-capture`.
 
-## Why the runner refuses to compare the two legs
+## Why the runner is not what checks it
 
-It should. `wa-wire-gate --profile interop` reports `INCOMPARABLE (neither side
-declares its input)` — D-079: a comparison means something only when both
-recordings say what traffic they are a replay *of*. Two live legs are two
-different windows of a server talking, so a stanza-by-stanza difference between
-them is a fact about the server and not about the engines. Reporting "these
-disagree" there is the error the container exists to prevent.
+`wa-wire-gate --profile interop` reports `INCOMPARABLE (neither side declares
+its input)` on two legs, and it is right to. D-079: a comparison means something
+only when both recordings say what traffic they are a replay *of*. Two live legs
+are two different windows of a server talking, so a stanza-by-stanza difference
+between them is a fact about the server and not about the engines. Reporting
+"these disagree" there is the error the container exists to prevent.
 
-Which makes item 5's phrasing — "the events on either side compared by the
-conformance runner" — ask for something the runner is built to decline. The
-comparison the v1 machinery does make is two engines over *one* recorded input,
-and that already runs (`engine_agreement`). What a live handoff can be checked
-for is continuity, and that is a different assertion needing a different check.
+Item 5 names that comparison, and the runner declines it by design. What a live
+move actually supports is continuity, and `continuity.mjs` is that check:
 
-## What is still missing
+- **The server paired once.** Its log is the one witness that cannot be talked
+  into agreeing, since it is the party that would have had to accept a second
+  pairing.
+- **The same account came back.** `success` carries the account's `lid` and its
+  `companion_enc_static`, and a re-pair would have minted a new one of each.
+- **Every leg carried a session**, not just an open socket — messages and
+  receipts, not silence.
 
-The return leg. Coming back needs `zapo`'s session read *out*, and its store
-contracts do not offer that: `getPreKeysById`, `getSessionsBatch` and
-`getRemoteIdentities` all take the keys you are asking about, and nothing
-enumerates. Only `appState.exportData()` has a bulk read. So `zapo` can be
-attached to from outside and not harvested from outside — which is not an
-oversight, since those contracts are shaped for the engine's own lookups.
+Verified by pointing it at two recordings from *different* pairings, where it
+fails on all three counts.
 
-The way through is the one the store was built for: `createStore({backends,
-providers})` takes a caller's backend, and a backend sees every write as it
-happens. Harvesting becomes recording rather than reading. That is the next
-piece, and it is host work.
+One thing it reports rather than asserts: leg B has no `success` in its
+recording. `zapo` does not declare `l0.inbound.auth-phase` — it protects
+`success` and `failure` from its stanza filters — so its recording cannot carry
+the login even though the login happened, and `zapo`'s own log shows it. A
+silent skip there would have turned a capability gap into a passing check.
 
 There is also a route-blocking disagreement above this tool's level:
 `registrationId`. `zapo` generates 1..16381 and Baileys masks to 14 bits, while

@@ -15,6 +15,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 
 import { migrate } from 'wa-store-migrate'
 import { WaClient, createStore } from 'zapo-js'
+import { decodeBinaryNode } from 'zapo-js/transport'
 import {
     ArtifactClass,
     Mode,
@@ -25,11 +26,14 @@ import {
     waWire,
 } from '@oxidezap/wa-wire-adapter-zapo'
 
+import { harvest } from './harvest-zapo-store.mjs'
 import { seed } from './seed-zapo-store.mjs'
 
-const [snapshotPath, url, out, seconds = '8'] = process.argv.slice(2)
-if (!snapshotPath || !url || !out) {
-    throw new Error('usage: attach-zapo.mjs <rust-snapshot.json> <ws-url> <out.wawr> [seconds]')
+const [snapshotPath, url, out, harvested, seconds = '8'] = process.argv.slice(2)
+if (!snapshotPath || !url || !out || !harvested) {
+    throw new Error(
+        'usage: attach-zapo.mjs <rust-snapshot.json> <ws-url> <out.wawr> <harvested.json> [seconds]'
+    )
 }
 
 const BYTE_FIELDS = new Set([
@@ -49,6 +53,16 @@ function decode(value, field) {
     return value
 }
 
+/** Bytes back out as base64, the same way the dumper wrote them in. */
+function encodeBytes(_key, value) {
+    if (value instanceof Uint8Array) return Buffer.from(value).toString('base64')
+    if (value?.type === 'Buffer' && Array.isArray(value.data)) {
+        return Buffer.from(value.data).toString('base64')
+    }
+    if (value instanceof Map) return Object.fromEntries(value)
+    return value
+}
+
 const rust = decode(JSON.parse(readFileSync(snapshotPath, 'utf-8')), '')
 // `validate: false` for one reason, recorded in the README: `whatsapp-rust`
 // generates a registration id wider than the 14 bits the IR checks, and so does
@@ -61,7 +75,36 @@ const written = await seed(store.session(SESSION), moved.data)
 console.log('seeded', JSON.stringify(written))
 
 const envelopes = []
-const plugin = waWire({ mode: Mode.Tap, sink: (stanza) => envelopes.push(encodeEnvelope(stanza)) })
+// Every peer the leg hears from, so the harvest can ask about addresses that
+// were not in what it seeded. `zapo`'s signal stores answer about addresses you
+// name and list nothing, and the traffic is where a new name can come from.
+const peers = new Map()
+
+function noteAddresses(frame) {
+    let node
+    try {
+        node = decodeBinaryNode(frame)
+    } catch {
+        // A frame this build cannot read is a finding elsewhere, not here.
+        return
+    }
+    for (const attr of ['from', 'participant', 'sender']) {
+        const jid = node.attrs?.[attr]
+        if (typeof jid !== 'string' || !jid.includes('@')) continue
+        const [left, server] = jid.split('@')
+        const [user, device] = left.split(':')
+        const address = { user, server, device: device ? Number(device) : 0 }
+        peers.set(`${address.user}|${address.server}|${address.device}`, address)
+    }
+}
+
+const plugin = waWire({
+    mode: Mode.Tap,
+    sink: (stanza) => {
+        envelopes.push(encodeEnvelope(stanza))
+        noteAddresses(stanza.frame)
+    },
+})
 
 // `chatSocketUrls`, not `url`: the latter is silently ignored and the client
 // races its two production endpoints instead — which is a run against real
@@ -103,6 +146,24 @@ await new Promise((resolve) => setTimeout(resolve, Number(seconds) * 1000))
 // Detach, not logout — the same distinction the adapter's `Detach` trait makes
 // unreachable by construction on the Rust side.
 await createDetacher(client).detach()
+
+// Read the session back before the store goes away. Every peer the leg heard
+// from is asked for on top of what was seeded, because the contracts answer
+// about addresses you name and list nothing.
+const peersInTraffic = [...peers.values()]
+const taken = await harvest(store.session(SESSION), moved.data, peersInTraffic)
+writeFileSync(harvested, JSON.stringify(taken, encodeBytes, 1))
+console.log(
+    'harvested',
+    JSON.stringify({
+        preKeys: taken.preKeys.length,
+        sessions: taken.sessions.length,
+        identities: taken.identities.length,
+        appStateSyncKeys: taken.appState.keys.length,
+        peersSeenInTraffic: peersInTraffic.length,
+    })
+)
+
 await store.destroy?.()
 
 writeFileSync(
